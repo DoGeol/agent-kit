@@ -115,6 +115,8 @@ declare module 'claude-code' {
       showOlderTurns: boolean
       /** Agents that aged off the band, so a reload does not bring them back. */
       dropped: string[]
+      /** The checkout's branch, marked when it is a linked worktree; "" outside a repository. */
+      branch: string
     }
   }
 }

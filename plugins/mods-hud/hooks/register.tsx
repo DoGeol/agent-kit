@@ -27,6 +27,8 @@ const detailTabAtom = atom({ plugin: 'mods-hud', key: 'detailTab' } as const, 'h
 const showOlderTurnsAtom = atom({ plugin: 'mods-hud', key: 'showOlderTurns' } as const, false)
 // Agents that aged off the band: kept so a reload does not bring them back (issue 008).
 const droppedAtom = atom({ plugin: 'mods-hud', key: 'dropped' } as const, [] as string[])
+// The checkout's branch, "" outside a repository.
+const branchAtom = atom({ plugin: 'mods-hud', key: 'branch' } as const, '')
 
 // Prompts the engine or a machine raised, not the person's own words.
 const AUTOMATED = new Set([
@@ -223,6 +225,14 @@ export const effortFor = (settings: unknown, model: string | null | undefined) =
 // "Opus 5.5(high)": what a turn or an agent runs on.
 export const modelTag = (model: string | undefined, effort: string | undefined) =>
   model ? `${prettyModel(model)}${effort ? `(${effort})` : ''}` : ''
+
+// "⎇ main" or "⎇ feat (워크트리)" from `git rev-parse --abbrev-ref HEAD --git-dir --git-common-dir`:
+// a linked worktree has its own git dir apart from the common one. Empty outside a repository.
+export const branchLabel = (out: string) => {
+  const [head, gitDir, commonDir] = out.trim().split('\n')
+  if (!head || !gitDir || !commonDir) return ''
+  return `⎇ ${head}${gitDir !== commonDir ? ' (워크트리)' : ''}`
+}
 
 // The widest state word (진행 중): the state sits left in a cell this wide, so what follows lines up.
 const STATE_CELLS = 7
@@ -728,6 +738,14 @@ export const register: Register = on => {
 
     $.clock.every(TICK_MS, () => void poll())
     $.clock.every(SESSION_POLL_MS, () => void pollSessions())
+    // A branch changes by hand (checkout, a new worktree's session): read it now and every session poll.
+    const pollBranch = async () => {
+      const r = await $.process.run(['git', 'rev-parse', '--path-format=absolute', '--abbrev-ref', 'HEAD', '--git-dir', '--git-common-dir']).catch(() => null)
+      const label = r && r.exitCode === 0 ? branchLabel(r.stdout) : ''
+      if (label !== (await read($, branchAtom))) await update($, branchAtom, () => label)
+    }
+    void pollBranch()
+    $.clock.every(SESSION_POLL_MS, () => void pollBranch())
     let fast: { cancel: () => void } | null = null
     rush = () => {
       fast?.cancel()
@@ -1278,7 +1296,7 @@ export const register: Register = on => {
     if (!room) return next(e)
 
     const isPane = e.component === 'Pane'
-    const [sum, typed, turnPhase, m, ags, now, showAgentsRaw, hidden, stopArmed, sess, showSessionsRaw, hiddenSess] = await Promise.all([
+    const [sum, typed, turnPhase, m, ags, now, showAgentsRaw, hidden, stopArmed, sess, showSessionsRaw, hiddenSess, branch] = await Promise.all([
       read($, beatAtom).then(() => read($, summary)),
       read($, prompt),
       read($, phase),
@@ -1291,6 +1309,7 @@ export const register: Register = on => {
       read($, sessionsAtom),
       read($, showSessionsAtom),
       read($, hiddenSessionsAtom),
+      read($, branchAtom),
     ])
     // the pane has the room: everything unfolded
     const showAgents = showAgentsRaw || isPane
@@ -1344,7 +1363,7 @@ export const register: Register = on => {
       { n: doneCount, word: '완료', color: LOOK.done.color },
       { n: ended.length - doneCount, word: '중지', color: LOOK.stopped.color },
     ].filter(c => c.n > 0)
-    lastDraw[`${e.surface} ${e.component}`] = `rows=${room.rows} cols=${width} rows=${rows.length} live=${live.length} ended=${ended.length}`
+    lastDraw[`${e.surface} ${e.component}`] = `rows=${room.rows} cols=${width} rows=${rows.length} live=${live.length} ended=${ended.length} at=${new Date(now).toTimeString().slice(0, 8)}`
 
     // A row is a label cell that shrinks and a status cell that never does: two elements, no drawn divider.
     const row = (key: string, label: JSX.Element, status: JSX.Element) => (
@@ -1493,7 +1512,7 @@ export const register: Register = on => {
       ]
     }
 
-    const sessionTag = m && turnPhase !== 'idle' ? modelTag(m.model, m.effort) : ''
+    const sessionTag = [branch, m && turnPhase !== 'idle' ? modelTag(m.model, m.effort) : ''].filter(Boolean).join(' · ')
     const headLabel = clipCells(headline, fit(Math.max(4, width - stateCells - (sessionTag ? cells(sessionTag) + 2 : 0) - 3)))
     const activity = (
       <Box key="activity" flexDirection="column" width={width}>

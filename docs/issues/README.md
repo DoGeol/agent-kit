@@ -17,3 +17,6 @@ Issues found while building and testing `plugins/mods-hud`.
 | [011](011-band-engine-mark.md) | The `[-]` on the band's right | can't be removed |
 | [012](012-terminal-tight-rows.md) | The terminal card cut when rows run short | fixed |
 | [013](013-meter-empty-after-failed-start.md) | Model, effort and usage missing from the terminal board | fixed |
+| [014](014-remote-control-no-band.md) | No band in the desktop view of a Remote Control session | open, upstream (#101256) |
+| [015](015-split-view-right-pane.md) | No band in a split view's right pane | open, upstream (#99265) |
+| [016](016-desktop-reload-keeps-old-module.md) | `/reload-plugins` does not load a new mods-hud in a desktop session | open, investigating |

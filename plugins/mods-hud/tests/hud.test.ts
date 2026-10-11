@@ -2,7 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
-import { cells, detailView, summaryLine } from '../hooks/register'
+import { branchLabel, cells, detailView, summaryLine } from '../hooks/register'
 
 const USAGE = { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }
 const NOW = new Date(2026, 9, 11, 12, 0).getTime()
@@ -1263,4 +1263,23 @@ test('a usage read that fails at start still leaves the model and, after a respo
   expect(await ui.find({ type: 'Text', text: /^Opus 5\.5$/ })).toBeDefined()
   await $.session.measure({ context: { percent: 30 }, rateLimits: [{ kind: 'five_hour', percentUsed: 12 }], changed: ['rateLimits'] } as never)
   expect(await ui.find({ type: 'Text', text: /^12%$/ })).toBeDefined()
+})
+
+test('branch label marks a linked worktree', async () => {
+  expect(branchLabel('main\n/r/.git\n/r/.git\n')).toBe('⎇ main')
+  expect(branchLabel('feat\n/r/.git/worktrees/wt\n/r/.git\n')).toBe('⎇ feat (워크트리)')
+  expect(branchLabel('')).toBe('')
+})
+
+test('the band shows the branch, marked in a worktree, on the desktop and in a terminal', async ($, on) => {
+  const clock = mock.clock(on, { now: NOW })
+  world(on, { list: [], forks: [] })
+  on('process.run', () => ({ value: { exitCode: 0, stdout: 'feat\n/r/.git/worktrees/wt\n/r/.git\n', stderr: '' } }))
+  await $.session.start({ cwd: '/tmp/x', surface: 'desktop', isInteractive: true })
+  await $.prompt.submit({ text: 'UI 바꿔줘', origin: { kind: 'composer' }, wait: false })
+  await clock.settle()
+  for (const surface of ['desktop', 'terminal'] as const) {
+    const ui = await $.ui.mount({ plugin: 'mods-hud', surface, component: 'AbovePrompt', props: BAND })
+    expect(await ui.find({ type: 'Text', text: /⎇ feat \(워크트리\)/ })).toBeDefined()
+  }
 })
