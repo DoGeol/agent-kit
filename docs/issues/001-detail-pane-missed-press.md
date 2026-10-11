@@ -1,6 +1,6 @@
 # 001. Presses in the detail pane are sometimes lost
 
-- **State:** fixed again (0.4.8); desktop to recheck
+- **State:** fixed again (0.4.8); desktop idle checked, with agents running to confirm
 - **Where:** `plugins/mods-hud`, detail pane (`session-detail`)
 
 ## Symptom
@@ -28,3 +28,8 @@ Presses were still lost on the desktop.
 - The same on the desktop app.
 - How often a press is lost now while subagents run, when the pane redraws on each of their tool calls.
 - If it is still frequent: batch the pane's redraws to one every 3 seconds or so while agents run.
+
+## Desktop check (0.4.9, 2026-10-12)
+- Idle: 9 tab presses in the detail pane, all 9 reached the mod (`detail 9회`, no failures) and every one changed the tab.
+- Idle draw rate: `band 16` a minute with no state written by the mod. The desktop asks for the band on its own (about every 4 s); #99265 reports the same. Not from this mod.
+- With three Explore subagents running: `band 19 · detail 26` a minute, `band 6회 · detail 8회`, no failures. Redraws follow the agents' tool calls.

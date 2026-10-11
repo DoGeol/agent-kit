@@ -1,6 +1,6 @@
 # 006. The desktop draws Buttons natively
 
-- **State:** worked around
+- **State:** worked around, confirmed on the desktop
 - **Where:** fold line, tabs
 
 ## What it is
@@ -14,3 +14,6 @@
 
 ## To check
 Whether the inactive tabs' `dimColor` shows on the desktop.
+
+## Checked
+- **Desktop (2026-10-12):** in the detail pane, the inactive tabs (히스토리, 현재) are drawn dimmer than the active one (`● 도구 호출 4`).
