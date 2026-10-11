@@ -1283,3 +1283,20 @@ test('the band shows the branch, marked in a worktree, on the desktop and in a t
     expect(await ui.find({ type: 'Text', text: /⎇ feat \(워크트리\)/ })).toBeDefined()
   }
 })
+
+test('an idle session writes no state, so nothing redraws and no press lands mid-redraw (issue 001)', async ($, on) => {
+  const clock = mock.clock(on, { now: NOW })
+  world(on, { list: [], forks: [] })
+  const writes: string[] = []
+  on('state.set', ($, e, next) => {
+    writes.push((e as unknown as { key: string }).key)
+    return next(e)
+  })
+  await $.session.start({ cwd: '/tmp/x', surface: 'desktop', isInteractive: true })
+  await clock.advance(10_000)
+  await clock.settle()
+  writes.length = 0
+  await clock.advance(20_000)
+  await clock.settle()
+  expect(writes).toEqual([])
+})

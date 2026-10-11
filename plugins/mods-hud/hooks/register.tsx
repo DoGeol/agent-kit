@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { Register, SessionMessage, SessionUsage } from 'claude-code'
+import type { Register, SessionMessage, SessionUsage, StateDollar } from 'claude-code'
 
 import type { AgentRow, DetailTab, DetailView, Limit, Meter, Phase, SessionRow, Spend, Summary, TurnCard } from '../types'
 
@@ -27,6 +27,28 @@ const detailTabAtom = atom({ plugin: 'mods-hud', key: 'detailTab' } as const, 'h
 const showOlderTurnsAtom = atom({ plugin: 'mods-hud', key: 'showOlderTurns' } as const, false)
 // Agents that aged off the band: kept so a reload does not bring them back (issue 008).
 const droppedAtom = atom({ plugin: 'mods-hud', key: 'dropped' } as const, [] as string[])
+
+// update() writes even when `fn` hands back what was there, and each write redraws every site that reads the
+// value: the 2 s poll redrew the band and the detail pane while nothing changed, so a press could land
+// mid-redraw (issue 001). The polled values go through these, which write only a change.
+const changeMeter = async ($: StateDollar, fn: (m: Meter | null) => Meter | null) => {
+  const prev = await read($, meter)
+  const next = fn(prev)
+  // fn runs once per value (the meter's marks what moved since its last call); again only if the value moved meanwhile
+  if (JSON.stringify(next) !== JSON.stringify(prev)) await update($, meter, cur => (JSON.stringify(cur) === JSON.stringify(prev) ? next : fn(cur)))
+}
+const changeHistory = async ($: StateDollar, fn: (cards: TurnCard[]) => TurnCard[]) => {
+  const prev = await read($, historyAtom)
+  const next = fn(prev)
+  // fn runs once per value (the meter's marks what moved since its last call); again only if the value moved meanwhile
+  if (JSON.stringify(next) !== JSON.stringify(prev)) await update($, historyAtom, cur => (JSON.stringify(cur) === JSON.stringify(prev) ? next : fn(cur)))
+}
+const changeSessions = async ($: StateDollar, fn: (rows: SessionRow[]) => SessionRow[]) => {
+  const prev = await read($, sessionsAtom)
+  const next = fn(prev)
+  // fn runs once per value (the meter's marks what moved since its last call); again only if the value moved meanwhile
+  if (JSON.stringify(next) !== JSON.stringify(prev)) await update($, sessionsAtom, cur => (JSON.stringify(cur) === JSON.stringify(prev) ? next : fn(cur)))
+}
 // The checkout's branch, "" outside a repository.
 const branchAtom = atom({ plugin: 'mods-hud', key: 'branch' } as const, '')
 
@@ -455,7 +477,7 @@ export const register: Register = on => {
       if (JSON.stringify(prev) !== JSON.stringify(rows)) await update($, agents, () => rows)
       // Each agent's snapshot stays in the card it started in, updated there; one not yet in a card joins the latest.
       // (one older than that card is from before the history: left out)
-      await update($, historyAtom, cards => {
+      await changeHistory($, cards => {
         const last = cards.at(-1)
         if (!last) return cards
         const placed = new Set(cards.flatMap(c => c.agents.map(a => a.id)))
@@ -583,7 +605,7 @@ export const register: Register = on => {
         const r = await $.tool.call({ tool: 'ListAgents' }).catch(() => null)
         const listed = r && !('deny' in r && r.deny) && !('isError' in r && r.isError) ? listedStates(r) : new Map<string, SessionRow['state']>()
         lastDraw['list-agents'] = r === null ? 'threw' : 'deny' in r && r.deny ? `deny: ${r.deny}` : 'isError' in r && r.isError ? 'error' : `ok ${listed.size}개`
-        await update($, sessionsAtom, rows => {
+        await changeSessions($, rows => {
           // a session the list answered without has ended (archived, closed); a failed list leaves it unknown
           const missing: SessionRow['state'] = listed.size > 0 ? 'gone' : 'unknown'
           const fresh = rows.map(s => ({ ...s, state: listed.get(s.name) ?? (s.title ? listed.get(s.title) : undefined) ?? missing }))
@@ -591,7 +613,7 @@ export const register: Register = on => {
         })
         // a session's state reads on in the newest card that has it; older cards keep theirs from then
         const states = new Map((await read($, sessionsAtom)).map(s => [s.name, s.state]))
-        await update($, historyAtom, cards => {
+        await changeHistory($, cards => {
           const newest = new Map<string, number>()
           cards.forEach((c, i) => c.sessions.forEach(s => newest.set(s.name, i)))
           let isChanged = false
@@ -634,7 +656,7 @@ export const register: Register = on => {
       settingsEffort = level ?? settingsEffort
       // A window past its reset starts over at 0 even before a response says so.
       const isStale = (l: Limit) => !!l.resetsAt && new Date(l.resetsAt).getTime() <= now
-      await update($, meter, m => {
+      await changeMeter($, m => {
         if (!m) return m
         const modelChanged = !!model && (!m.model || prettyModel(model) !== prettyModel(m.model))
         // a model switch brings that model's saved level along
