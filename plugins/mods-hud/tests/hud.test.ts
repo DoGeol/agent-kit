@@ -517,6 +517,14 @@ test('a press on a row opens the detail pane on it, with its recent calls', asyn
   expect((await main.findAll({ type: 'Text' })).map(t => t.text)).toContain('Grep "x"')
   await main.press({ key: 'back' })
   expect((await main.findAll({ type: 'Text' })).map(t => t.text)).toContain('서브에이전트 1')
+  // /mods-hud debug counts the presses that reached the mod, per site, and the draws in the last minute
+  const dbg = await $.command.run({ command: 'mods-hud', args: 'debug', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 90 } } as never)
+  expect(dbg.text).toContain('band 2회(실패 0, 마지막 go-session)')
+  expect(dbg.text).toContain('detail 4회(실패 0, 마지막 back)')
+  expect(dbg.text).toMatch(/최근 1분 그림: .*detail \d+/)
+  await $.command.run({ command: 'mods-hud', args: 'debug reset', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 90 } } as never)
+  const after = await $.command.run({ command: 'mods-hud', args: 'debug', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 90 } } as never)
+  expect(after.text).toContain('받은 누름: 없음')
 })
 
 test('a lone agent stays shown however few rows the surface gives', async ($, on) => {

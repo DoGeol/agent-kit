@@ -384,6 +384,14 @@ export const register: Register = on => {
   let statusLine: string | undefined | null = null
   let hasFooter = false
   const lastDraw: Record<string, string> = {}
+  // For /mods-hud debug (issue 001): when each site was drawn in the last minute, and the presses that reached
+  // this mod per site, with how many threw. A press counted here reached the engine; one lost before it is not.
+  const drawTimes: Record<string, number[]> = {}
+  const noteDraw = (site: string) => {
+    const now = Date.now()
+    drawTimes[site] = [...(drawTimes[site] ?? []).filter(t => now - t < 60_000), now]
+  }
+  let presses: Record<string, { n: number; failed: number; last: string }> = {}
   // The transcript changes only when a call finishes or a turn ends: the pane reads it again only then.
   // (Reading thousands of messages on every redraw made the pane slow to answer a press.)
   const transcriptV = new Map<string, number>()
@@ -732,8 +740,8 @@ export const register: Register = on => {
 
     await $.command.register({
       name: 'mods-hud',
-      description: 'HUD 요약 지금 갱신 (usage: 사용량·모드 토큰, pane: 패널로 보기, agents on/off: 서브에이전트 요약, debug: 진단)',
-      argumentHint: '[usage|pane|agents on|agents off|debug]',
+      description: 'HUD 요약 지금 갱신 (usage: 사용량·모드 토큰, pane: 패널로 보기, agents on/off: 서브에이전트 요약, debug: 진단, debug reset: 누름 카운터 초기화)',
+      argumentHint: '[usage|pane|agents on|agents off|debug|debug reset]',
     })
 
     // Any of these may fail at start: the meter is made anyway, and the timers below still start.
@@ -844,14 +852,21 @@ export const register: Register = on => {
       await update($, agentSummariesAtom, () => arg === 'agents on')
       return { text: arg === 'agents on' ? '서브에이전트 한글 요약 켬.' : '서브에이전트 한글 요약 끔 (요약 요청을 보내지 않음).' }
     }
+    if (arg === 'debug reset') {
+      presses = {}
+      return { text: '누름 카운터 초기화.' }
+    }
     if (arg === 'debug') {
+      const now = Date.now()
+      const perMin = Object.entries(drawTimes).map(([k, ts]) => `${k} ${ts.filter(t => now - t < 60_000).length}`).join(' · ') || '없음'
+      const pressed = Object.entries(presses).map(([k, p]) => `${k} ${p.n}회(실패 ${p.failed}, 마지막 ${p.last})`).join(' · ') || '없음'
       const surfaces = await $.session.surfaces()
       const draws = Object.entries(lastDraw).map(([k, v]) => `${k}: ${v}`).join(' | ') || '아직 한 번도 안 그림'
       const rows = (await read($, agents)).map(a => `${a.id.slice(0, 8)}:${a.type}:${a.status}`).join(', ') || '없음'
       const peers = (await read($, sessionsAtom)).map(x => `${x.title ?? x.name}:${x.state}:로그${x.log.length}`).join(', ') || '없음'
       const m = await read($, meter)
       const usage = m ? `${prettyModel(m.model) || '모델 없음'} ${m.effort ?? '-'} 한도${m.limits.length} ctx=${m.context ?? '-'}` : '없음'
-      return { text: `[진단] surfaces=${surfaces.join(',') || '없음'} · 입력=${e.origin?.kind ?? '?'} · 사용량: ${usage} · 에이전트: ${rows} · 세션: ${peers} · 마지막 그림: ${draws}` }
+      return { text: `[진단] surfaces=${surfaces.join(',') || '없음'} · 입력=${e.origin?.kind ?? '?'} · 사용량: ${usage} · 에이전트: ${rows} · 세션: ${peers} · 최근 1분 그림: ${perMin} · 받은 누름: ${pressed} · 마지막 그림: ${draws}` }
     }
     $.clock.after(0, () => void refresh?.(''))
 
@@ -1006,10 +1021,26 @@ export const register: Register = on => {
   })
 
   // One hook for the band and the pane: the drawing is the same, only its room differs.
+  // Counts each press on this mod's buttons for /mods-hud debug, then lets it through.
+  on('ui.press', async ($, e, next) => {
+    if (e.plugin !== 'mods-hud') return next(e)
+    const site = e.requestId === DETAIL ? 'detail' : e.component === 'AbovePrompt' ? 'band' : e.component
+    const p = (presses[site] ??= { n: 0, failed: 0, last: '' })
+    p.n += 1
+    p.last = e.element
+    try {
+      return await next(e)
+    } catch (err) {
+      p.failed += 1
+      throw err
+    }
+  })
+
   on('ui.render', async ($, e, next) => {
     // The desktop footer's mode labels: usage drawn there in color, no plugin name in front.
     if (e.component === 'SessionMode' && e.surface === 'desktop') {
       hasFooter = true
+      noteDraw('footer')
       const [m, now] = await Promise.all([read($, meter), $.clock.now()])
       if (!m) return next(e)
       const { Box, Text } = $.ui.resolve(e)
@@ -1036,6 +1067,7 @@ export const register: Register = on => {
       )
     }
     if (e.component === 'Pane' && e.requestId === DETAIL) {
+      noteDraw('detail')
       const [raw, ags, m, hidden, sess, hiddenSess, hist, tab, showOlder, now] = await Promise.all([
         read($, detailAtom), read($, agents), read($, meter), read($, hiddenAtom), read($, sessionsAtom), read($, hiddenSessionsAtom),
         read($, historyAtom), read($, detailTabAtom), read($, showOlderTurnsAtom), $.clock.now(),
@@ -1385,6 +1417,7 @@ export const register: Register = on => {
       { n: doneCount, word: '완료', color: LOOK.done.color },
       { n: ended.length - doneCount, word: '중지', color: LOOK.stopped.color },
     ].filter(c => c.n > 0)
+    noteDraw(isPane ? 'pane' : 'band')
     lastDraw[`${e.surface} ${e.component}`] = `rows=${room.rows} cols=${width} rows=${rows.length} live=${live.length} ended=${ended.length} at=${new Date(now).toTimeString().slice(0, 8)}`
 
     // A row is a label cell that shrinks and a status cell that never does: two elements, no drawn divider.
