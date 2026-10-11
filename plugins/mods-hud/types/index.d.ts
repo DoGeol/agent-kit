@@ -113,6 +113,8 @@ declare module 'claude-code' {
       detailTab: DetailTab
       /** Older turn cards shown past what fits the pane. */
       showOlderTurns: boolean
+      /** Agents that aged off the band, so a reload does not bring them back. */
+      dropped: string[]
     }
   }
 }

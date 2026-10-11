@@ -2,7 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
-import { cells, detailView } from '../hooks/register'
+import { cells, detailView, summaryLine } from '../hooks/register'
 
 const USAGE = { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }
 const NOW = new Date(2026, 9, 11, 12, 0).getTime()
@@ -16,7 +16,7 @@ const BAND = {
   view: {},
 } as const
 
-type World = { usage?: typeof USAGE; agentText?: string; completes?: string[]; perModel?: Record<string, { effortLevel: string }>; five?: number; statuses?: (string | undefined)[]; model?: string; effort?: string; forkText?: string; list: { id: string; type: string; description: string; status: 'running' | 'completed' | 'idle' }[]; forks: string[] }
+type World = { failUsage?: true; usage?: typeof USAGE; agentText?: string; completes?: string[]; perModel?: Record<string, { effortLevel: string }>; five?: number; statuses?: (string | undefined)[]; model?: string; effort?: string; forkText?: string; list: { id: string; type: string; description: string; status: 'running' | 'completed' | 'idle' }[]; forks: string[] }
 
 const world = (on: On, w: World) => {
   on('session.start', (_, e) => ({ cwd: e.cwd }))
@@ -30,16 +30,17 @@ const world = (on: On, w: World) => {
   on('classic.PostModelSwitch', () => ({}))
   on('turn.start', (_, e) => ({ turnId: e.turnId }))
   on('settings.read', () => ({ value: { effortLevel: 'max', modelSettings: w.perModel ?? { [w.model ?? 'claude-opus-5-5']: { effortLevel: w.effort ?? 'high' } } } }))
-  on('session.usage', () => ({
-    value: {
+  on('session.usage', () => {
+    if (w.failUsage) throw new Error('usage not ready')
+    return { value: {
       startedAt: NOW,
       context: { window: 200000, percent: 18 },
       rateLimits: [
         { kind: 'five_hour', percentUsed: w.five ?? 63, resetsAt: new Date(2026, 9, 11, 15, 30).toISOString() },
         { kind: 'seven_day', percentUsed: 77, resetsAt: new Date(2026, 9, 14, 12, 0).toISOString() },
       ],
-    },
-  }))
+    } }
+  })
   on('agent.list', () => ({ value: w.list }))
   on('ui.toast', () => ({ value: undefined }))
   on('prompt.submit', (_, e) => ({ text: e.text }))
@@ -568,22 +569,28 @@ test('an agent gets a Korean line as it starts, a check-in every two minutes it 
   // idle for two more minutes: nothing new to say, nothing asked
   await clock.advance(120_000)
   expect(completes.length).toBe(2)
+  // a drifted line (issue 009) is dropped, the last one stays, and it still counts as the check-in
+  w.agentText = '파일을 세고 있습니다'
+  for (const n of [5, 6, 7]) await call(n)
+  await clock.settle()
+  expect(completes.length).toBe(3)
+  expect(await label()).toBe('파일 세는 중')
 
   w.agentText = '텍스트 파일 653개 찾음'
   await $.turn.complete({ answer: '653', durationMs: 5, isAborted: false, turnId: 'x', reason: 'answer', agentId: 'bg1' } as never)
   await clock.settle()
-  expect(completes.length).toBe(3)
-  expect(completes[2]).toContain('결과')
+  expect(completes.length).toBe(4)
+  expect(completes[3]).toContain('결과')
   // the final answer from turn.complete goes in, even when the transcript lacks it
-  expect(completes[2]).toContain('[마지막 말]\n653')
+  expect(completes[3]).toContain('[마지막 말]\n653')
   expect(await label()).toBe('텍스트 파일 653개 찾음')
 
   await $.command.run({ command: 'mods-hud', args: 'agents off', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 90 } } as never)
   await $.agent.spawn({ tool_use_id: 's2', prompt: 'p', description: 'other', subagentType: 'Explore', provider: { plugin: 'engine', tier: 'core' } } as never)
-  await call(7)
   await call(8)
+  await call(9)
   await clock.settle()
-  expect(completes.length).toBe(3)
+  expect(completes.length).toBe(4)
 })
 
 test('a live agent stops on a second press; a stopped one resumes or closes; a finished one closes', async ($, on) => {
@@ -1201,4 +1208,59 @@ test('a turn a notice or another session started adds no card of its own', async
   const heads = (await pane.findAll({ type: 'Text' })).map(t => t.text).filter(t => t.includes('턴 '))
   expect(heads.some(t => t.includes('턴 1'))).toBe(true)
   expect(heads.some(t => t.includes('턴 2'))).toBe(false)
+})
+
+// Issue 008. A fresh module is what a hot reload gives: the ids it finds in state stay off the band.
+test('an agent that aged off the band stays off after a reload, though the engine still lists it', async ($, on) => {
+  const clock = mock.clock(on, { now: NOW })
+  const w: World = { list: [{ id: 'old', type: 'Explore', description: '예전 작업', status: 'completed' }], forks: [] }
+  on('state.get', (($: unknown, e: { key: string }, next: (e: unknown) => unknown) => (e.key === 'dropped' ? { value: { value: ['old'], version: 1 } } : next(e))) as never)
+  world(on, w)
+  await $.session.start({ cwd: '/tmp/x', surface: 'desktop', isInteractive: true })
+  await clock.advance(2000)
+  const ui = await $.ui.mount({ plugin: 'mods-hud', surface: 'desktop', component: 'AbovePrompt', props: BAND })
+  expect(await ui.find({ key: 'agent-old' })).toBeUndefined()
+})
+
+test('an agent aging off the band is written to state for the next load', async ($, on) => {
+  const clock = mock.clock(on, { now: NOW })
+  const w: World = { list: [{ id: 'a1', type: 'Explore', description: '작업', status: 'running' }], forks: [] }
+  const writes: unknown[] = []
+  on('state.set', { plugin: 'mods-hud', key: 'dropped' } as never, (($: unknown, e: { value: unknown }, next: (e: unknown) => unknown) => (writes.push(e.value), next(e))) as never)
+  world(on, w)
+  await $.session.start({ cwd: '/tmp/x', surface: 'desktop', isInteractive: true })
+  await clock.advance(2000)
+  w.list[0]!.status = 'completed'
+  await clock.advance(2000)
+  expect(writes).toEqual([])
+  await clock.advance(11 * 60_000)
+  expect(writes.at(-1)).toEqual(['a1'])
+})
+
+// Issue 009: drifted lines are dropped, so the last good one stays.
+test('a summary that echoes the ask, apologizes, ends as a sentence, or runs on when done is dropped', () => {
+  expect(summaryLine('- **"로그인 버그 수정 완료"**')).toBe('로그인 버그 수정 완료')
+  expect(summaryLine('파일 3개 찾음')).toBe('파일 3개 찾음')
+  expect(summaryLine('라이선스 파일 세는 중')).toBe('라이선스 파일 세는 중')
+  expect(summaryLine('라이선스 파일 세는 중', true)).toBe('')
+  expect(summaryLine('…질문 형태로: 터미널')).toBe('')
+  expect(summaryLine('주어진 정보가 부족합니다')).toBe('')
+  expect(summaryLine('파일이 3개입니다')).toBe('')
+  expect(summaryLine('…30자 이내로만 출력')).toBe('')
+  // words that also name ordinary work stay
+  expect(summaryLine('README 마크다운 정리 완료')).toBe('README 마크다운 정리 완료')
+  expect(summaryLine('JSON 형태로 변환 완료')).toBe('JSON 형태로 변환 완료')
+  expect(summaryLine('원인 알 수 없음 보고')).toBe('원인 알 수 없음 보고')
+})
+
+// A failed read at session start once left the meter empty for good: no model, effort or usage anywhere.
+test('a usage read that fails at start still leaves the model and, after a response, the usage shown', async ($, on) => {
+  const clock = mock.clock(on, { now: NOW })
+  world(on, { list: [], forks: [], failUsage: true })
+  await $.session.start({ cwd: '/tmp/x', surface: 'terminal', isInteractive: true })
+  await clock.advance(2000)
+  const ui = await $.ui.mount({ plugin: 'mods-hud', surface: 'terminal', component: 'AbovePrompt', props: BAND })
+  expect(await ui.find({ type: 'Text', text: /^Opus 5\.5$/ })).toBeDefined()
+  await $.session.measure({ context: { percent: 30 }, rateLimits: [{ kind: 'five_hour', percentUsed: 12 }], changed: ['rateLimits'] } as never)
+  expect(await ui.find({ type: 'Text', text: /^12%$/ })).toBeDefined()
 })

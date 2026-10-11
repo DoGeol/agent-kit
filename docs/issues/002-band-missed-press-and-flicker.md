@@ -1,6 +1,6 @@
 # 002. Band presses lost, and the app blinks
 
-- **State:** fixed, needs checking on screen
+- **State:** fixed; checked on the terminal, desktop not yet
 - **Where:** band above the prompt (`AbovePrompt`)
 
 ## Symptom
@@ -15,6 +15,10 @@ The running agents' elapsed time redrew the whole band every second (first a `be
 - Only the running clock is drawn in its own `Client` region (`hooks/elapsed.tsx`), which redraws itself every second (see 003).
 - An ended agent shows how long it took as plain text.
 
+## Checked
+- **Terminal (2026-10-11):** with two Explore subagents running, the fold line, ■ and ✕ answered, and nothing blinked. The terminal has no native Buttons to re-lay out, so the cause mostly applies to the desktop.
+
 ## Still to check
+- The desktop app, where the cause lies.
 - Whether presses are lost and the app blinks while agents run.
 - Other sources of redraw: agent row changes on each tool call, session state polled every 10s, summary arrivals.

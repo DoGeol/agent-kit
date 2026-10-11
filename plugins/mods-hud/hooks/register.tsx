@@ -25,6 +25,8 @@ const hiddenSessionsAtom = atom({ plugin: 'mods-hud', key: 'hiddenSessions' } as
 const historyAtom = atom({ plugin: 'mods-hud', key: 'history' } as const, [] as TurnCard[])
 const detailTabAtom = atom({ plugin: 'mods-hud', key: 'detailTab' } as const, 'history' as DetailTab)
 const showOlderTurnsAtom = atom({ plugin: 'mods-hud', key: 'showOlderTurns' } as const, false)
+// Agents that aged off the band: kept so a reload does not bring them back (issue 008).
+const droppedAtom = atom({ plugin: 'mods-hud', key: 'dropped' } as const, [] as string[])
 
 // Prompts the engine or a machine raised, not the person's own words.
 const AUTOMATED = new Set([
@@ -263,6 +265,18 @@ export const oneLine = (text: string) =>
     .replace(/^["'“”‘’]+|["'“”‘’]+$/g, '')
     .trim()
 
+// A Haiku line that drifted from the asks (issue 009): an instruction echoed, an apology, a sentence ending,
+// or running wording on something finished. Such a line is dropped and the last one stays.
+export const summaryLine = (text: string, isFinal = false) => {
+  const line = oneLine(text)
+  const isBad =
+    /이내로|한 줄|출력해|끝내|금지|머리말|형태로:|^…/.test(line) ||
+    /정보가 (부족|없)|죄송/.test(line) ||
+    /(니다|어요|해요)[.!]?$/.test(line) ||
+    (isFinal && /(중|하는 중)[.…]*$/.test(line))
+  return isBad ? '' : line
+}
+
 // "<agent-message from="x">…</agent-message>": another session's (or a subagent's) message inside a prompt.
 // Messages from elsewhere inside a prompt: a subagent's `<agent-message from="id">`, or another session's
 // `<cross-session-message from-session="local_…" from-name="title">` (keyed by its session id, shown by its title).
@@ -346,6 +360,7 @@ export const register: Register = on => {
   // Per-agent facts the list does not carry; a hot reload starts them over.
   // Every subagent this load has heard of, kept live from its spawn, its tool calls and its end.
   const tracked = new Map<string, AgentRow>()
+  const dropped = new Set<string>()
   // Set in session.start: writes `tracked` to the drawn state (only when it changed).
   let publish: (() => Promise<void>) | null = null
   // Set in session.start: writes an agent's Korean line from its own transcript.
@@ -382,7 +397,7 @@ export const register: Register = on => {
         ].filter(Boolean).join('\n\n')
         const reply = await $.model.complete({ model: 'haiku', prompt: request, effort: 'low', maxTokens: 80 })
         if (reply.isAnswered) await count('turn', reply.usage)
-        const text = reply.isAnswered ? oneLine(reply.text) : ''
+        const text = reply.isAnswered ? summaryLine(reply.text) : ''
         if (text) {
           const at = await $.clock.now()
           await update($, summary, () => ({ text, at, turns }) satisfies Summary)
@@ -413,8 +428,16 @@ export const register: Register = on => {
 
     publish = async () => {
       const now = await $.clock.now()
+      const aged = [...tracked.values()].filter(t => t.endedAt !== undefined && now - t.endedAt > KEEP_DONE_MS)
+      if (aged.length > 0) {
+        for (const t of aged) {
+          tracked.delete(t.id)
+          dropped.add(t.id)
+        }
+        // ponytail: the newest 200 ids; an older one the engine still lists would come back once
+        await update($, droppedAtom, () => [...dropped].slice(-200))
+      }
       const rows = [...tracked.values()]
-        .filter(t => t.endedAt === undefined || now - t.endedAt <= KEEP_DONE_MS)
         .sort((x, y) => y.startedAt - x.startedAt)
         .slice(0, 12)
         .map(t => ({ ...t }))
@@ -452,6 +475,8 @@ export const register: Register = on => {
       }
       if (inFlight.has(id) || inFlight.size >= 2 || (!isFinal && (t.summaryCount ?? 0) >= SUMMARY_MAX)) return
       if (!(await read($, agentSummariesAtom))) return
+      // calls queued in one gap each asked for a check-in: the first one answers for them all
+      if (!isFinal && t.summaryAt !== undefined && (await $.clock.now()) - t.summaryAt < SUMMARY_GAP_MS) return
       inFlight.add(id)
       try {
         const got = await $.session.messages({ agentId: id }).catch(() => [])
@@ -468,16 +493,17 @@ export const register: Register = on => {
         ].filter(Boolean).join('\n\n')
         const r = await $.model.complete({ model: 'haiku', prompt: prompt.slice(0, 2400), effort: 'low', maxTokens: 80 })
         if (r.isAnswered) await count('agent', r.usage)
-        const text = r.isAnswered ? oneLine(r.text) : ''
+        const text = r.isAnswered ? summaryLine(r.text, isFinal) : ''
         const cur = tracked.get(id)
-        if (text && cur) {
-          cur.summary = text
+        // an answer counts as a check-in even when its line was dropped: no new ask before the next gap
+        if (r.isAnswered && cur) {
+          if (text) cur.summary = text
           cur.summaryAt = await $.clock.now()
           cur.summaryTools = cur.tools
           cur.summaryCount = (cur.summaryCount ?? 0) + 1
           await publish?.()
         }
-        // ponytail: a failed line keeps the last one, or the description
+        // ponytail: a failed or dropped line keeps the last one, or the description
       } catch {
         // as above
       } finally {
@@ -485,7 +511,7 @@ export const register: Register = on => {
       }
     }
 
-    isSubagent = async id => tracked.has(id) || (await read($, agents)).some(a => a.id === id)
+    isSubagent = async id => tracked.has(id) || dropped.has(id) || (await read($, agents)).some(a => a.id === id)
 
     // A Korean line on the latest received message, one at a time per session.
     // ponytail: an older line landing after a newer message is possible; the next message rewrites it
@@ -495,7 +521,7 @@ export const register: Register = on => {
       try {
         const r = await $.model.complete({ model: 'haiku', prompt: `${SESSION_ASK}\n\n[메시지]\n${text.slice(0, 1500)}`, effort: 'low', maxTokens: 80 })
         if (r.isAnswered) await count('session', r.usage)
-        const line = r.isAnswered ? oneLine(r.text) : ''
+        const line = r.isAnswered ? summaryLine(r.text) : ''
         if (line) await update($, sessionsAtom, rows => rows.map(s => (s.name === name ? { ...s, summary: line } : s)))
       } catch {
         // a failed line leaves the message's own first line shown
@@ -600,7 +626,7 @@ export const register: Register = on => {
       const isStale = (l: Limit) => !!l.resetsAt && new Date(l.resetsAt).getTime() <= now
       await update($, meter, m => {
         if (!m) return m
-        const modelChanged = !!model && prettyModel(model) !== prettyModel(m.model)
+        const modelChanged = !!model && (!m.model || prettyModel(model) !== prettyModel(m.model))
         // a model switch brings that model's saved level along
         const effort = (effortChanged || modelChanged) && level ? level : m.effort
         const isOld = m.measuredAt === undefined || now - m.measuredAt > STALE_MS
@@ -630,7 +656,13 @@ export const register: Register = on => {
       // The engine's list is the authority on status; events fill in between ticks.
       const list = await $.agent.list().catch(() => [])
       for (const a of list) {
-        const t = tracked.get(a.id) ?? { id: a.id, type: a.type, description: a.description, status: a.status, lastTool: '', activity: '', tools: 0, startedAt: now }
+        // a row that aged off the band stays off (the engine still lists it, and a reload would bring it back),
+        // unless a message woke it and it runs again
+        if (dropped.has(a.id)) {
+          if (agentPhase(a.status) !== 'running') continue
+          dropped.delete(a.id)
+        }
+        const t = tracked.get(a.id) ??{ id: a.id, type: a.type, description: a.description, status: a.status, lastTool: '', activity: '', tools: 0, startedAt: now }
         // idle is a loop that ended its turn and waits for a message: a subagent there is done
         // (a message may wake it, and the next tick shows it running again); a teammate waits (대기).
         t.status = a.status === 'idle' && !a.teammateId ? 'completed' : a.status
@@ -663,7 +695,8 @@ export const register: Register = on => {
     // A reload starts with an empty map: take back the rows already shown (model, effort, call id, last step),
     // so an agent's model stays on its row instead of waiting for its next request.
     // (a row named 'agent' came from a fork's calls in an older build: dropped)
-    for (const row of await read($, agents)) if (!tracked.has(row.id) && row.type !== 'agent') tracked.set(row.id, { ...row })
+    for (const id of await read($, droppedAtom)) dropped.add(id)
+    for (const row of await read($, agents)) if (!tracked.has(row.id) && !dropped.has(row.id) && row.type !== 'agent') tracked.set(row.id, { ...row })
 
     await $.command.register({
       name: 'mods-hud',
@@ -671,19 +704,27 @@ export const register: Register = on => {
       argumentHint: '[usage|pane|agents on|agents off|debug]',
     })
 
-    const [model, usage, settings] = await Promise.all([$.session.model(), $.session.usage(), $.settings.read()])
+    // Any of these may fail at start: the meter is made anyway, and the timers below still start.
+    // (A throw here once left the meter empty for good: no model, effort or usage on any surface.)
+    const [model, usage, settings] = await Promise.all([
+      $.session.model().catch(() => null),
+      $.session.usage().catch(() => null),
+      $.settings.read().catch(() => null),
+    ])
     settingsEffort = effortFor(settings, model)
     // A reload starts here too: keep when figures last arrived.
-    await update($, meter, prev =>
-      ({
-        model,
+    await update($, meter, prev => {
+      const name = model ?? prev?.model ?? ''
+      return {
+        model: name,
         // a reload keeps the level the last request ran on
-        effort: (prev && prettyModel(prev.model) === prettyModel(model) && prev.effort) || settingsEffort,
-        context: usage.context.percent,
-        limits: toLimits(usage),
+        effort: (prev && prettyModel(prev.model) === prettyModel(name) && prev.effort) || settingsEffort,
+        context: usage ? usage.context.percent : prev?.context,
+        limits: usage ? toLimits(usage) : (prev?.limits ?? []),
         measuredAt: prev?.measuredAt,
         isStale: prev?.isStale,
-      }) satisfies Meter)
+      } satisfies Meter
+    })
 
     $.clock.every(TICK_MS, () => void poll())
     $.clock.every(SESSION_POLL_MS, () => void pollSessions())
@@ -706,7 +747,8 @@ export const register: Register = on => {
 
   on('session.measure', async ($, e, next) => {
     const now = await $.clock.now()
-    await update($, meter, m => (m ? { ...m, context: e.context.percent, limits: toLimits(e), measuredAt: now, isStale: false } : m))
+    // an empty meter is made here too; the next tick names the model
+    await update($, meter, m => ({ model: '', ...m, context: e.context.percent, limits: toLimits(e), measuredAt: now, isStale: false }))
 
     return next(e)
   })
@@ -767,7 +809,9 @@ export const register: Register = on => {
       const draws = Object.entries(lastDraw).map(([k, v]) => `${k}: ${v}`).join(' | ') || '아직 한 번도 안 그림'
       const rows = (await read($, agents)).map(a => `${a.id.slice(0, 8)}:${a.type}:${a.status}`).join(', ') || '없음'
       const peers = (await read($, sessionsAtom)).map(x => `${x.title ?? x.name}:${x.state}:로그${x.log.length}`).join(', ') || '없음'
-      return { text: `[진단] surfaces=${surfaces.join(',') || '없음'} · 에이전트: ${rows} · 세션: ${peers} · 마지막 그림: ${draws}` }
+      const m = await read($, meter)
+      const usage = m ? `${prettyModel(m.model) || '모델 없음'} ${m.effort ?? '-'} 한도${m.limits.length} ctx=${m.context ?? '-'}` : '없음'
+      return { text: `[진단] surfaces=${surfaces.join(',') || '없음'} · 사용량: ${usage} · 에이전트: ${rows} · 세션: ${peers} · 마지막 그림: ${draws}` }
     }
     $.clock.after(0, () => void refresh?.(''))
 
@@ -1300,7 +1344,7 @@ export const register: Register = on => {
       { n: doneCount, word: '완료', color: LOOK.done.color },
       { n: ended.length - doneCount, word: '중지', color: LOOK.stopped.color },
     ].filter(c => c.n > 0)
-    lastDraw[e.surface] = `${e.component} rows=${room.rows} cols=${width} rows=${rows.length} live=${live.length} ended=${ended.length}`
+    lastDraw[`${e.surface} ${e.component}`] = `rows=${room.rows} cols=${width} rows=${rows.length} live=${live.length} ended=${ended.length}`
 
     // A row is a label cell that shrinks and a status cell that never does: two elements, no drawn divider.
     const row = (key: string, label: JSX.Element, status: JSX.Element) => (
