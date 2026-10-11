@@ -2,7 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
-import { branchLabel, cells, detailView, summaryLine } from '../hooks/register'
+import { branchLabel, cells, summaryLine } from '../hooks/register'
 
 const USAGE = { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }
 const NOW = new Date(2026, 9, 11, 12, 0).getTime()
@@ -473,61 +473,6 @@ test('a reload keeps each agent row whole: its model stays shown', async ($, on)
   expect(await ui.find({ type: 'Text', text: /^Haiku 5\.5$/ })).toBeDefined()
 })
 
-const PANE_PROPS = { title: 'd', isFocused: false, bodyColumns: 60, placement: 'dock', scroll: { offset: 0, bodyRows: 10 }, view: {} } as const
-
-test('a press on a row opens the detail pane on it, with its recent calls', async ($, on) => {
-  const clock = mock.clock(on, { now: NOW })
-  const w: World = { list: [{ id: 'a9', type: 'Explore', description: '작업 a9', status: 'running' }], forks: [] }
-  world(on, w)
-  const opened: string[] = []
-  on('ui.open', (_, e) => (opened.push(`${e.id}:${e.title}`), { value: { isPlaced: true } }) as never)
-  on('session.messages', (_, e) => ({
-    value: (e as { agentId?: string }).agentId === 'a9'
-      ? [
-          { role: 'assistant', text: '세는 중', toolUses: [{ tool_use_id: 'b1', tool: 'Bash', input: { command: 'ls', description: 'List files' }, text: 'ok' }] },
-          { role: 'assistant', text: '', toolUses: [{ tool_use_id: 'b2', tool: 'Grep', input: { pattern: 'x' } }] },
-        ]
-      : [{ role: 'assistant', text: '메인 답', toolUses: [{ tool_use_id: 'm1', tool: 'Read', input: { file_path: '/a/b.ts' }, text: 'x' }] }],
-  }) as never)
-  await $.session.start({ cwd: '/tmp/x', surface: 'desktop', isInteractive: true })
-  await clock.advance(2000)
-  const band = await $.ui.mount({ plugin: 'mods-hud', surface: 'desktop', component: 'AbovePrompt', props: BAND })
-  await band.press({ key: 'go-a9' })
-  expect(opened).toEqual(['session-detail:Explore · 작업 a9'])
-
-  const pane = await $.ui.mount({ plugin: 'mods-hud', surface: 'desktop', component: 'Pane', requestId: 'session-detail', props: PANE_PROPS })
-  const shown = await texts(pane)
-  expect(shown).toContain('Bash List files')
-  expect(shown).toContain('Grep "x"')
-  expect((await feedOf(pane)).find(l => l.mark === '●')?.color).toBe('warning') // still running
-  expect((await feedOf(pane)).find(l => l.mark === '✓')?.color).toBe('success')
-  expect(shown).toContain('“세는 중”')
-  await pane.unmount()
-
-  await band.press({ key: 'go-session' })
-  const main = await $.ui.mount({ plugin: 'mods-hud', surface: 'desktop', component: 'Pane', requestId: 'session-detail', props: PANE_PROPS })
-  // the main calls sit on their own tab, the agents on 현재
-  await main.press({ key: 'tab-calls' })
-  expect(await texts(main)).toContain('Read b.ts')
-  await main.press({ key: 'tab-live' })
-  const mainTexts = (await main.findAll({ type: 'Text' })).map(t => t.text)
-  expect(mainTexts).toContain('서브에이전트 1')
-  expect((await main.find({ key: 'open-a9' }))?.text).toBe('● Explore 작업 a9')
-  await main.press({ key: 'open-a9' })
-  expect(await texts(main)).toContain('Grep "x"')
-  await main.press({ key: 'back' })
-  // the title follows the view (issue 017)
-  expect(opened.slice(-2)).toEqual(['session-detail:Explore · 작업 a9', 'session-detail:세션 상세'])
-  expect((await main.findAll({ type: 'Text' })).map(t => t.text)).toContain('서브에이전트 1')
-  // /mods-hud debug counts the presses that reached the mod, per site, and the draws in the last minute
-  const dbg = await $.command.run({ command: 'mods-hud', args: 'debug', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 90 } } as never)
-  expect(dbg.text).toContain('band 2회(실패 0, 마지막 go-session)')
-  expect(dbg.text).toContain('detail 4회(실패 0, 마지막 back)')
-  expect(dbg.text).toMatch(/최근 1분 그림: .*detail \d+/)
-  await $.command.run({ command: 'mods-hud', args: 'debug reset', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 90 } } as never)
-  const after = await $.command.run({ command: 'mods-hud', args: 'debug', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 90 } } as never)
-  expect(after.text).toContain('받은 누름: 없음')
-})
 
 test('a lone agent stays shown however few rows the surface gives', async ($, on) => {
   const clock = mock.clock(on, { now: NOW })
@@ -554,7 +499,7 @@ test('an agent gets a Korean line as it starts, a check-in every two minutes it 
   await $.agent.spawn({ tool_use_id: 's1', prompt: 'p', description: 'Count txt files', subagentType: 'Explore', provider: { plugin: 'engine', tier: 'core' } } as never)
   const label = async () => {
     const ui = await $.ui.mount({ plugin: 'mods-hud', surface: 'desktop', component: 'AbovePrompt', props: BAND })
-    const t = (await ui.find({ key: 'go-bg1' }))?.text
+    const t = (await ui.find({ key: 'label-bg1' }))?.text
     await ui.unmount()
     return t
   }
@@ -687,7 +632,7 @@ test('a SendMessage to another session makes a session row under its own fold li
   expect(await ui.find({ type: 'Text', text: /^other$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^a1$/ })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /^zz$/ })).toBeUndefined()
-  expect((await ui.find({ key: 'go-s-worker-b' }))?.text).toBe('로그인 버그를 고쳐줘')
+  expect((await ui.find({ key: 'label-s-worker-b' }))?.text).toBe('로그인 버그를 고쳐줘')
   expect(await ui.find({ type: 'Text', text: /^↑ 30초 전$/ })).toBeDefined()
   // its unknown dot is dim
   expect((await ui.findAll({ type: 'Text', text: /^◇$/ })).every(t => t.props.dimColor === true)).toBe(true)
@@ -713,8 +658,8 @@ test('an incoming agent-message makes or updates a session row and gets a Korean
   const ui = await $.ui.mount({ plugin: 'mods-hud', surface: 'desktop', component: 'AbovePrompt', props: BAND })
   expect((await ui.find({ key: 'sessions-line' }))?.text.trim()).toBe('▸ 오케스트레이션 2  대기 2')
   await ui.press({ key: 'sessions' })
-  expect((await ui.find({ key: 'go-s-worker-b' }))?.text).toBe('빌드 통과 보고')
-  expect(await ui.find({ key: 'go-s-a1' })).toBeUndefined()
+  expect((await ui.find({ key: 'label-s-worker-b' }))?.text).toBe('빌드 통과 보고')
+  expect(await ui.find({ key: 'label-s-a1' })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /^↓ 0초 전$/ })).toBeDefined()
 })
 
@@ -783,55 +728,11 @@ test('↻ sends the session a one-press nudge and logs it; ✕ hides the row; a 
   // no stop button for a session
   expect(await ui.find({ key: 'stop-s-worker-b' })).toBeUndefined()
   await ui.press({ key: 'hide-s-worker-c' })
-  expect(await ui.find({ key: 'go-s-worker-c' })).toBeUndefined()
+  expect(await ui.find({ key: 'label-s-worker-c' })).toBeUndefined()
   expect((await ui.find({ key: 'sessions-line' }))?.text.trim()).toBe('▾ 오케스트레이션 1  대기 1')
-
-  // the nudge is in the session's log
-  await ui.press({ key: 'go-s-worker-b' })
-  const pane = await $.ui.mount({ plugin: 'mods-hud', surface: 'desktop', component: 'Pane', requestId: 'session-detail', props: PANE_PROPS })
-  const texts = (await pane.findAll({ type: 'Text' })).map(t => t.text)
-  expect(texts).toContain('주고받은 메시지')
-  expect(texts.filter(t => /^↑ \d\d:\d\d /.test(t))).toEqual(['↑ 12:00 첫 지시', '↑ 12:00 이어서 진행해줘'])
 })
 
-test('the detail main view lists the sessions; one opens its log, newest at the bottom, and back returns', async ($, on) => {
-  const clock = mock.clock(on, { now: NOW })
-  const w: World = { list: [], forks: [] }
-  world(on, w)
-  on('ui.open', () => ({ value: { isPlaced: true } }) as never)
-  on('session.messages', () => ({ value: [{ role: 'assistant', text: '메인 답', toolUses: [{ tool_use_id: 'm1', tool: 'Read', input: { file_path: '/a/b.ts' }, text: 'x' }] }] }) as never)
-  await $.session.start({ cwd: '/tmp/x', surface: 'desktop', isInteractive: true })
-  await send($, 'worker-b', '로그 확인해줘')
-  await clock.advance(60_000)
-  await $.prompt.submit({ text: peerMsg('worker-b', '로그에 오류 없음'), origin: { kind: 'peer' }, wait: false })
-  await clock.settle()
-  const band = await $.ui.mount({ plugin: 'mods-hud', surface: 'desktop', component: 'AbovePrompt', props: BAND })
-  await band.press({ key: 'go-session' })
-  const pane = await $.ui.mount({ plugin: 'mods-hud', surface: 'desktop', component: 'Pane', requestId: 'session-detail', props: PANE_PROPS })
-  await pane.press({ key: 'tab-calls' })
-  expect(await texts(pane)).toContain('Read b.ts')
-  await pane.press({ key: 'tab-live' })
-  const main = (await pane.findAll({ type: 'Text' })).map(t => t.text)
-  expect(main).toContain('오케스트레이션 1')
-  expect(main).toContain('↓ 0초 전')
-  await pane.press({ key: 'open-s-worker-b' })
-  const view = (await pane.findAll({ type: 'Text' })).map(t => t.text)
-  expect(view).toContain('worker-b')
-  expect(view).toContain('대기')
-  expect(view.filter(t => /^[↑↓] \d\d:\d\d /.test(t))).toEqual(['↑ 12:00 로그 확인해줘', '↓ 12:01 로그에 오류 없음'])
-  expect(view).not.toContain('Read b.ts')
-  await pane.press({ key: 'back' })
-  expect((await pane.findAll({ type: 'Text' })).map(t => t.text)).toContain('오케스트레이션 1')
-})
-
-test('a detail subject saved by an older build reads as the view it meant', () => {
-  expect(detailView({ agentId: 'a9', at: 1 })).toEqual({ kind: 'agent', id: 'a9', at: 1 })
-  expect(detailView({ agentId: null, at: 1 })).toEqual({ kind: 'main', id: null, at: 1 })
-  expect(detailView({ kind: 'session', id: 'x', at: 1 })).toEqual({ kind: 'session', id: 'x', at: 1 })
-  expect(detailView(null)).toBeNull()
-})
-
-test('long session names and messages stay one line on both surfaces, band and detail', async ($, on) => {
+test('long session names and messages stay one line on both surfaces', async ($, on) => {
   const clock = mock.clock(on, { now: NOW })
   const name = 'orchestrated-session-with-a-really-long-name-for-clipping'
   const body = '아주 긴 메시지 본문이 여기 있다 '.repeat(8)
@@ -856,18 +757,6 @@ test('long session names and messages stay one line on both surfaces, band and d
       expect(cells((await ui.find({ key: 'sessions' }))!.text) + 2).toBeLessThanOrEqual(width)
       await ui.unmount()
     }
-    const band = await $.ui.mount({ plugin: 'mods-hud', surface, component: 'AbovePrompt', props: BAND })
-    await band.press({ key: 'go-session' })
-    const pane = await $.ui.mount({ plugin: 'mods-hud', surface, component: 'Pane', requestId: 'session-detail', props: PANE_PROPS })
-    await pane.press({ key: 'tab-live' })
-    // the terminal is exact; the desktop's proportional Hangul takes about 1.3 cells, so its cut allows ×1.3
-    const room = surface === 'desktop' ? Math.ceil(PANE_PROPS.bodyColumns * 1.3) : PANE_PROPS.bodyColumns
-    const peer = await pane.find({ key: `peer-${name}` })
-    expect(cells(peer!.text) + 3).toBeLessThanOrEqual(room)
-    await pane.press({ key: `open-s-${name}` })
-    for (const t of await pane.findAll({ type: 'Text' })) expect(cells(t.text)).toBeLessThanOrEqual(room)
-    await pane.unmount()
-    await band.unmount()
   }
 })
 
@@ -961,292 +850,14 @@ test('agent time shows hours only once one is reached', async ($, on) => {
   expect(await ui.find({ type: 'Text', text: /^1:02:0\d$/ })).toBeDefined()
 })
 
-// History: the detail main view's turn cards.
-const turn = async ($: Engine, id: string, ask?: string) => {
-  if (ask) await $.prompt.submit({ text: ask, origin: { kind: 'composer' }, wait: false })
-  await $.turn.start({ text: ask ?? '', turnId: id })
-}
-const endTurn = ($: Engine, id: string, answer = '했어요') => $.turn.complete({ answer, durationMs: 5, isAborted: false, turnId: id, reason: 'answer' })
-// The detail pane on the main view, opened from the band as the person would.
-const openMain = async ($: Engine, surface: 'terminal' | 'desktop' = 'desktop', bodyColumns = 60) => {
-  const band = await $.ui.mount({ plugin: 'mods-hud', surface, component: 'AbovePrompt', props: BAND })
-  await band.press({ key: 'go-session' })
-  await band.unmount()
-  return $.ui.mount({ plugin: 'mods-hud', surface, component: 'Pane', requestId: 'session-detail', props: { ...PANE_PROPS, bodyColumns } })
-}
-type Mounted = Awaited<ReturnType<typeof openMain>>
+type Mounted = Awaited<ReturnType<Engine['ui']['mount']>>
 // Lines drawn in feed regions (hooks/feed.tsx): their props, since a Client's own tree is the surface's
 const feedOf = async (ui: Mounted) =>
   (await ui.findAll({ type: 'Client' }))
     .filter(c => c.props.module === 'hooks/feed.tsx')
     .flatMap(c => (c.props.props as { lines: { mark?: string; color?: string; text: string }[] }).lines)
-// Every text drawn, feed lines included; a call's line ("12:03  1.2s  Read b.ts") as its description alone
-const CALL_PREFIX = '12:03  1.2s  '.length
-const texts = async (ui: Mounted) => [
-  ...(await ui.findAll({ type: 'Text' })).map(t => t.text),
-  ...(await feedOf(ui)).map(l => (l.mark === undefined ? l.text : l.text.slice(CALL_PREFIX))),
-]
-
-test('a turn makes a history card: its ask, model, duration, and the session line as its result', async ($, on) => {
-  const clock = mock.clock(on, { now: NOW })
-  on('ui.open', () => ({ value: { isPlaced: true } }) as never)
-  const w: World = { list: [], forks: [], forkText: '로그인 버그 수정 완료' }
-  world(on, w)
-  await $.session.start({ cwd: '/tmp/x', surface: 'desktop', isInteractive: true })
-  await turn($, 't1', '로그인 고쳐줘')
-  await clock.advance(64_000)
-  const pane = await openMain($)
-  expect((await pane.find({ key: 'tab-now' }))?.text).toBe('▸ 턴')
-  // running: its clock moves and the result waits
-  const live = await pane.find({ type: 'Text', text: /^─ 턴 1 / })
-  expect(live?.text).toBe('─ 턴 1 · 12:00 · 01:04 · Opus 5.5(high)')
-  expect(live?.props.bold).toBe(true)
-  expect((await pane.find({ key: 'ask' }))?.text).toBe('  요청  로그인 고쳐줘')
-  // running: in place of the result, its calls so far and the latest, in a feed region
-  expect((await pane.find({ key: 'result' }))?.text).toBe('  지금  ')
-  expect((await feedOf(pane)).map(l => l.text)).toContain('→ …')
-  await endTurn($, 't1')
-  await clock.settle()
-  await clock.advance(30_000)
-  // ended: the time it took, frozen, and Haiku's session line as its result
-  expect(await texts(pane)).toContain('─ 턴 1 · 12:00 · 01:04 · Opus 5.5(high)')
-  expect((await pane.find({ key: 'result' }))?.text).toBe('  결과  로그인 버그 수정 완료')
-  await turn($, 't2', '테스트 추가해줘')
-  expect((await texts(pane)).filter(t => t.startsWith('─ 턴'))).toEqual(['─ 턴 1 · 12:00 · 01:04 · Opus 5.5(high)', '─ 턴 2 · 12:01 · 00:00 · Opus 5.5(high)'])
-})
-
-test('an agent spawned in a turn lands in its card and stays there, its last line and time kept, after ✕ and after its row drops', async ($, on) => {
-  const clock = mock.clock(on, { now: NOW })
-  on('ui.open', () => ({ value: { isPlaced: true } }) as never)
-  on('agent.spawn', () => ({ model: 'claude-haiku-5-5', agentId: 'bg1' }))
-  const w: World = { list: [], forks: [], agentText: '텍스트 파일 653개 찾음' }
-  world(on, w)
-  await $.session.start({ cwd: '/tmp/x', surface: 'desktop', isInteractive: true })
-  await turn($, 't1', '파일 세줘')
-  await $.agent.spawn({ tool_use_id: 's1', prompt: 'p', description: '파일 세기', subagentType: 'Explore', provider: { plugin: 'engine', tier: 'core' } } as never)
-  const pane = await openMain($)
-  expect((await pane.find({ key: 'h-agent-bg1' }))?.props.label).toBe('Explore  파일 세기')
-  // running: when it started, fixed (the pane redraws on change only)
-  expect((await pane.find({ key: 'h-a-bg1' }))?.text).toBe('    ⎿ ● Explore  파일 세기  12:00~')
-  await $.tool.call({ tool: 'Bash', tool_use_id: 'b1', agentId: 'bg1', command: 'ls' } as never)
-  await clock.advance(46_000)
-  await $.turn.complete({ answer: '653', durationMs: 5, isAborted: false, turnId: 'c1', reason: 'answer', agentId: 'bg1' } as never)
-  await clock.settle()
-  const done = '    ⎿ ✓ Explore  텍스트 파일 653개 찾음  00:46'
-  expect((await pane.find({ key: 'h-a-bg1' }))?.text).toBe(done)
-
-  // ✕ on the band closes the row, not the card's line
-  const band = await $.ui.mount({ plugin: 'mods-hud', surface: 'desktop', component: 'AbovePrompt', props: BAND })
-  await band.press({ key: 'hide-bg1' })
-  expect(await band.find({ key: 'go-bg1' })).toBeUndefined()
-  await band.unmount()
-  expect((await pane.find({ key: 'h-a-bg1' }))?.text).toBe(done)
-  // past KEEP_DONE_MS the row is gone from state too
-  await clock.advance(11 * 60_000)
-  const dbg = await $.command.run({ command: 'mods-hud', args: 'debug', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 90 } } as never)
-  expect(dbg.text).toContain('에이전트: 없음')
-  expect((await pane.find({ key: 'h-a-bg1' }))?.text).toBe(done)
-
-  // a press opens its view from the snapshot; back returns to the history tab
-  await pane.press({ key: 'h-agent-bg1' })
-  expect(await texts(pane)).toContain('Explore  텍스트 파일 653개 찾음')
-  await pane.press({ key: 'back' })
-  expect((await pane.find({ key: 'tab-now' }))?.text).toBe('▸ 턴')
-  expect((await pane.find({ key: 'h-a-bg1' }))?.text).toBe(done)
-})
-
-test('session traffic in a turn lands in its card; ListAgents moves its state there', async ($, on) => {
-  const clock = mock.clock(on, { now: NOW })
-  on('ui.open', () => ({ value: { isPlaced: true } }) as never)
-  let listing = '[running]  ·  worker-b  ·  /a  ·  started 2h ago'
-  on('tool.call', { tool: 'ListAgents' }, () => ({ result: { listing } }) as never)
-  const w: World = { list: [], forks: [] }
-  world(on, w)
-  await $.session.start({ cwd: '/tmp/x', surface: 'desktop', isInteractive: true })
-  await turn($, 't1', '빌드 맡겨')
-  await send($, 'worker-b', '빌드 돌려줘\n자세한 건 아래')
-  await $.prompt.submit({ text: peerMsg('worker-b', '빌드 통과\n120개'), origin: { kind: 'peer' }, wait: false })
-  await clock.settle()
-  const pane = await openMain($)
-  expect((await pane.find({ key: 'h-sess-1-worker-b' }))?.props.label).toBe('worker-b  ↑빌드 돌려줘  ↓빌드 통과')
-  await clock.advance(10_000)
-  expect((await pane.find({ key: 'h-s-1-worker-b' }))?.text).toBe('    ↔ ◆ worker-b  ↑빌드 돌려줘  ↓빌드 통과')
-  await endTurn($, 't1')
-  await turn($, 't2', '정리해')
-  await send($, 'worker-c', '문서 정리')
-  expect(await pane.find({ key: 'h-sess-2-worker-c' })).toBeDefined()
-  expect(await pane.find({ key: 'h-sess-1-worker-c' })).toBeUndefined()
-  // ended: the list no longer has it
-  listing = '[running]  ·  worker-c  ·  /a  ·  started 2h ago'
-  await clock.advance(10_000)
-  // two cards of four rows outgrow the pane: the first sits behind the fold
-  await pane.press({ key: 'older' })
-  expect((await pane.find({ key: 'h-s-1-worker-b' }))?.text).toBe('    ↔ ■ worker-b  ↑빌드 돌려줘  ↓빌드 통과')
-  await pane.press({ key: 'h-sess-1-worker-b' })
-  expect((await texts(pane)).filter(t => /^[↑↓] \d\d:\d\d /.test(t))).toEqual(['↑ 12:00 빌드 돌려줘', '↓ 12:00 빌드 통과'])
-})
-
-test('the tabs switch: 도구 호출 has the main calls, 현재 the live sections; back from an agent returns to the tab left', async ($, on) => {
-  const clock = mock.clock(on, { now: NOW })
-  on('ui.open', () => ({ value: { isPlaced: true } }) as never)
-  on('session.messages', (_, e) => ({
-    value: (e as { agentId?: string }).agentId
-      ? [{ role: 'assistant', text: '세는 중', toolUses: [{ tool_use_id: 'b1', tool: 'Grep', input: { pattern: 'x' } }] }]
-      : [
-          { role: 'assistant', text: '메인 답', toolUses: [{ tool_use_id: 'm1', tool: 'Read', input: { file_path: '/a/b.ts' }, text: 'x' }] },
-          { role: 'assistant', text: '', toolUses: [{ tool_use_id: 'm2', tool: 'Bash', input: { command: 'ls', description: 'List files' } }] },
-        ],
-  }) as never)
-  const w: World = { list: [{ id: 'a9', type: 'Explore', description: '작업 a9', status: 'running' }], forks: [] }
-  world(on, w)
-  await $.session.start({ cwd: '/tmp/x', surface: 'desktop', isInteractive: true })
-  await turn($, 't1', '해줘')
-  await clock.advance(2000)
-  const pane = await openMain($)
-  const labels = async () => [
-    ...(await Promise.all(['history', 'calls', 'live'].map(async k => (await pane.find({ key: `tab-${k}` }))?.props.label))),
-    (await pane.find({ key: 'tab-now' }))?.text,
-  ]
-  expect(await labels()).toEqual(['턴', '도구', '지금', '▸ 턴'])
-  // the history holds no calls and no live sections
-  expect(await texts(pane)).not.toContain('Read b.ts')
-  expect(await pane.find({ key: 'open-a9' })).toBeUndefined()
-  expect(await pane.find({ key: 'h-agent-a9' })).toBeDefined()
-
-  await pane.press({ key: 'tab-calls' })
-  expect(await labels()).toEqual(['턴', '도구', '지금', '▸ 도구'])
-  expect(await texts(pane)).toEqual(expect.arrayContaining(['Read b.ts', 'Bash List files']))
-  expect(await pane.find({ key: 'open-a9' })).toBeUndefined()
-
-  await pane.press({ key: 'tab-live' })
-  expect(await labels()).toEqual(['턴', '도구', '지금', '▸ 지금'])
-  const live = await texts(pane)
-  expect(live).toEqual(expect.arrayContaining(['메인 세션', '서브에이전트 1', '“메인 답”']))
-  expect(live).not.toContain('Read b.ts')
-  await pane.press({ key: 'open-a9' })
-  expect(await texts(pane)).toContain('Grep "x"')
-  await pane.press({ key: 'back' })
-  expect(await labels()).toEqual(['턴', '도구', '지금', '▸ 지금'])
-
-  await pane.press({ key: 'tab-calls' })
-  await pane.press({ key: 'tab-history' })
-  await pane.press({ key: 'h-agent-a9' })
-  await pane.press({ key: 'back' })
-  expect(await labels()).toEqual(['턴', '도구', '지금', '▸ 턴'])
-})
-
-test('older turns sit behind ▸ 이전 턴 N개, which reveals them', async ($, on) => {
-  const clock = mock.clock(on, { now: NOW })
-  on('ui.open', () => ({ value: { isPlaced: true } }) as never)
-  const w: World = { list: [], forks: [] }
-  world(on, w)
-  await $.session.start({ cwd: '/tmp/x', surface: 'desktop', isInteractive: true })
-  for (const n of [1, 2, 3, 4, 5]) {
-    await turn($, `t${n}`, `요청 ${n}`)
-    await endTurn($, `t${n}`)
-    await clock.settle()
-  }
-  const pane = await openMain($)
-  const heads = async () => (await texts(pane)).filter(t => t.startsWith('─ 턴')).map(t => t.split(' · ')[0])
-  // ten rows: the tabs, a gap, the fold line, then two cards of three
-  expect(await heads()).toEqual(['─ 턴 4', '─ 턴 5'])
-  expect((await pane.find({ key: 'older' }))?.props.label).toBe('▸ 이전 턴 3개')
-  await pane.press({ key: 'older' })
-  expect(await heads()).toEqual(['─ 턴 1', '─ 턴 2', '─ 턴 3', '─ 턴 4', '─ 턴 5'])
-  expect((await pane.find({ key: 'older' }))?.props.label).toBe('▾ 이전 턴 3개')
-})
-
-test('a reload keeps the history, its agents as they ended, and the tab', async ($, on) => {
-  const clock = mock.clock(on, { now: NOW })
-  on('ui.open', () => ({ value: { isPlaced: true } }) as never)
-  on('agent.spawn', () => ({ model: 'claude-haiku-5-5', agentId: 'bg1' }))
-  const w: World = { list: [], forks: [], agentText: '파일 3개 찾음', forkText: '파일 개수 확인 완료' }
-  world(on, w)
-  await $.session.start({ cwd: '/tmp/x', surface: 'desktop', isInteractive: true })
-  await turn($, 't1', '파일 세줘')
-  await $.agent.spawn({ tool_use_id: 's1', prompt: 'p', description: '파일 세기', subagentType: 'Explore', provider: { plugin: 'engine', tier: 'core' } } as never)
-  await $.tool.call({ tool: 'Bash', tool_use_id: 'b1', agentId: 'bg1', command: 'ls' } as never)
-  await clock.advance(20_000)
-  await $.turn.complete({ answer: '3', durationMs: 5, isAborted: false, turnId: 'c1', reason: 'answer', agentId: 'bg1' } as never)
-  await send($, 'worker-b', '확인해줘')
-  await endTurn($, 't1')
-  await clock.settle()
-  // its row drops; the engine still lists it, so a reload finds it again with a fresh clock and no line
-  await clock.advance(11 * 60_000)
-  w.list.push({ id: 'bg1', type: 'Explore', description: '파일 세기', status: 'completed' })
-  const before = await openMain($)
-  await before.press({ key: 'tab-calls' })
-  await before.unmount()
-  await $.session.start({ cwd: '/tmp/x', surface: 'desktop', isInteractive: true })
-  await clock.advance(2000)
-  const pane = await openMain($)
-  expect((await pane.find({ key: 'tab-now' }))?.text).toBe('▸ 도구')
-  await pane.press({ key: 'tab-history' })
-  expect((await pane.find({ key: 'result' }))?.text).toBe('  결과  파일 개수 확인 완료')
-  expect((await pane.find({ key: 'h-a-bg1' }))?.text).toBe('    ⎿ ✓ Explore  파일 3개 찾음  00:20')
-  expect((await pane.find({ key: 'h-sess-1-worker-b' }))?.props.label).toBe('worker-b  ↑확인해줘')
-  // the count goes on from the kept cards
-  await turn($, 't2', '다음')
-  expect((await texts(pane)).some(t => t.startsWith('─ 턴 2 · '))).toBe(true)
-})
-
-test('long asks, results, agents and sessions stay one line in every tab at widths 40, 60 and 100 on both surfaces', async ($, on) => {
-  const clock = mock.clock(on, { now: NOW })
-  on('ui.open', () => ({ value: { isPlaced: true } }) as never)
-  on('agent.spawn', () => ({ model: 'claude-haiku-5-5', agentId: 'bg1' }))
-  const long = '아주 긴 한국어 문장이 패널의 폭을 넘기려고 계속 이어진다 '.repeat(4)
-  const name = 'orchestrated-session-with-a-really-long-name-for-clipping'
-  on('session.messages', () => ({ value: [{ role: 'assistant', text: long, toolUses: [{ tool_use_id: 'm1', tool: 'Bash', input: { command: 'ls', description: long } }] }] }) as never)
-  const w: World = { list: [], forks: [], agentText: long, forkText: long }
-  world(on, w)
-  await $.session.start({ cwd: '/tmp/x', surface: 'desktop', isInteractive: true })
-  await turn($, 't1', long)
-  await $.agent.spawn({ tool_use_id: 's1', prompt: 'p', description: long, subagentType: 'general-purpose', provider: { plugin: 'engine', tier: 'core' } } as never)
-  await $.tool.call({ tool: 'Bash', tool_use_id: 'b1', agentId: 'bg1', command: 'ls' } as never)
-  await $.turn.complete({ answer: long, durationMs: 5, isAborted: false, turnId: 'c1', reason: 'answer', agentId: 'bg1' } as never)
-  await send($, name, long)
-  await $.prompt.submit({ text: peerMsg(name, long), origin: { kind: 'peer' }, wait: false })
-  await endTurn($, 't1', long)
-  await clock.settle()
-  for (const surface of ['terminal', 'desktop'] as const) {
-    for (const cols of [40, 60, 100]) {
-      // the terminal is exact; the desktop's proportional Hangul takes about 1.3 cells, so its cut allows ×1.3
-      const room = surface === 'desktop' ? Math.ceil(cols * 1.3) : cols
-      const pane = await openMain($, surface, cols)
-      for (const tab of ['history', 'calls', 'live']) {
-        await pane.press({ key: `tab-${tab}` })
-        for (const t of await pane.findAll({ type: 'Text' })) expect(cells(t.text)).toBeLessThanOrEqual(room)
-        for (const b of await pane.findAll({ type: 'Button' })) expect(cells(String(b.props.label ?? b.text))).toBeLessThanOrEqual(room)
-        // a whole line (indent, dot, label, time) fits too
-        for (const key of tab === 'history' ? ['tabs', 'ask', 'result', 'h-a-bg1', `h-s-1-${name}`] : ['tabs']) {
-          const line = await pane.find({ key })
-          expect(line).toBeDefined()
-          expect(cells(line!.text)).toBeLessThanOrEqual(room)
-        }
-      }
-      await pane.unmount()
-    }
-  }
-})
-
-test('a turn a notice or another session started adds no card of its own', async ($, on) => {
-  const clock = mock.clock(on, { now: NOW })
-  const w: World = { list: [], forks: [] }
-  on('ui.open', () => ({ value: { isPlaced: true } }) as never)
-  world(on, w)
-  await $.session.start({ cwd: '/tmp/x', surface: 'desktop', isInteractive: true })
-  await $.turn.start({ text: '고쳐줘', turnId: 't1' })
-  await $.turn.complete({ answer: 'x', durationMs: 5, isAborted: false, turnId: 't1', reason: 'answer' })
-  await $.turn.start({ text: '<task-notification>done</task-notification>', turnId: 't2' })
-  await $.turn.complete({ answer: 'y', durationMs: 5, isAborted: false, turnId: 't2', reason: 'answer' })
-  await clock.settle()
-  const band = await $.ui.mount({ plugin: 'mods-hud', surface: 'desktop', component: 'AbovePrompt', props: BAND })
-  await band.press({ key: 'go-session' })
-  const pane = await $.ui.mount({ plugin: 'mods-hud', surface: 'desktop', component: 'Pane', requestId: 'session-detail', props: PANE_PROPS })
-  const heads = (await pane.findAll({ type: 'Text' })).map(t => t.text).filter(t => t.includes('턴 '))
-  expect(heads.some(t => t.includes('턴 1'))).toBe(true)
-  expect(heads.some(t => t.includes('턴 2'))).toBe(false)
-})
+// Every text drawn, feed lines included
+const texts = async (ui: Mounted) => [...(await ui.findAll({ type: 'Text' })).map(t => t.text), ...(await feedOf(ui)).map(l => l.text)]
 
 // Issue 008. A fresh module is what a hot reload gives: the ids it finds in state stay off the band.
 test('an agent that aged off the band stays off after a reload, though the engine still lists it', async ($, on) => {
@@ -1362,34 +973,4 @@ test('a tool call writes no state: its step reaches the band through the feed re
   await ui.advance(1000)
   expect(await drawn()).toEqual(['→ Read b.ts'])
   await ui.unmount()
-})
-
-test('도구 lists calls under their prompt with time and duration, an error below its call; an ended card counts its calls', async ($, on) => {
-  const clock = mock.clock(on, { now: NOW })
-  on('ui.open', () => ({ value: { isPlaced: true } }) as never)
-  on('session.messages', () => ({
-    value: [
-      { role: 'user', text: '고쳐줘', toolUses: [] },
-      {
-        role: 'assistant',
-        text: '',
-        toolUses: [
-          { tool_use_id: 'm1', tool: 'Read', input: { file_path: '/a/b.ts' }, text: 'x' },
-          { tool_use_id: 'm2', tool: 'Bash', input: { command: 'false', description: 'Fail' }, isError: true, text: 'Exit code 1\nmore' },
-        ],
-      },
-    ],
-  }) as never)
-  world(on, { list: [], forks: [] })
-  await $.session.start({ cwd: '/tmp/x', surface: 'desktop', isInteractive: true })
-  await turn($, 't1', '고쳐줘')
-  await $.tool.call({ tool: 'Read', tool_use_id: 'm1', file_path: '/a/b.ts' } as never)
-  await $.tool.call({ tool: 'Bash', tool_use_id: 'm2', command: 'false', description: 'Fail' } as never)
-  const pane = await openMain($)
-  await pane.press({ key: 'tab-calls' })
-  expect((await feedOf(pane)).map(l => `${l.mark ?? ''}${l.text}`)).toEqual(['─ 고쳐줘', '✓12:00  0.0s  Read b.ts', '✗12:00  0.0s  Bash Fail', '  Exit code 1'])
-  await endTurn($, 't1')
-  await clock.settle()
-  await pane.press({ key: 'tab-history' })
-  expect((await pane.find({ type: 'Text', text: /^─ 턴 1 / }))?.text).toMatch(/ · 도구 2$/)
 })

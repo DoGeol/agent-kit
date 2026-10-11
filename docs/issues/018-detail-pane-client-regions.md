@@ -1,6 +1,6 @@
 # 018. Session detail on Client regions, with clearer tabs
 
-- **State:** stages 1-2 confirmed on the desktop (0.4.13); stage 3 implemented (0.4.14), desktop to check
+- **State:** closed: the detail pane was removed (0.5.0); the band's step line keeps its feed region
 - **Where:** the detail pane in `hooks/register.tsx` (`DETAIL`), new surface modules next to `hooks/elapsed.tsx`
 - **Related:** [001](001-detail-pane-missed-press.md) (presses lost while agents run), [003](003-client-elapsed-clock.md) (Client clock, works on the desktop)
 
@@ -76,3 +76,7 @@ The hook answers from `transcriptCache` and the in-memory steps, never calling `
 - Agent view: its request, its calls (same rows as 도구), its result.
 
 **Stage 4. Check.** Tests (zero `agents`/`history` writes between an agent's start and end apart from status; Client props shape), a terminal `expect` run with an agent of 10 s or more, the desktop in a new session after a version bump (016), `/mods-hud debug` counters.
+
+## 0.5.0: the detail pane is gone (2026-10-12)
+The person chose the band alone: the detail pane was hard to read, and tab presses were still lost after 0.4.15 was proposed. The pane, its turn history and its call log are removed. The band's rows are plain text now; its only buttons are ■ stop, ↻ resume, ✕ close and the fold lines.
+What stays from this work: a tool call writes no state, the band's `→ step` line is a feed region (`hooks/feed.tsx`, topic `step|<agent>`), and `/mods-hud debug` counts Client round trips and faults.

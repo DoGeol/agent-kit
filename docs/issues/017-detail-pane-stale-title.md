@@ -1,6 +1,6 @@
 # 017. The detail pane keeps its first title
 
-- **State:** fixed (0.4.10), desktop to recheck
+- **State:** closed: the detail pane was removed (0.5.0)
 - **Where:** detail pane (`session-detail`), navigation inside it
 
 ## Symptom

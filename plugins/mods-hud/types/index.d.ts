@@ -30,8 +30,6 @@ export type AgentRow = {
   tools: number
   startedAt: number
   endedAt?: number
-  /** The Agent call that started it: where a press on its row scrolls to. */
-  toolUseId?: string
   /** A Korean line on what it has done so far, or its result once it ended. */
   summary?: string
   summaryAt?: number
@@ -55,31 +53,7 @@ export type SessionRow = {
   lastReceived?: { at: number; text: string }
   /** A Korean line on the latest received message. */
   summary?: string
-  /** The last 20 messages each way, oldest first. */
-  log: { dir: 'out' | 'in'; at: number; text: string }[]
 }
-
-/** One main turn as the detail pane's history keeps it: what was asked, what came of it, who worked on it. */
-export type TurnCard = {
-  n: number
-  startedAt: number
-  endedAt?: number
-  model?: string
-  effort?: string
-  ask: string
-  /** The session line Haiku wrote for it. */
-  result?: string
-  /** Agents that started in it, kept after their rows are closed or dropped. */
-  agents: { id: string; type: string; summary: string; status: string; startedAt: number; endedAt?: number }[]
-  /** Sessions messaged during it: first lines each way and their state then. */
-  sessions: { name: string; title?: string; state: SessionRow['state']; lastOut?: string; lastIn?: string }[]
-}
-
-/** The detail main view's tab. */
-export type DetailTab = 'history' | 'calls' | 'live'
-
-/** The detail pane's subject; `at` ticks to redraw it live. */
-export type DetailView = { kind: 'main' | 'agent' | 'session'; id: string | null; at: number }
 
 declare module 'claude-code' {
   interface PluginState {
@@ -100,19 +74,12 @@ declare module 'claude-code' {
       spend: Spend
       /** Ticks while an agent runs, so its elapsed time redraws. */
       beat: number
-      /** The detail pane's subject. An older build saved `{ agentId, at }`: read through `detailView`. */
-      detail: DetailView | null
       /** Other sessions this one coordinates with by message. */
       sessions: SessionRow[]
       /** The orchestration group, folded to one line until unfolded. */
       showSessions: boolean
       /** Session rows the person closed, by name. */
       hiddenSessions: string[]
-      /** The last 50 main turns, oldest first. */
-      history: TurnCard[]
-      detailTab: DetailTab
-      /** Older turn cards shown past what fits the pane. */
-      showOlderTurns: boolean
       /** Agents that aged off the band, so a reload does not bring them back. */
       dropped: string[]
       /** The checkout's branch, marked when it is a linked worktree; "" outside a repository. */

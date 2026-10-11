@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
-import type { CoreEngineInterface, Register, SessionMessage, SessionUsage, StateDollar } from 'claude-code'
+import type { CoreEngineInterface, Register, SessionUsage, StateDollar } from 'claude-code'
 
-import type { AgentRow, DetailTab, DetailView, Limit, Meter, Phase, SessionRow, Spend, Summary, TurnCard } from '../types'
+import type { AgentRow, Limit, Meter, Phase, SessionRow, Spend, Summary } from '../types'
 
 const summary = atom({ plugin: 'mods-hud', key: 'summary' } as const, null)
 const prompt = atom({ plugin: 'mods-hud', key: 'prompt' } as const, null)
@@ -18,30 +18,20 @@ const spendAtom = atom({ plugin: 'mods-hud', key: 'spend' } as const, {
   session: { calls: 0, input: 0, output: 0 },
 } as Spend)
 const beatAtom = atom({ plugin: 'mods-hud', key: 'beat' } as const, 0)
-const detailAtom = atom({ plugin: 'mods-hud', key: 'detail' } as const, null as DetailView | null)
 const sessionsAtom = atom({ plugin: 'mods-hud', key: 'sessions' } as const, [] as SessionRow[])
 const showSessionsAtom = atom({ plugin: 'mods-hud', key: 'showSessions' } as const, false)
 const hiddenSessionsAtom = atom({ plugin: 'mods-hud', key: 'hiddenSessions' } as const, [] as string[])
-const historyAtom = atom({ plugin: 'mods-hud', key: 'history' } as const, [] as TurnCard[])
-const detailTabAtom = atom({ plugin: 'mods-hud', key: 'detailTab' } as const, 'history' as DetailTab)
-const showOlderTurnsAtom = atom({ plugin: 'mods-hud', key: 'showOlderTurns' } as const, false)
 // Agents that aged off the band: kept so a reload does not bring them back (issue 008).
 const droppedAtom = atom({ plugin: 'mods-hud', key: 'dropped' } as const, [] as string[])
 
 // update() writes even when `fn` hands back what was there, and each write redraws every site that reads the
-// value: the 2 s poll redrew the band and the detail pane while nothing changed, so a press could land
+// value: the 2 s poll redrew the band while nothing changed, so a press could land
 // mid-redraw (issue 001). The polled values go through these, which write only a change.
 const changeMeter = async ($: StateDollar, fn: (m: Meter | null) => Meter | null) => {
   const prev = await read($, meter)
   const next = fn(prev)
   // fn runs once per value (the meter's marks what moved since its last call); again only if the value moved meanwhile
   if (JSON.stringify(next) !== JSON.stringify(prev)) await update($, meter, cur => (JSON.stringify(cur) === JSON.stringify(prev) ? next : fn(cur)))
-}
-const changeHistory = async ($: StateDollar, fn: (cards: TurnCard[]) => TurnCard[]) => {
-  const prev = await read($, historyAtom)
-  const next = fn(prev)
-  // fn runs once per value (the meter's marks what moved since its last call); again only if the value moved meanwhile
-  if (JSON.stringify(next) !== JSON.stringify(prev)) await update($, historyAtom, cur => (JSON.stringify(cur) === JSON.stringify(prev) ? next : fn(cur)))
 }
 const changeSessions = async ($: StateDollar, fn: (rows: SessionRow[]) => SessionRow[]) => {
   const prev = await read($, sessionsAtom)
@@ -59,7 +49,6 @@ const AUTOMATED = new Set([
 ])
 const LIVE = new Set(['pending', 'running', 'waiting'])
 const PANE = 'session-monitor'
-const DETAIL = 'session-detail'
 const TICK_MS = 2000
 const FLASH_MS = 4000
 const STALE_MS = 5 * 60_000
@@ -89,12 +78,10 @@ const SESSION_ASK =
   "'…완료', '…3개 확인', '…요청함'처럼 명사형으로 끝내고, '입니다'·'했습니다' 같은 문장체는 쓰지 마. " +
   '마크다운, 따옴표, 머리말, 괄호 설명 금지. 주어지지 않은 정보는 언급하지 마.'
 const SESSION_POLL_MS = 10_000
-const SESSION_LOG = 20
 const SUMMARY_MAX = 10
 // a running agent's line is checked again at most this often, and only after it did something
 const SUMMARY_GAP_MS = 120_000
 const STOP_ARM_MS = 3000
-const HISTORY_MAX = 50
 
 // claude-opus-5-5[1m] -> Opus 5.5
 export const prettyModel = (id: string) => {
@@ -339,17 +326,6 @@ export const listedStates = (r: unknown) => {
 
 const hhmm = (at: number) => `${two(new Date(at).getHours())}:${two(new Date(at).getMinutes())}`
 
-// An agent's snapshot in its turn card. What the card first saw holds where the live row lost it:
-// a reload re-finds an old agent with a fresh start and no line.
-const snapOf = (t: AgentRow, prev?: TurnCard['agents'][number]): TurnCard['agents'][number] => {
-  const ended = agentPhase(t.status) === 'done' || agentPhase(t.status) === 'stopped'
-  const endedAt = ended ? (prev?.endedAt ?? t.endedAt) : undefined
-  return {
-    id: t.id, type: t.type, summary: t.summary ?? prev?.summary ?? t.description, status: t.status,
-    startedAt: prev?.startedAt ?? t.startedAt, ...(endedAt === undefined ? {} : { endedAt }),
-  }
-}
-
 // "30초 전", "2분 전", "3시간 전", "1일 전"
 export const ago = (ms: number) => {
   const s = Math.max(0, Math.floor(ms / 1000))
@@ -371,66 +347,8 @@ const SESSION_LOOK: Record<SessionRow['state'], { dot: string; color?: string; d
   gone: { dot: '■', dim: true, word: '종료' },
 }
 
-// A saved `{ agentId, at }` from an older build reads as the view it meant.
-export const detailView = (d: DetailView | { agentId: string | null; at: number } | null): DetailView | null =>
-  !d ? null : 'kind' in d ? d : { kind: d.agentId === null ? 'main' : 'agent', id: d.agentId, at: d.at }
-
 // A line of a feed region (hooks/feed.tsx): an optional colored mark, then text cut to the region.
 type FeedLine = { mark?: string; color?: string; dim?: true; text: string }
-
-// A tool call's mark: ✗ failed, ● still running, ✓ done.
-const callDot = (u: { isError?: true; result?: unknown; text?: string }) =>
-  u.isError ? { dot: '✗', color: 'error' } : u.result === undefined && u.text === undefined ? { dot: '●', color: 'warning' } : { dot: '✓', color: 'success' }
-
-// The newest 400 rows of a transcript (`main` or an agent id), from `cache` while its version `v` holds:
-// it changes only when a call finishes or a turn ends there. (Reading thousands of messages on every redraw made the pane slow.)
-async function messagesOf($: Pick<CoreEngineInterface, 'session'>, key: string, v: number, cache: Map<string, { v: number; msgs: SessionMessage[] }>) {
-  const hit = cache.get(key)
-  if (hit?.v === v) return hit.msgs
-  const got = await (key === 'main' ? $.session.messages() : $.session.messages({ agentId: key })).catch(() => [])
-  // ponytail: the newest 400 rows cover what the tabs show; a deeper history would need paging
-  const msgs = (Array.isArray(got) ? got : []).slice(-400)
-  cache.set(key, { v, msgs })
-  return msgs
-}
-
-// A call's duration in 5 cells: "0.4s", " 12s", "01:05".
-const tookText = (ms: number) => (ms < 10_000 ? `${(ms / 1000).toFixed(1)}s` : ms < 60_000 ? `${Math.floor(ms / 1000)}s` : durText(ms)).padStart(5)
-
-// When a call started and ended, as this load saw it (the transcript has no times); a call from before it shows none.
-type CallTime = { at: number; end?: number }
-
-// The calls list's lines, the newest `rows` of them, each cut to `columns`: a call reads
-// "✓ 12:03  1.2s  Bash npm test", its error's first line below it; with `asks`, each prompt heads the calls it led to.
-const callLines = (msgs: SessionMessage[], rows: number, columns: number, times: Map<string, CallTime>, now: number, asks: boolean): FeedLine[] => {
-  const out: FeedLine[] = []
-  for (const m of msgs) {
-    // a notice or another session's message (a <tag>) is no prompt of the user's
-    if (asks && m.role === 'user' && m.text.trim() && !m.text.trimStart().startsWith('<')) {
-      out.push({ dim: true, text: clipCells(`─ ${oneLine(m.text)}`, Math.max(4, columns - 1)) })
-    }
-    for (const u of m.toolUses) {
-      const d = callDot(u)
-      const t = times.get(u.tool_use_id)
-      const when = t ? `${hhmm(t.at)} ${tookText((t.end ?? now) - t.at)}` : `${'--:--'} ${''.padStart(5)}`
-      out.push({ mark: d.dot, color: d.color, text: clipCells(`${when}  ${describeCall(u.tool, u.input)}`, Math.max(4, columns - 3)) })
-      if (u.isError && u.text?.trim()) out.push({ dim: true, text: clipCells(`  ${oneLine(u.text)}`, Math.max(4, columns - 1)) })
-    }
-  }
-  if (!out.some(l => l.mark !== undefined)) return [{ dim: true, text: '아직 도구 호출이 없음' }]
-  return out.slice(-Math.max(1, rows))
-}
-
-// The calls since the newest prompt of the user's, and how many.
-const callsSinceAsk = (msgs: SessionMessage[]) => {
-  let n = 0
-  for (let i = msgs.length - 1; i >= 0; i--) {
-    const m = msgs[i]!
-    if (m.role === 'user' && m.text.trim() && !m.text.trimStart().startsWith('<')) break
-    n += m.toolUses.length
-  }
-  return n
-}
 
 export const register: Register = on => {
   let turns = 0
@@ -454,35 +372,16 @@ export const register: Register = on => {
   let trips: Record<string, { heard: number; bad: number; got: number }> = {}
   // Client failures per surface, as ui.fault reports them: how many, and the last phase and reason.
   let faults: Record<string, { n: number; last: string }> = {}
-  // The transcript changes only when a call finishes or a turn ends: the pane reads it again only then.
-  // (Reading thousands of messages on every redraw made the pane slow to answer a press.)
-  const transcriptV = new Map<string, number>()
-  const transcriptCache = new Map<string, { v: number; msgs: SessionMessage[] }>()
-  const touchTranscript = (key: string) => transcriptV.set(key, (transcriptV.get(key) ?? 0) + 1)
   // Per-agent facts the list does not carry; a hot reload starts them over.
   // Every subagent this load has heard of, kept live from its spawn, its tool calls and its end.
   const tracked = new Map<string, AgentRow>()
   const dropped = new Set<string>()
-  // Feed regions (issue 018): what changes on every call, read from memory here, never from $.state.
-  // A topic is `step|<agent>` (the band's step line), `meta|<agent>` (the 현재 tab's line under an agent),
-  // or `calls|<main or agent>|<rows>` (the calls list). `columns` is the region's width, the desktop's Hangul fit applied.
-  const agentLines = (topic: string, columns: number): FeedLine[] => {
-    const [kind, id = ''] = topic.split('|')
-    const t = tracked.get(id)
-    if (kind === 'step') return [{ dim: true, text: clipCells(`→ ${t?.activity || '…'}`, Math.max(4, columns - 1)) }]
-    if (!t) return []
-    const meta = [t.tools > 0 && `도구 ${t.tools}`, LIVE.has(t.status) && t.activity && `→ ${t.activity}`].filter(Boolean).join('  ')
-    return meta ? [{ dim: true, text: clipCells(meta, Math.max(4, columns - 1)) }] : []
+  // An agent's step line, kept out of $.state (it changes on every call) and drawn in a feed region (issue 018).
+  // The topic is `step|<agent>`; `columns` is the region's width, the desktop's Hangul fit applied.
+  const stepLines = (topic: string, columns: number): FeedLine[] => {
+    const t = tracked.get(topic.split('|')[1] ?? '')
+    return [{ dim: true, text: clipCells(`→ ${t?.activity || '…'}`, Math.max(4, columns - 1)) }]
   }
-  // The live turn's line: its call count and latest call (topic `turn|main`).
-  const turnLines = (msgs: SessionMessage[], columns: number): FeedLine[] => {
-    const n = callsSinceAsk(msgs)
-    return [{ dim: true, text: clipCells([n > 0 && `도구 ${n}`, `→ ${mainStep || '…'}`].filter(Boolean).join('  '), Math.max(4, columns - 1)) }]
-  }
-  // Each call's start and end, newest 1000 (issue 018: the calls list shows when and how long).
-  const callTimes = new Map<string, CallTime>()
-  // The main loop's latest call this turn, for the live turn card and 지금.
-  let mainStep = ''
   // What each feed instance (`<requestId>|<key>`) was last handed, so an answer goes only when its lines moved.
   const feedSent = new Map<string, string>()
   // A feed region where the surface has one, plain rows elsewhere; its first lines come with the drawing.
@@ -544,11 +443,6 @@ export const register: Register = on => {
         if (text) {
           const at = await $.clock.now()
           await update($, summary, () => ({ text, at, turns }) satisfies Summary)
-          // ponytail: the latest card, so a turn started before Haiku answered gets the line one card late
-          await update($, historyAtom, cards => {
-            const last = cards.at(-1)
-            return last ? [...cards.slice(0, -1), { ...last, result: text }] : cards
-          })
         }
         // ponytail: a failed summary keeps the last line; the state shows the turn, not the summarizer
       } catch {
@@ -587,25 +481,6 @@ export const register: Register = on => {
         .map(t => ({ ...t, lastTool: '', activity: '', tools: 0 }))
       const prev = await read($, agents)
       if (JSON.stringify(prev) !== JSON.stringify(rows)) await update($, agents, () => rows)
-      // Each agent's snapshot stays in the card it started in, updated there; one not yet in a card joins the latest.
-      // (one older than that card is from before the history: left out)
-      await changeHistory($, cards => {
-        const last = cards.at(-1)
-        if (!last) return cards
-        const placed = new Set(cards.flatMap(c => c.agents.map(a => a.id)))
-        const fresh = [...tracked.values()].filter(t => !placed.has(t.id) && t.startedAt >= last.startedAt)
-        const out = cards.map((c, i) => ({
-          ...c,
-          agents: [
-            ...c.agents.map(s => {
-              const t = tracked.get(s.id)
-              return t ? snapOf(t, s) : s
-            }),
-            ...(i === cards.length - 1 ? fresh.map(t => snapOf(t)) : []),
-          ],
-        }))
-        return JSON.stringify(out) === JSON.stringify(cards) ? cards : out
-      })
     }
 
     summarizeAgent = async (id, isFinal, answer) => {
@@ -678,33 +553,16 @@ export const register: Register = on => {
       const at = await $.clock.now()
       const line = clip(oneLine(text), 200)
       await update($, sessionsAtom, rows => {
-        const cur = rows.find(s => s.name === name) ?? { name, state: 'unknown' as const, log: [] }
+        const cur = rows.find(s => s.name === name) ?? { name, state: 'unknown' as const }
         const row: SessionRow = {
           ...cur,
           ...(title ? { title } : {}),
           ...(dir === 'out' ? { lastSent: { at, text: line } } : { lastReceived: { at, text: line }, summary: undefined }),
-          log: [...cur.log, { dir, at, text: line }].slice(-SESSION_LOG),
         }
         return [row, ...rows.filter(s => s.name !== name)]
       })
       // new traffic brings a closed row back
       await update($, hiddenSessionsAtom, ids => (ids.includes(name) ? ids.filter(x => x !== name) : ids))
-      // and lands in the current turn's card
-      const row = (await read($, sessionsAtom)).find(s => s.name === name)
-      await update($, historyAtom, cards => {
-        const last = cards.at(-1)
-        if (!last || !row) return cards
-        const prev = last.sessions.find(s => s.name === name)
-        const snap: TurnCard['sessions'][number] = {
-          ...prev,
-          name,
-          ...(row.title ? { title: row.title } : {}),
-          state: row.state,
-          ...(dir === 'out' ? { lastOut: line } : { lastIn: line }),
-        }
-        const sessions = prev ? last.sessions.map(s => (s.name === name ? snap : s)) : [...last.sessions, snap]
-        return [...cards.slice(0, -1), { ...last, sessions }]
-      })
       if (dir === 'in') $.clock.after(0, () => void summarizeSession(name, text))
     }
 
@@ -722,23 +580,6 @@ export const register: Register = on => {
           const missing: SessionRow['state'] = listed.size > 0 ? 'gone' : 'unknown'
           const fresh = rows.map(s => ({ ...s, state: listed.get(s.name) ?? (s.title ? listed.get(s.title) : undefined) ?? missing }))
           return JSON.stringify(fresh) === JSON.stringify(rows) ? rows : fresh
-        })
-        // a session's state reads on in the newest card that has it; older cards keep theirs from then
-        const states = new Map((await read($, sessionsAtom)).map(s => [s.name, s.state]))
-        await changeHistory($, cards => {
-          const newest = new Map<string, number>()
-          cards.forEach((c, i) => c.sessions.forEach(s => newest.set(s.name, i)))
-          let isChanged = false
-          const out = cards.map((c, i) => ({
-            ...c,
-            sessions: c.sessions.map(s => {
-              const state = states.get(s.name)
-              if (newest.get(s.name) !== i || !state || state === s.state) return s
-              isChanged = true
-              return { ...s, state }
-            }),
-          }))
-          return isChanged ? out : cards
         })
       } finally {
         isListing = false
@@ -971,7 +812,7 @@ export const register: Register = on => {
       const surfaces = await $.session.surfaces()
       const draws = Object.entries(lastDraw).map(([k, v]) => `${k}: ${v}`).join(' | ') || '아직 한 번도 안 그림'
       const rows = (await read($, agents)).map(a => `${a.id.slice(0, 8)}:${a.type}:${a.status}`).join(', ') || '없음'
-      const peers = (await read($, sessionsAtom)).map(x => `${x.title ?? x.name}:${x.state}:로그${x.log.length}`).join(', ') || '없음'
+      const peers = (await read($, sessionsAtom)).map(x => `${x.title ?? x.name}:${x.state}`).join(', ') || '없음'
       const m = await read($, meter)
       const usage = m ? `${prettyModel(m.model) || '모델 없음'} ${m.effort ?? '-'} 한도${m.limits.length} ctx=${m.context ?? '-'}` : '없음'
       return { text: `[진단] surfaces=${surfaces.join(',') || '없음'} · 입력=${e.origin?.kind ?? '?'} · 사용량: ${usage} · 에이전트: ${rows} · 세션: ${peers} · 최근 1분 그림: ${perMin} · 받은 누름: ${pressed} · Client 왕복: ${tripped} · Client 오류: ${failed} · 마지막 그림: ${draws}` }
@@ -983,11 +824,6 @@ export const register: Register = on => {
 
   on('ui.close', { id: PANE }, async ($, e, next) => {
     if (e.origin.kind === 'person') wantsPane = false
-    return next(e)
-  })
-
-  on('ui.close', { id: DETAIL }, async ($, e, next) => {
-    await update($, detailAtom, () => null)
     return next(e)
   })
 
@@ -1042,21 +878,7 @@ export const register: Register = on => {
       }
     }
 
-    // the calls list is a feed region: it reads the transcript again on its next ask, with no redraw;
-    // once as the call starts (it shows ● running), once as it ends
-    const id = String((e as { tool_use_id?: unknown }).tool_use_id ?? '')
-    if (id) {
-      callTimes.set(id, { at: await $.clock.now() })
-      // ponytail: the oldest go first past 1000; the list shows far fewer
-      if (callTimes.size > 1000) callTimes.delete(callTimes.keys().next().value!)
-    }
-    if (e.agentId === undefined) mainStep = describeCall(String(e.tool), e as unknown as Record<string, unknown>)
-    touchTranscript(e.agentId ?? 'main')
-    const ran = await next(e)
-    const t = id ? callTimes.get(id) : undefined
-    if (t) callTimes.set(id, { ...t, end: await $.clock.now() })
-    touchTranscript(e.agentId ?? 'main')
-    return ran
+    return next(e)
   })
 
   // A subagent shows the moment it starts, foreground or background, before any tool call or tick.
@@ -1066,7 +888,7 @@ export const register: Register = on => {
       const now = await $.clock.now()
       tracked.set(ran.agentId, {
         id: ran.agentId, type: e.subagentType, description: e.description, status: 'running',
-        lastTool: '', activity: '시작', tools: 0, startedAt: now, model: ran.model, toolUseId: e.tool_use_id,
+        lastTool: '', activity: '시작', tools: 0, startedAt: now, model: ran.model,
       })
       await publish?.()
       // its task in Korean right away
@@ -1078,33 +900,14 @@ export const register: Register = on => {
 
   // Only the main loop raises turn.start (a subagent's run raises none): each opens a card.
   on('turn.start', async ($, e, next) => {
-    mainStep = ''
     await update($, phase, () => 'running' as const)
-    // a turn a notice or another session's message started (its text is a <tag>) adds to the card before it
-    if (String((e as { text?: unknown }).text ?? '').trimStart().startsWith('<')) return next(e)
-    const [ask, m, now] = await Promise.all([read($, prompt), read($, meter), $.clock.now()])
-    // ponytail: a card whose turn.complete never came (a reload mid-turn) ends where the next begins
-    await update($, historyAtom, cards =>
-      [
-        ...cards.map(c => (c.endedAt === undefined ? { ...c, endedAt: now } : c)),
-        { n: (cards.at(-1)?.n ?? 0) + 1, startedAt: now, ...(m ? { model: m.model, effort: m.effort } : {}), ask: ask ?? '', agents: [], sessions: [] },
-      ].slice(-HISTORY_MAX))
     return next(e)
   })
 
   on('turn.complete', async ($, e, next) => {
     const ran = await next(e)
-    touchTranscript(e.agentId ?? 'main')
     if (e.agentId === undefined) {
       await update($, phase, () => (e.reason === 'answer' ? 'done' : 'stopped') as Phase)
-      const end = await $.clock.now()
-      // an aborted or failed turn gets no session line: its card says so
-      await update($, historyAtom, cards => {
-        const last = cards.at(-1)
-        return last && last.endedAt === undefined
-          ? [...cards.slice(0, -1), { ...last, endedAt: end, ...(e.reason === 'answer' || last.result ? {} : { result: '중지됨' }) }]
-          : cards
-      })
       // a response came back, so the usage figures are current even when none moved
       const now = await $.clock.now()
       await update($, meter, m => (m ? { ...m, measuredAt: now, isStale: false } : m))
@@ -1157,15 +960,7 @@ export const register: Register = on => {
     const t = (trips[`feed ${e.surface}`] ??= { heard: 0, bad: 0, got: 0 })
     t.heard += 1
     const columns = d.columns
-    const [kind, id = '', rows = '1'] = d.topic.split('|')
-    const msgs = kind === 'calls' || kind === 'turn' ? await messagesOf($, id, transcriptV.get(id) ?? 0, transcriptCache) : []
-    const now = await $.clock.now()
-    const lines =
-      kind === 'calls'
-        ? callLines(msgs, Number(rows) || 1, columns, callTimes, now, id === 'main')
-        : kind === 'turn'
-          ? turnLines(msgs, columns)
-          : agentLines(d.topic, columns)
+    const lines = stepLines(d.topic, columns)
     const instance = `${e.requestId}|${e.element}`
     const json = JSON.stringify(lines)
     if (feedSent.get(instance) === json) return next(e)
@@ -1186,7 +981,7 @@ export const register: Register = on => {
   // Counts each press on this mod's buttons for /mods-hud debug, then lets it through.
   on('ui.press', async ($, e, next) => {
     if (e.plugin !== 'mods-hud') return next(e)
-    const site = e.requestId === DETAIL ? 'detail' : e.component === 'AbovePrompt' ? 'band' : e.component
+    const site = e.component === 'AbovePrompt' ? 'band' : e.component
     const p = (presses[site] ??= { n: 0, failed: 0, last: '' })
     p.n += 1
     p.last = e.element
@@ -1228,318 +1023,6 @@ export const register: Register = on => {
         </Box>
       )
     }
-    if (e.component === 'Pane' && e.requestId === DETAIL) {
-      noteDraw('detail')
-      const [raw, ags, m, hidden, sess, hiddenSess, hist, tab, showOlder, now] = await Promise.all([
-        read($, detailAtom), read($, agents), read($, meter), read($, hiddenAtom), read($, sessionsAtom), read($, hiddenSessionsAtom),
-        read($, historyAtom), read($, detailTabAtom), read($, showOlderTurnsAtom), $.clock.now(),
-      ])
-      const d = detailView(raw)
-      if (!d) return next(e)
-      const els = $.ui.resolve(e)
-      const { Box, Text, Button } = els
-      const width = e.props.bodyColumns
-      const bodyRows = e.props.scroll.bodyRows
-      // ponytail: the desktop sets text in a proportional font where Hangul takes about 1.3 cells, not 2; cut by that there
-      const fit = (n: number) => (e.surface === 'desktop' ? Math.floor(n * 1.3) : n)
-      // the pane's title follows what it shows (an open id retitles), as when the band opened it (issue 017)
-      const show = async (kind: DetailView['kind'], id: string | null, title: string) => {
-        await $.ui.open({ id: DETAIL, title })
-        await update($, detailAtom, () => ({ kind, id, at: now }))
-      }
-      // back to the main view, on the tab it was left on
-      const back = (
-        <Box key="back" flexDirection="row">
-          <Button key="back" plain dimColor label="← 메인 세션" onPress={() => show('main', null, '세션 상세')} />
-        </Box>
-      )
-
-      // A session's view: its state and the messages both ways, newest at the bottom.
-      if (d.kind === 'session') {
-        const s = sess.find(x => x.name === d.id)
-        const look = SESSION_LOOK[s?.state ?? 'unknown']
-        const log = (s?.log ?? []).slice(-Math.max(1, bodyRows - 6))
-        lastDraw['detail-draw'] = `session ${d.id} log=${log.length} at=${now}`
-        return (
-          <Box flexDirection="column" rowGap={1} width={width}>
-            <Box key="head" flexDirection="row" columnGap={1} width={width}>
-              <Box flexShrink={0}><Text color={look.color} dimColor={look.dim}>{look.dot}</Text></Box>
-              <Text wrap="truncate-end" bold>{clipCells(s?.title || d.id || '', fit(Math.max(4, width - 2 - STATE_CELLS - 2)))}</Text>
-              <Box flexShrink={0}><Text color={look.color} dimColor={look.dim}>{look.word}</Text></Box>
-            </Box>
-            {back}
-            <Box key="log" flexDirection="column" width={width}>
-              <Text dimColor>주고받은 메시지</Text>
-              {log.length === 0 && <Text dimColor>아직 메시지가 없음</Text>}
-              {log.map((x, i) => (
-                <Text key={`log-${i}`} wrap="truncate-end" dimColor={x.dir === 'out'}>
-                  {clipCells(`${x.dir === 'out' ? '↑' : '↓'} ${hhmm(x.at)} ${x.text}`, fit(width - 1))}
-                </Text>
-              ))}
-            </Box>
-          </Box>
-        )
-      }
-
-      const agentId = d.kind === 'agent' ? d.id : null
-      // an agent whose row was closed or dropped still opens from its turn card, drawn from the snapshot
-      const snap = agentId === null ? undefined : hist.flatMap(c => c.agents).find(x => x.id === agentId)
-      const a: Pick<AgentRow, 'type' | 'status' | 'description' | 'summary' | 'model' | 'effort'> | undefined =
-        agentId === null ? undefined : (ags.find(x => x.id === agentId) ?? (snap && { ...snap, description: snap.summary }))
-      const key = agentId ?? 'main'
-      const msgs = await messagesOf($, key, transcriptV.get(key) ?? 0, transcriptCache)
-      const look = LOOK[a ? agentPhase(a.status) : agentId === null ? await read($, phase) : 'idle']
-      const said = [...msgs].reverse().find(x => x.role === 'assistant' && x.text.trim())?.text
-      const uses = msgs.flatMap(x => x.toolUses)
-      const tag = a ? modelTag(a.model, a.effort) : m ? modelTag(m.model, m.effort) : ''
-      // the newest calls that fit, in a feed region: a finished call shows on its next ask, with no redraw of the pane
-      const calls = (room: number) => {
-        const topic = `calls|${key}|${room}`
-        return (
-          <Box key="calls" flexDirection="column" width={width}>
-            {feedRegion(els, DETAIL, 'calls-feed', topic, fit(width), callLines(msgs, room, fit(width), callTimes, now, key === 'main'))}
-          </Box>
-        )
-      }
-      const head = (
-        <Box key="head" flexDirection="row" justifyContent="space-between" width={width}>
-          <Box flexDirection="row" columnGap={1} flexShrink={1} minWidth={0}>
-            <Box flexShrink={0}><Text color={look.color}>{look.dot} {look.word}</Text></Box>
-            <Text wrap="truncate-end" bold>{a ? clipCells(`${a.type}  ${a.summary || a.description}`, fit(Math.max(4, width - 20))) : '메인 세션'}</Text>
-          </Box>
-          <Box flexShrink={0}><Text dimColor>{tag}</Text></Box>
-        </Box>
-      )
-      const last = said && <Text key="said" wrap="truncate-end" dimColor>{clipCells(`“${oneLine(said)}”`, fit(width - 1))}</Text>
-      // a labeled line: "요청  …", the label dim
-      const labeled = (k: string, label: string, text: string) => (
-        <Box key={k} flexDirection="row" width={width}>
-          <Text dimColor>{`${label}  `}</Text>
-          <Text wrap="truncate-end">{clipCells(text || '—', fit(Math.max(4, width - cells(label) - 3)))}</Text>
-        </Box>
-      )
-      // the live turn's call count and latest call, in a feed region
-      const turnNow = (k: string, columns: number) =>
-        feedRegion(els, DETAIL, k, 'turn|main', fit(columns), turnLines(msgs, fit(columns)))
-
-      if (agentId !== null) {
-        lastDraw['detail-draw'] = `${agentId} msgs=${msgs.length} uses=${uses.length} at=${now}`
-        return (
-          <Box flexDirection="column" rowGap={1} width={width}>
-            {head}
-            {back}
-            {a && labeled('ask', '요청', a.description)}
-            {calls(Math.max(3, bodyRows - 7))}
-            {last}
-          </Box>
-        )
-      }
-
-      // The main view: three tabs, the turn history first. Their buttons are the same in every drawing: a desktop
-      // Button is native, a new label or dim made a new one, and a press right after a switch landed on the one
-      // being replaced (issue 001). The active tab is named beside them; a press on it writes nothing.
-      const tabs: [DetailTab, string][] = [['history', '턴'], ['calls', '도구'], ['live', '지금']]
-      const tabRow = (
-        <Box key="tabs" flexDirection="row" columnGap={1} width={width}>
-          {tabs.map(([k, l]) => (
-            <Button key={`tab-${k}`} plain label={l} onPress={() => (k === tab ? undefined : update($, detailTabAtom, () => k))} />
-          ))}
-          <Box key="tab-now" flexShrink={0}><Text color="suggestion">{`▸ ${tabs.find(([k]) => k === tab)?.[1] ?? ''}`}</Text></Box>
-        </Box>
-      )
-      lastDraw['detail-draw'] = `main ${tab} msgs=${msgs.length} uses=${uses.length} cards=${hist.length} at=${now}`
-
-      if (tab === 'calls') {
-        return (
-          <Box flexDirection="column" rowGap={1} width={width}>
-            {tabRow}
-            {calls(Math.max(3, bodyRows - 2))}
-          </Box>
-        )
-      }
-
-      if (tab === 'history') {
-        // Newest last, as many as fit under the tabs and the fold line; the rest behind a press, the pane scrolling.
-        const cardRows = (c: TurnCard) => 3 + c.agents.length + c.sessions.length
-        let fits = 0
-        for (let i = hist.length - 1, used = 0; i >= 0; i--) {
-          used += cardRows(hist[i]!)
-          if (fits > 0 && used > bodyRows - 3) break
-          fits += 1
-        }
-        const older = hist.length - fits
-        const shown = showOlder ? hist : hist.slice(older)
-        // Each prompt's calls in the transcript; a card takes the newest unused prompt of its text (its ask), newest card first.
-        const groups: { text: string; n: number }[] = []
-        for (const x of msgs) {
-          if (x.role === 'user' && x.text.trim() && !x.text.trimStart().startsWith('<')) groups.push({ text: x.text.trim(), n: 0 })
-          else if (groups.length > 0) groups.at(-1)!.n += x.toolUses.length
-        }
-        const callsOf = new Map<number, number>()
-        for (let i = hist.length - 1, j = groups.length - 1; i >= 0 && j >= 0; i--) {
-          const ask = hist[i]!.ask.trim()
-          for (let k = j; k >= 0; k--) {
-            if (groups[k]!.text !== ask) continue
-            callsOf.set(hist[i]!.n, groups[k]!.n)
-            j = k - 1
-            break
-          }
-        }
-        const card = (c: TurnCard) => {
-          const isLive = c.endedAt === undefined
-          const n = callsOf.get(c.n) ?? 0
-          const top = [`─ 턴 ${c.n}`, hhmm(c.startedAt), durText((c.endedAt ?? now) - c.startedAt), modelTag(c.model, c.effort), !isLive && n > 0 && `도구 ${n}`].filter(Boolean).join(' · ')
-          return (
-            <Box key={`card-${c.n}`} flexDirection="column" width={width}>
-              <Text key="top" wrap="truncate-end" bold={isLive} dimColor={!isLive}>{clipCells(top, fit(width - 1))}</Text>
-              <Box key="ask" flexDirection="row" width={width}>
-                <Text dimColor>{'  요청  '}</Text>
-                <Text wrap="truncate-end">{clipCells(c.ask || '—', fit(Math.max(4, width - 9)))}</Text>
-              </Box>
-              {isLive ? (
-                // the live turn: its calls so far and the latest, moving with no redraw
-                <Box key="result" flexDirection="row" width={width}>
-                  <Text dimColor>{'  지금  '}</Text>
-                  {turnNow(`turn-${c.n}`, Math.max(4, width - 9))}
-                </Box>
-              ) : (
-                <Box key="result" flexDirection="row" width={width}>
-                  <Text dimColor>{'  결과  '}</Text>
-                  <Text wrap="truncate-end">{clipCells(c.result ?? '…', fit(Math.max(4, width - 9)))}</Text>
-                </Box>
-              )}
-              {c.agents.map(x => {
-                const s = LOOK[agentPhase(x.status)]
-                const took = elapsedText(x, now)
-                return (
-                  <Box key={`h-a-${x.id}`} flexDirection="row" width={width}>
-                    <Box flexShrink={0}><Text dimColor>{'    ⎿ '}</Text></Box>
-                    <Box flexShrink={0}><Text color={s.color}>{`${s.dot} `}</Text></Box>
-                    <Box flexShrink={1} minWidth={0} overflow="hidden">
-                      <Button
-                        key={`h-agent-${x.id}`}
-                        plain
-                        dimColor={s.isDone}
-                        label={clipCells(`${x.type}  ${x.summary}`, fit(Math.max(4, width - 8 - 2 - cells(took) - 1)))}
-                        onPress={() => show('agent', x.id, `${x.type} · ${x.summary}`)}
-                      />
-                    </Box>
-                    <Box flexShrink={0}><Text dimColor>{`  ${took}`}</Text></Box>
-                  </Box>
-                )
-              })}
-              {c.sessions.map(x => {
-                const s = SESSION_LOOK[x.state]
-                const text = [x.title || x.name, x.lastOut && `↑${x.lastOut}`, x.lastIn && `↓${x.lastIn}`].filter(Boolean).join('  ')
-                return (
-                  <Box key={`h-s-${c.n}-${x.name}`} flexDirection="row" width={width}>
-                    <Box flexShrink={0}><Text dimColor>{'    ↔ '}</Text></Box>
-                    <Box flexShrink={0}><Text color={s.color} dimColor={s.dim}>{`${s.dot} `}</Text></Box>
-                    <Box flexShrink={1} minWidth={0} overflow="hidden">
-                      <Button key={`h-sess-${c.n}-${x.name}`} plain label={clipCells(text, fit(Math.max(4, width - 9)))} onPress={() => show('session', x.name, clipCells(`세션 · ${x.title || x.name}`, 40))} />
-                    </Box>
-                  </Box>
-                )
-              })}
-            </Box>
-          )
-        }
-        return (
-          <Box flexDirection="column" rowGap={1} width={width}>
-            {tabRow}
-            <Box key="history" flexDirection="column" width={width}>
-              {hist.length === 0 && <Text dimColor>아직 기록된 턴이 없음</Text>}
-              {older > 0 && (
-                <Button
-                  key="older"
-                  plain
-                  dimColor
-                  label={clipCells(`${showOlder ? '▾' : '▸'} 이전 턴 ${older}개`, fit(width - 1))}
-                  onPress={() => update($, showOlderTurnsAtom, v => !v)}
-                />
-              )}
-              {shown.map(card)}
-            </Box>
-          </Box>
-        )
-      }
-
-      // 현재: the main loop's state, its agents (an orchestrating session's work is mostly theirs), its sessions, its last words.
-      const subs = ags.filter(x => !hidden.includes(x.id)).slice(0, MAX_AGENTS * 2)
-      const peers = sess.filter(x => !hiddenSess.includes(x.name)).slice(0, MAX_AGENTS * 2)
-      return (
-        <Box flexDirection="column" rowGap={1} width={width}>
-          {tabRow}
-          {head}
-          {hist.length > 0 && (
-            <Box key="now" flexDirection="column" width={width}>
-              {labeled('ask', '요청', hist.at(-1)!.ask)}
-              {hist.at(-1)!.endedAt === undefined && (
-                <Box key="step" flexDirection="row" width={width}>
-                  <Text dimColor>{'지금  '}</Text>
-                  {turnNow('turn-now', Math.max(4, width - 7))}
-                </Box>
-              )}
-            </Box>
-          )}
-          {subs.length === 0 && peers.length === 0 && <Text key="none" dimColor>서브에이전트·오케스트레이션 없음</Text>}
-          {subs.length > 0 && (
-            <Box key="subs" flexDirection="column" width={width}>
-              <Text dimColor>{`서브에이전트 ${subs.length}`}</Text>
-              {subs.map(x => {
-                const s = LOOK[agentPhase(x.status)]
-                const t = modelTag(x.model, x.effort)
-                const meta = [elapsedText(x, now), t].filter(Boolean).join(' · ')
-                return (
-                  <Box key={`sub-${x.id}`} flexDirection="column" width={width}>
-                    {/* a pane is narrow: the whole first line is the press target, details go below it */}
-                    <Button key={`open-${x.id}`} plain onPress={() => show('agent', x.id, `${x.type} · ${x.description}`)}>
-                      <Text color={s.color}>{`${s.dot} `}</Text>
-                      <Text color={s.isDone ? undefined : 'suggestion'} dimColor={s.isDone}>{`${x.type} `}</Text>
-                      <Text dimColor={s.isDone}>{clipCells(x.summary || x.description, fit(Math.max(4, width - 3 - cells(x.type))))}</Text>
-                    </Button>
-                    {/* its call count and step change per call: a feed region beside the fixed part */}
-                    <Box paddingLeft={2} flexDirection="row" columnGap={2} width={width}>
-                      <Box flexShrink={0}><Text dimColor>{meta}</Text></Box>
-                      {feedRegion(els, DETAIL, `meta-${x.id}`, `meta|${x.id}`, fit(Math.max(4, width - 2 - cells(meta) - 2)), agentLines(`meta|${x.id}`, fit(Math.max(4, width - 2 - cells(meta) - 2))))}
-                    </Box>
-                  </Box>
-                )
-              })}
-            </Box>
-          )}
-          {peers.length > 0 && (
-            <Box key="peers" flexDirection="column" width={width}>
-              <Text dimColor>{`오케스트레이션 ${peers.length}`}</Text>
-              {peers.map(x => {
-                const s = SESSION_LOOK[x.state]
-                const lastMsg = lastOf(x)
-                const meta = lastMsg ? `${lastMsg.arrow} ${ago(now - lastMsg.at)}` : ''
-                const name = clipCells(x.title || x.name, 20)
-                return (
-                  <Box key={`peer-${x.name}`} flexDirection="row" justifyContent="space-between" width={width}>
-                    <Box flexDirection="row" columnGap={1} flexShrink={1} minWidth={0}>
-                      <Box flexShrink={0}><Text color={s.color} dimColor={s.dim}>{s.dot}</Text></Box>
-                      <Box flexShrink={0}><Text color="suggestion">{name}</Text></Box>
-                      <Box flexShrink={1} minWidth={0} overflow="hidden">
-                        <Button key={`open-s-${x.name}`} plain onPress={() => show('session', x.name, clipCells(`세션 · ${x.title || x.name}`, 40))}>
-                          <Text wrap="truncate-end">
-                            {clipCells(x.summary || lastMsg?.text || '', fit(Math.max(4, width - 4 - cells(name) - cells(meta) - 4)))}
-                          </Text>
-                        </Button>
-                      </Box>
-                    </Box>
-                    <Box flexShrink={0}><Text dimColor>{meta}</Text></Box>
-                  </Box>
-                )
-              })}
-            </Box>
-          )}
-          {last}
-        </Box>
-      )
-    }
-
     const room =
       e.component === 'AbovePrompt' && !e.props.hasSurvey
         ? { width: e.props.bodyColumns, rows: e.props.maxRows, isWorking: e.props.isWorking }
@@ -1627,13 +1110,6 @@ export const register: Register = on => {
       </Box>
     )
 
-    // A press on a row opens the detail pane on it: its recent calls, live, on any surface.
-    const openDetail = async (kind: DetailView['kind'], id: string | null, title: string) => {
-      await update($, detailAtom, () => ({ kind, id, at: now }))
-      const opened = await $.ui.open({ id: DETAIL, title, rows: 12 })
-      lastDraw['detail'] = `${id ?? 'main'} ${opened.isPlaced ? 'open' : opened.reason}`
-    }
-
     // A live agent stops on a second press within STOP_ARM_MS (the engine's TaskStop, as the model would call it);
     // a finished one closes off the band with ✕.
     const stopAgent = async (id: string) => {
@@ -1695,10 +1171,8 @@ export const register: Register = on => {
           <Box flexShrink={0}><Text dimColor>  ⎿</Text></Box>
           <Box flexShrink={0}><Text color={look.color} dimColor={look.dim}>{look.dot}</Text></Box>
           <Box flexShrink={0}><Text color="suggestion">{name}</Text></Box>
-          <Box flexShrink={1} minWidth={0} overflow="hidden">
-            <Button key={`go-s-${s.name}`} plain onPress={() => openDetail('session', s.name, clipCells(`세션 · ${s.title || s.name}`, 40))}>
-              <Text wrap="truncate-end">{text}</Text>
-            </Button>
+          <Box key={`label-s-${s.name}`} flexShrink={1} minWidth={0} overflow="hidden">
+            <Text wrap="truncate-end">{text}</Text>
           </Box>
         </Box>,
         <Box flexDirection="row" columnGap={1}>
@@ -1732,10 +1206,8 @@ export const register: Register = on => {
             <Box flexShrink={0}><Text color={s.color}>{s.dot}</Text></Box>
             {!isCompact && <Box width={STATE_CELLS} flexShrink={0}><Text color={s.color}>{s.word}</Text></Box>}
             <Box flexShrink={0}><Text color={s.isDone ? undefined : 'suggestion'} dimColor={s.isDone}>{a.type}</Text></Box>
-            <Box flexShrink={1} minWidth={0} overflow="hidden">
-              <Button key={`go-${a.id}`} plain onPress={() => openDetail('agent', a.id, `${a.type} · ${a.description}`)}>
-                <Text wrap="truncate-end" dimColor={s.isDone}>{label}</Text>
-              </Button>
+            <Box key={`label-${a.id}`} flexShrink={1} minWidth={0} overflow="hidden">
+              <Text wrap="truncate-end" dimColor={s.isDone}>{label}</Text>
             </Box>
           </Box>,
           <Box flexDirection="row" columnGap={1}>
@@ -1760,7 +1232,7 @@ export const register: Register = on => {
         // Every unfinished agent keeps its step line, between calls too, so the band never jumps (room allowing).
         !isEnded(a) && withSteps && (
           <Box key={`step-${a.id}`} paddingLeft={isCompact ? 6 : 14} width={width}>
-            {feedRegion(els, e.requestId, `feed-step-${a.id}`, `step|${a.id}`, fit(Math.max(4, width - (isCompact ? 6 : 14))), agentLines(`step|${a.id}`, fit(Math.max(4, width - (isCompact ? 6 : 14)))))}
+            {feedRegion(els, e.requestId, `feed-step-${a.id}`, `step|${a.id}`, fit(Math.max(4, width - (isCompact ? 6 : 14))), stepLines(`step|${a.id}`, fit(Math.max(4, width - (isCompact ? 6 : 14)))))}
           </Box>
         ),
       ]
@@ -1776,9 +1248,7 @@ export const register: Register = on => {
             <Box flexShrink={0}><Text color={state.color}>{state.dot}</Text></Box>
             {!isCompact && <Box width={STATE_CELLS} flexShrink={0}><Text color={state.color}>{state.word}</Text></Box>}
             <Box flexShrink={1} minWidth={0} overflow="hidden">
-              <Button key="go-session" plain onPress={() => openDetail('main', null, '세션 상세')}>
-                <Text wrap="truncate-end" bold={!state.isDone} dimColor={state.isDone}>{headLabel}</Text>
-              </Button>
+              <Text wrap="truncate-end" bold={!state.isDone} dimColor={state.isDone}>{headLabel}</Text>
             </Box>
           </Box>,
           <Box>{sessionTag && <Text dimColor>{sessionTag}</Text>}</Box>,

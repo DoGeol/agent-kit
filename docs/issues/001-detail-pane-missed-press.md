@@ -1,6 +1,6 @@
 # 001. Presses in the detail pane are sometimes lost
 
-- **State:** open again on the desktop (0.4.14): a tab press right after a switch is lost; 0.4.15 tries fixed tab buttons
+- **State:** closed: the detail pane was removed (0.5.0)
 - **Where:** `plugins/mods-hud`, detail pane (`session-detail`)
 
 ## Symptom
@@ -50,3 +50,6 @@ Guess: a tab press redraws the whole pane, and its labels changed (`● 턴` aga
 ## 0.4.15: fixed tab buttons
 The three tab buttons keep the same label and look in every drawing. The active tab is named in a Text beside them (`▸ 도구`). A press on the active tab writes nothing, so it redraws nothing.
 If presses are still lost, the next step is the whole pane in one Client (tabs switched in the module, with no redraw of the pane), or no pane at all (issue 018).
+
+## 0.5.0: the detail pane is gone (2026-10-12)
+The person chose the band alone: the detail pane was hard to read, and tab presses were still lost after 0.4.15 was proposed. The pane, its turn history and its call log are removed. The band's rows are plain text now; its only buttons are ■ stop, ↻ resume, ✕ close and the fold lines.
