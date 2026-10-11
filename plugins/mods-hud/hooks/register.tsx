@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { Register, SessionMessage, SessionUsage, StateDollar } from 'claude-code'
+import type { CoreEngineInterface, Register, SessionMessage, SessionUsage, StateDollar } from 'claude-code'
 
 import type { AgentRow, DetailTab, DetailView, Limit, Meter, Phase, SessionRow, Spend, Summary, TurnCard } from '../types'
 
@@ -375,6 +375,35 @@ const SESSION_LOOK: Record<SessionRow['state'], { dot: string; color?: string; d
 export const detailView = (d: DetailView | { agentId: string | null; at: number } | null): DetailView | null =>
   !d ? null : 'kind' in d ? d : { kind: d.agentId === null ? 'main' : 'agent', id: d.agentId, at: d.at }
 
+// A line of a feed region (hooks/feed.tsx): an optional colored mark, then text cut to the region.
+type FeedLine = { mark?: string; color?: string; dim?: true; text: string }
+
+// A tool call's mark: ✗ failed, ● still running, ✓ done.
+const callDot = (u: { isError?: true; result?: unknown; text?: string }) =>
+  u.isError ? { dot: '✗', color: 'error' } : u.result === undefined && u.text === undefined ? { dot: '●', color: 'warning' } : { dot: '✓', color: 'success' }
+
+// The newest 400 rows of a transcript (`main` or an agent id), from `cache` while its version `v` holds:
+// it changes only when a call finishes or a turn ends there. (Reading thousands of messages on every redraw made the pane slow.)
+async function messagesOf($: Pick<CoreEngineInterface, 'session'>, key: string, v: number, cache: Map<string, { v: number; msgs: SessionMessage[] }>) {
+  const hit = cache.get(key)
+  if (hit?.v === v) return hit.msgs
+  const got = await (key === 'main' ? $.session.messages() : $.session.messages({ agentId: key })).catch(() => [])
+  // ponytail: the newest 400 rows cover what the tabs show; a deeper history would need paging
+  const msgs = (Array.isArray(got) ? got : []).slice(-400)
+  cache.set(key, { v, msgs })
+  return msgs
+}
+
+// The calls list's lines: the newest `rows` calls, each cut to `columns`.
+const callLines = (msgs: SessionMessage[], rows: number, columns: number): FeedLine[] => {
+  const uses = msgs.flatMap(x => x.toolUses)
+  if (uses.length === 0) return [{ dim: true, text: '아직 도구 호출이 없음' }]
+  return uses.slice(-Math.max(1, rows)).map(u => {
+    const d = callDot(u)
+    return { mark: d.dot, color: d.color, text: clipCells(describeCall(u.tool, u.input), Math.max(4, columns - 3)) }
+  })
+}
+
 export const register: Register = on => {
   let turns = 0
   let isBusy = false
@@ -392,7 +421,8 @@ export const register: Register = on => {
     drawTimes[site] = [...(drawTimes[site] ?? []).filter(t => now - t < 60_000), now]
   }
   let presses: Record<string, { n: number; failed: number; last: string }> = {}
-  // Client round trips per surface (issue 018, stage 0): posts heard, and answers the module says reached it.
+  // Client round trips per region kind and surface (issue 018): asks heard, and answers
+  // (for the clock, the answers its module says reached it; for a feed, the answers sent).
   let trips: Record<string, { heard: number; bad: number; got: number }> = {}
   // Client failures per surface, as ui.fault reports them: how many, and the last phase and reason.
   let faults: Record<string, { n: number; last: string }> = {}
@@ -405,6 +435,38 @@ export const register: Register = on => {
   // Every subagent this load has heard of, kept live from its spawn, its tool calls and its end.
   const tracked = new Map<string, AgentRow>()
   const dropped = new Set<string>()
+  // Feed regions (issue 018): what changes on every call, read from memory here, never from $.state.
+  // A topic is `step|<agent>` (the band's step line), `meta|<agent>` (the 현재 tab's line under an agent),
+  // or `calls|<main or agent>|<rows>` (the calls list). `columns` is the region's width, the desktop's Hangul fit applied.
+  const agentLines = (topic: string, columns: number): FeedLine[] => {
+    const [kind, id = ''] = topic.split('|')
+    const t = tracked.get(id)
+    if (kind === 'step') return [{ dim: true, text: clipCells(`→ ${t?.activity || '…'}`, Math.max(4, columns - 1)) }]
+    if (!t) return []
+    const meta = [t.tools > 0 && `도구 ${t.tools}`, LIVE.has(t.status) && t.activity && `→ ${t.activity}`].filter(Boolean).join('  ')
+    return meta ? [{ dim: true, text: clipCells(meta, Math.max(4, columns - 1)) }] : []
+  }
+  // What each feed instance (`<requestId>|<key>`) was last handed, so an answer goes only when its lines moved.
+  const feedSent = new Map<string, string>()
+  // A feed region where the surface has one, plain rows elsewhere; its first lines come with the drawing.
+  const feedRegion = (els: ReturnType<CoreEngineInterface['ui']['resolve']>, requestId: string, key: string, topic: string, columns: number, lines: FeedLine[]) => {
+    feedSent.set(`${requestId}|${key}`, JSON.stringify(lines))
+    const { Box, Text } = els
+    if ('Client' in els && els.Client) {
+      const Client = els.Client
+      return <Client key={key} module="./feed.tsx" props={{ topic, columns, lines }} />
+    }
+    return (
+      <Box key={key} flexDirection="column">
+        {lines.map((l, i) => (
+          <Box key={`l${i}`} flexDirection="row" columnGap={1}>
+            {l.mark !== undefined && <Text color={l.color}>{l.mark}</Text>}
+            <Text wrap="truncate-end" dimColor={l.dim}>{l.text}</Text>
+          </Box>
+        ))}
+      </Box>
+    )
+  }
   // Set in session.start: writes `tracked` to the drawn state (only when it changed).
   let publish: (() => Promise<void>) | null = null
   // Set in session.start: writes an agent's Korean line from its own transcript.
@@ -484,7 +546,8 @@ export const register: Register = on => {
       const rows = [...tracked.values()]
         .sort((x, y) => y.startedAt - x.startedAt)
         .slice(0, 12)
-        .map(t => ({ ...t }))
+        // the per-call fields stay in memory (feed regions read them): written here they'd redraw the band and pane on every call
+        .map(t => ({ ...t, lastTool: '', activity: '', tools: 0 }))
       const prev = await read($, agents)
       if (JSON.stringify(prev) !== JSON.stringify(rows)) await update($, agents, () => rows)
       // Each agent's snapshot stays in the card it started in, updated there; one not yet in a card joins the latest.
@@ -866,7 +929,7 @@ export const register: Register = on => {
       const now = Date.now()
       const perMin = Object.entries(drawTimes).map(([k, ts]) => `${k} ${ts.filter(t => now - t < 60_000).length}`).join(' · ') || '없음'
       const pressed = Object.entries(presses).map(([k, p]) => `${k} ${p.n}회(실패 ${p.failed}, 마지막 ${p.last})`).join(' · ') || '없음'
-      const tripped = Object.entries(trips).map(([k, t]) => `${k} 받음 ${t.heard}${t.bad ? `(형식 오류 ${t.bad})` : ''} · 응답 도착 ${t.got}`).join(' · ') || '없음'
+      const tripped = Object.entries(trips).map(([k, t]) => `${k} 받음 ${t.heard}${t.bad ? `(형식 오류 ${t.bad})` : ''} · 응답 ${t.got}`).join(' · ') || '없음'
       const failed = Object.entries(faults).map(([k, f]) => `${k} ${f.n}회(마지막 ${f.last})`).join(' · ') || '없음'
       const surfaces = await $.session.surfaces()
       const draws = Object.entries(lastDraw).map(([k, v]) => `${k}: ${v}`).join(' | ') || '아직 한 번도 안 그림'
@@ -942,13 +1005,11 @@ export const register: Register = on => {
       }
     }
 
+    // the calls list is a feed region: it reads the transcript again on its next ask, with no redraw;
+    // once as the call starts (it shows ● running), once as it ends
+    touchTranscript(e.agentId ?? 'main')
     const ran = await next(e)
     touchTranscript(e.agentId ?? 'main')
-    // an open detail pane lists calls from the transcript: a finished call is its one cue to redraw
-    if (await read($, detailAtom)) {
-      const now = await $.clock.now()
-      await update($, detailAtom, d => (d ? { ...d, at: now } : d))
-    }
     return ran
   })
 
@@ -1029,9 +1090,8 @@ export const register: Register = on => {
   })
 
   // An agent clock's post: answer with a fresh `now`, so its time stays true with no redraw of the band.
-  on('ui.message', async ($, e, next) => {
-    if (!e.module.endsWith('elapsed.tsx')) return next(e)
-    const t = (trips[e.surface] ??= { heard: 0, bad: 0, got: 0 })
+  on('ui.message', { module: 'hooks/elapsed.tsx' }, async ($, e, next) => {
+    const t = (trips[`시계 ${e.surface}`] ??= { heard: 0, bad: 0, got: 0 })
     t.heard += 1
     const d = e.data as { startedAt?: unknown; got?: unknown } | null
     if (typeof d?.startedAt !== 'number' || typeof d.got !== 'number') {
@@ -1040,6 +1100,27 @@ export const register: Register = on => {
     }
     t.got = Math.max(t.got, d.got)
     return { props: { startedAt: d.startedAt, now: await $.clock.now(), answer: d.got + 1 } }
+  })
+
+  // A feed region's ask: its lines, when they moved since it was last handed them.
+  on('ui.message', { module: 'hooks/feed.tsx' }, async ($, e, next) => {
+    const d = e.data as { topic?: unknown; columns?: unknown } | null
+    if (typeof d?.topic !== 'string' || typeof d.columns !== 'number') return next(e)
+    // for /mods-hud debug: asks heard, and answers sent (here `got`)
+    const t = (trips[`feed ${e.surface}`] ??= { heard: 0, bad: 0, got: 0 })
+    t.heard += 1
+    const columns = d.columns
+    const [kind, id = '', rows = '1'] = d.topic.split('|')
+    const lines =
+      kind === 'calls'
+        ? callLines(await messagesOf($, id, transcriptV.get(id) ?? 0, transcriptCache), Number(rows) || 1, columns)
+        : agentLines(d.topic, columns)
+    const instance = `${e.requestId}|${e.element}`
+    const json = JSON.stringify(lines)
+    if (feedSent.get(instance) === json) return next(e)
+    feedSent.set(instance, json)
+    t.got += 1
+    return { props: { topic: d.topic, columns, lines } }
   })
 
   // A Client that failed, for /mods-hud debug; the engine then draws the site again without it.
@@ -1104,7 +1185,8 @@ export const register: Register = on => {
       ])
       const d = detailView(raw)
       if (!d) return next(e)
-      const { Box, Text, Button } = $.ui.resolve(e)
+      const els = $.ui.resolve(e)
+      const { Box, Text, Button } = els
       const width = e.props.bodyColumns
       const bodyRows = e.props.scroll.bodyRows
       // ponytail: the desktop sets text in a proportional font where Hangul takes about 1.3 cells, not 2; cut by that there
@@ -1154,32 +1236,20 @@ export const register: Register = on => {
       const a: Pick<AgentRow, 'type' | 'status' | 'description' | 'summary' | 'model' | 'effort'> | undefined =
         agentId === null ? undefined : (ags.find(x => x.id === agentId) ?? (snap && { ...snap, description: snap.summary }))
       const key = agentId ?? 'main'
-      const v = transcriptV.get(key) ?? 0
-      let msgs = transcriptCache.get(key)?.v === v ? transcriptCache.get(key)!.msgs : undefined
-      if (!msgs) {
-        const got = await (agentId === null ? $.session.messages() : $.session.messages({ agentId })).catch(() => [])
-        // ponytail: the newest 400 rows cover what the tabs show; a deeper history would need paging
-        msgs = (Array.isArray(got) ? got : []).slice(-400)
-        transcriptCache.set(key, { v, msgs })
-      }
+      const msgs = await messagesOf($, key, transcriptV.get(key) ?? 0, transcriptCache)
       const look = LOOK[a ? agentPhase(a.status) : agentId === null ? await read($, phase) : 'idle']
       const said = [...msgs].reverse().find(x => x.role === 'assistant' && x.text.trim())?.text
       const uses = msgs.flatMap(x => x.toolUses)
       const tag = a ? modelTag(a.model, a.effort) : m ? modelTag(m.model, m.effort) : ''
-      const callDot = (u: { isError?: true; result?: unknown; text?: string }) =>
-        u.isError ? { dot: '✗', color: 'error' } : u.result === undefined && u.text === undefined ? { dot: '●', color: 'warning' } : { dot: '✓', color: 'success' }
-      // the newest calls that fit
-      const calls = (room: number) => (
-        <Box key="calls" flexDirection="column" width={width}>
-          {uses.length === 0 && <Text dimColor>아직 도구 호출이 없음</Text>}
-          {uses.slice(-room).map(u => (
-            <Box key={u.tool_use_id} flexDirection="row" columnGap={1} width={width}>
-              <Box flexShrink={0}><Text color={callDot(u).color}>{callDot(u).dot}</Text></Box>
-              <Text wrap="truncate-end">{clipCells(describeCall(u.tool, u.input), fit(width - 3))}</Text>
-            </Box>
-          ))}
-        </Box>
-      )
+      // the newest calls that fit, in a feed region: a finished call shows on its next ask, with no redraw of the pane
+      const calls = (room: number) => {
+        const topic = `calls|${key}|${room}`
+        return (
+          <Box key="calls" flexDirection="column" width={width}>
+            {feedRegion(els, DETAIL, 'calls-feed', topic, fit(width), callLines(msgs, room, fit(width)))}
+          </Box>
+        )
+      }
       const head = (
         <Box key="head" flexDirection="row" justifyContent="space-between" width={width}>
           <Box flexDirection="row" columnGap={1} flexShrink={1} minWidth={0}>
@@ -1326,7 +1396,7 @@ export const register: Register = on => {
               {subs.map(x => {
                 const s = LOOK[agentPhase(x.status)]
                 const t = modelTag(x.model, x.effort)
-                const meta = [elapsedText(x, now), t, x.tools > 0 && `도구 ${x.tools}`].filter(Boolean).join(' · ')
+                const meta = [elapsedText(x, now), t].filter(Boolean).join(' · ')
                 return (
                   <Box key={`sub-${x.id}`} flexDirection="column" width={width}>
                     {/* a pane is narrow: the whole first line is the press target, details go below it */}
@@ -1335,8 +1405,10 @@ export const register: Register = on => {
                       <Text color={s.isDone ? undefined : 'suggestion'} dimColor={s.isDone}>{`${x.type} `}</Text>
                       <Text dimColor={s.isDone}>{clipCells(x.summary || x.description, fit(Math.max(4, width - 3 - cells(x.type))))}</Text>
                     </Button>
-                    <Box paddingLeft={2} width={width}>
-                      <Text dimColor>{clipCells([meta, LIVE.has(x.status) && x.activity && `→ ${x.activity}`].filter(Boolean).join('  '), fit(width - 3))}</Text>
+                    {/* its call count and step change per call: a feed region beside the fixed part */}
+                    <Box paddingLeft={2} flexDirection="row" columnGap={2} width={width}>
+                      <Box flexShrink={0}><Text dimColor>{meta}</Text></Box>
+                      {feedRegion(els, DETAIL, `meta-${x.id}`, `meta|${x.id}`, fit(Math.max(4, width - 2 - cells(meta) - 2)), agentLines(`meta|${x.id}`, fit(Math.max(4, width - 2 - cells(meta) - 2))))}
                     </Box>
                   </Box>
                 )
@@ -1595,7 +1667,7 @@ export const register: Register = on => {
         // Every unfinished agent keeps its step line, between calls too, so the band never jumps (room allowing).
         !isEnded(a) && withSteps && (
           <Box key={`step-${a.id}`} paddingLeft={isCompact ? 6 : 14} width={width}>
-            <Text wrap="truncate-end" dimColor>{clipCells(`→ ${a.activity || '…'}`, Math.max(4, width - (isCompact ? 6 : 14) - 1))}</Text>
+            {feedRegion(els, e.requestId, `feed-step-${a.id}`, `step|${a.id}`, fit(Math.max(4, width - (isCompact ? 6 : 14))), agentLines(`step|${a.id}`, fit(Math.max(4, width - (isCompact ? 6 : 14)))))}
           </Box>
         ),
       ]

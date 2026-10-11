@@ -1,6 +1,6 @@
 # 018. Session detail on Client regions, with clearer tabs
 
-- **State:** stage 0 in progress: works on the terminal (0.4.11), desktop to check
+- **State:** stages 1 and 2 implemented (0.4.13), desktop to check; stage 3 open
 - **Where:** the detail pane in `hooks/register.tsx` (`DETAIL`), new surface modules next to `hooks/elapsed.tsx`
 - **Related:** [001](001-detail-pane-missed-press.md) (presses lost while agents run), [003](003-client-elapsed-clock.md) (Client clock, works on the desktop)
 
@@ -34,7 +34,18 @@
 - Terminal (2026-10-12, a 15 s subagent): `받음 7 · 응답 도착 6`. The round trip works. M lags N by one because the module reports its count with its next post.
 - Desktop: to check. Same run, then `/mods-hud debug`. If `응답 도착` stays 0, the desktop drops answers, and Stage 1 can't move per-call fields out of the pane there.
 - Desktop, first try (0.4.11, the module confirmed loaded): `Client 왕복: 없음`. No post reached the hook. 0.4.12 also counts posts of the wrong shape and records `ui.fault` (`Client 오류`), to tell "never posts" from "fails".
+- Desktop, second try (0.4.12, `sleep 30` agent, debug while it ran): `받음 8 · 응답 도착 7`, `Client 오류: 없음`. The round trip works on the desktop. The first try's `없음` came from running debug after the agent ended.
 - Not probed yet: a Button inside a Client, and a Client taller than its region.
+
+## Stages 1 and 2 (0.4.13)
+
+- `publish` writes the agents with `lastTool`, `activity` and `tools` blanked. Those stay in the module's `tracked` map.
+- `tool.call` no longer touches `detailAtom`. A tool call now writes no state at all (test: `a tool call writes no state`).
+- New surface module `hooks/feed.tsx`: lines with an optional colored mark. It asks every second with `{ topic, columns }`; the hook answers `{ props }` only when the lines moved for that instance (`feedSent`).
+- Topics: `step|<agent>` (the band's `→ step` line), `meta|<agent>` (the 현재 tab's `도구 N  → step`), `calls|<main or agent>|<rows>` (the calls list, read from the transcript cache).
+- `/mods-hud debug` shows `Client 왕복: feed <surface> 받음 N · 응답 M` (asks, answers sent) and `시계 <surface> ...`.
+- Terminal (2026-10-12, a subagent with four shell calls): `feed terminal 받음 25 · 응답 2`, no faults. The step line moved twice with no state write. The band still drew 33 times a minute: the terminal asks for the band on its own (typing, the spinner), not on our writes.
+- Validator rule met on the way: `$` can be passed only to functions declared at the top of the file (`messagesOf`).
 
 ## Plan
 

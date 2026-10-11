@@ -100,7 +100,7 @@ test('summary line, three recent agents, a rule, then the fixed status line', as
     expect(await ui.find({ type: 'Text', text: /^작업 a1$/ })).toBeDefined()
     expect((await ui.find({ type: 'Text', text: /^작업 a3$/ }))?.props.dimColor).toBe(true)
     expect((await ui.findAll({ type: 'Text', text: /^완료$/ })).some(t => t.props.color === 'success')).toBe(true)
-    expect(await ui.find({ type: 'Text', text: /^→ Grep "x"$/ })).toBeDefined()
+    expect(await texts(ui)).toContain('→ Grep "x"')
     expect(await ui.find({ type: 'Text', text: /회/ })).toBeUndefined()
     expect(await ui.find({ key: 'done' })).toBeUndefined()
     // no drawn dividers: each figure is its own cell in a bordered block
@@ -186,9 +186,9 @@ test('model and effort changes show within a tick, before any request; states ar
   const idle = { ...BAND, isWorking: false }
   const look = async () => {
     const ui = await $.ui.mount({ plugin: 'mods-hud', surface: 'terminal', component: 'AbovePrompt', props: idle })
-    const texts = (await ui.findAll({ type: 'Text' })).map(t => t.text)
+    const all = await texts(ui)
     await ui.unmount()
-    return texts
+    return all
   }
   expect(await look()).toContain('대기')
   expect(await look()).toContain('Opus 5.5')
@@ -298,9 +298,9 @@ test('a subagent shows from its spawn, its row follows each tool call, and its e
 
   const look = async () => {
     const ui = await $.ui.mount({ plugin: 'mods-hud', surface: 'terminal', component: 'AbovePrompt', props: BAND })
-    const texts = (await ui.findAll({ type: 'Text' })).map(t => t.text)
+    const all = await texts(ui)
     await ui.unmount()
-    return texts
+    return all
   }
   // not in the engine's list (a background agent): still shown, from the spawn alone
   expect(await look()).toEqual(expect.arrayContaining(['Explore', '파일 개수 세기', '→ 시작']))
@@ -432,7 +432,7 @@ test('an agent keeps its step line between calls; idle (turn ended) reads as don
   await clock.advance(2000)
   const steps = async () => {
     const ui = await $.ui.mount({ plugin: 'mods-hud', surface: 'desktop', component: 'AbovePrompt', props: BAND })
-    const found = (await ui.findAll({ type: 'Text', text: /^→ / })).map(t => t.text)
+    const found = (await texts(ui)).filter(t => t.startsWith('→ '))
     await ui.unmount()
     return found
   }
@@ -496,25 +496,25 @@ test('a press on a row opens the detail pane on it, with its recent calls', asyn
   expect(opened).toEqual(['session-detail:Explore · 작업 a9'])
 
   const pane = await $.ui.mount({ plugin: 'mods-hud', surface: 'desktop', component: 'Pane', requestId: 'session-detail', props: PANE_PROPS })
-  const texts = (await pane.findAll({ type: 'Text' })).map(t => t.text)
-  expect(texts).toContain('Bash List files')
-  expect(texts).toContain('Grep "x"')
-  expect((await pane.find({ type: 'Text', text: /^●$/ }))?.props.color).toBe('warning') // still running
-  expect((await pane.find({ type: 'Text', text: /^✓$/ }))?.props.color).toBe('success')
-  expect(texts).toContain('“세는 중”')
+  const shown = await texts(pane)
+  expect(shown).toContain('Bash List files')
+  expect(shown).toContain('Grep "x"')
+  expect((await feedOf(pane)).find(l => l.mark === '●')?.color).toBe('warning') // still running
+  expect((await feedOf(pane)).find(l => l.mark === '✓')?.color).toBe('success')
+  expect(shown).toContain('“세는 중”')
   await pane.unmount()
 
   await band.press({ key: 'go-session' })
   const main = await $.ui.mount({ plugin: 'mods-hud', surface: 'desktop', component: 'Pane', requestId: 'session-detail', props: PANE_PROPS })
   // the main calls sit on their own tab, the agents on 현재
   await main.press({ key: 'tab-calls' })
-  expect((await main.findAll({ type: 'Text' })).map(t => t.text)).toContain('Read b.ts')
+  expect(await texts(main)).toContain('Read b.ts')
   await main.press({ key: 'tab-live' })
   const mainTexts = (await main.findAll({ type: 'Text' })).map(t => t.text)
   expect(mainTexts).toContain('서브에이전트 1')
   expect((await main.find({ key: 'open-a9' }))?.text).toBe('● Explore 작업 a9')
   await main.press({ key: 'open-a9' })
-  expect((await main.findAll({ type: 'Text' })).map(t => t.text)).toContain('Grep "x"')
+  expect(await texts(main)).toContain('Grep "x"')
   await main.press({ key: 'back' })
   // the title follows the view (issue 017)
   expect(opened.slice(-2)).toEqual(['session-detail:Explore · 작업 a9', 'session-detail:세션 상세'])
@@ -538,7 +538,7 @@ test('a lone agent stays shown however few rows the surface gives', async ($, on
   for (const [rows, steps] of [[2, 0], [3, 1], [4, 1], [5, 1], [6, 1]] as const) {
     const ui = await $.ui.mount({ plugin: 'mods-hud', surface: 'desktop', component: 'AbovePrompt', props: { ...BAND, maxRows: rows } })
     expect(await ui.find({ type: 'Text', text: /^작업 a1$/ })).toBeDefined()
-    expect((await ui.findAll({ type: 'Text', text: /^→ / })).length).toBe(steps)
+    expect((await texts(ui)).filter(t => t.startsWith('→ ')).length).toBe(steps)
     await ui.unmount()
   }
 })
@@ -809,7 +809,7 @@ test('the detail main view lists the sessions; one opens its log, newest at the 
   await band.press({ key: 'go-session' })
   const pane = await $.ui.mount({ plugin: 'mods-hud', surface: 'desktop', component: 'Pane', requestId: 'session-detail', props: PANE_PROPS })
   await pane.press({ key: 'tab-calls' })
-  expect((await pane.findAll({ type: 'Text' })).map(t => t.text)).toContain('Read b.ts')
+  expect(await texts(pane)).toContain('Read b.ts')
   await pane.press({ key: 'tab-live' })
   const main = (await pane.findAll({ type: 'Text' })).map(t => t.text)
   expect(main).toContain('오케스트레이션 1')
@@ -910,7 +910,7 @@ test('an agent clock posts every 2 s; the answer hands it a fresh now, and debug
   const ui = await $.ui.mount({ plugin: 'mods-hud', surface: 'desktop', component: 'AbovePrompt', props: BAND })
   for (let i = 0; i < 6; i++) await ui.advance(1000)
   const dbg = await $.command.run({ command: 'mods-hud', args: 'debug', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 90 } } as never)
-  expect((dbg as { text: string }).text).toContain('Client 왕복: desktop 받음 3 · 응답 도착 2 · Client 오류: 없음')
+  expect((dbg as { text: string }).text).toContain('시계 desktop 받음 3 · 응답 2 · Client 오류: 없음')
   await ui.unmount()
 })
 
@@ -975,7 +975,13 @@ const openMain = async ($: Engine, surface: 'terminal' | 'desktop' = 'desktop', 
   return $.ui.mount({ plugin: 'mods-hud', surface, component: 'Pane', requestId: 'session-detail', props: { ...PANE_PROPS, bodyColumns } })
 }
 type Mounted = Awaited<ReturnType<typeof openMain>>
-const texts = async (ui: Mounted) => (await ui.findAll({ type: 'Text' })).map(t => t.text)
+// Lines drawn in feed regions (hooks/feed.tsx): their props, since a Client's own tree is the surface's
+const feedOf = async (ui: Mounted) =>
+  (await ui.findAll({ type: 'Client' }))
+    .filter(c => c.props.module === 'hooks/feed.tsx')
+    .flatMap(c => (c.props.props as { lines: { mark?: string; color?: string; text: string }[] }).lines)
+// Every text drawn, feed lines included
+const texts = async (ui: Mounted) => [...(await ui.findAll({ type: 'Text' })).map(t => t.text), ...(await feedOf(ui)).map(l => l.text)]
 
 test('a turn makes a history card: its ask, model, duration, and the session line as its result', async ($, on) => {
   const clock = mock.clock(on, { now: NOW })
@@ -1322,4 +1328,29 @@ test('an idle session writes no state, so nothing redraws and no press lands mid
   await clock.advance(20_000)
   await clock.settle()
   expect(writes).toEqual([])
+})
+
+test('a tool call writes no state: its step reaches the band through the feed region, with no redraw (issue 018)', async ($, on) => {
+  const clock = mock.clock(on, { now: NOW })
+  const w: World = { list: [{ id: 'a1', type: 'Explore', description: '작업 a1', status: 'running' }], forks: [] }
+  world(on, w)
+  const writes: string[] = []
+  on('state.set', ($, e, next) => {
+    writes.push((e as unknown as { key: string }).key)
+    return next(e)
+  })
+  await $.session.start({ cwd: '/tmp/x', surface: 'desktop', isInteractive: true })
+  await clock.advance(2000)
+  const ui = await $.ui.mount({ plugin: 'mods-hud', surface: 'desktop', component: 'AbovePrompt', props: BAND })
+  expect((await feedOf(ui)).map(l => l.text)).toEqual(['→ …'])
+  writes.length = 0
+  await $.tool.call({ tool: 'Grep', tool_use_id: 't1', agentId: 'a1', pattern: 'x' } as never)
+  await $.tool.call({ tool: 'Read', tool_use_id: 't2', agentId: 'a1', file_path: '/a/b.ts' } as never)
+  expect(writes).toEqual([])
+  // the region asks each second and draws the newest step it gets back
+  const drawn = async () => (await ui.findAll({ in: 'feed-step-a1', type: 'Text' })).map(t => t.text)
+  expect(await drawn()).toEqual(['→ …'])
+  await ui.advance(1000)
+  expect(await drawn()).toEqual(['→ Read b.ts'])
+  await ui.unmount()
 })

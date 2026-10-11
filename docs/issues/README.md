@@ -21,4 +21,4 @@ Issues found while building and testing `plugins/mods-hud`.
 | [015](015-split-view-right-pane.md) | No band in a split view's right pane | open, upstream (#99265) |
 | [016](016-desktop-reload-keeps-old-module.md) | `/reload-plugins` does not load a new mods-hud in a desktop session | open, upstream (#96223) |
 | [017](017-detail-pane-stale-title.md) | The detail pane keeps its first title | fixed (0.4.10), desktop to recheck |
-| [018](018-detail-pane-client-regions.md) | Session detail on Client regions, with clearer tabs | stage 0: terminal works, desktop to check |
+| [018](018-detail-pane-client-regions.md) | Session detail on Client regions, with clearer tabs | stages 1-2 in 0.4.13, desktop to check |

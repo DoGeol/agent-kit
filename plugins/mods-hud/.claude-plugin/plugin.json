@@ -1,6 +1,6 @@
 {
   "name": "mods-hud",
-  "version": "0.4.12",
+  "version": "0.4.13",
   "description": "HUD above the prompt: session summary and state, subagents and orchestrated sessions with Korean summaries and controls, model/effort and usage limits, and a session detail pane with per-turn history",
   "author": { "name": "DoGeol" },
   "license": "MIT",
