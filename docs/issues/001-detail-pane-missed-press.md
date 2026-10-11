@@ -1,6 +1,6 @@
 # 001. Presses in the detail pane are sometimes lost
 
-- **State:** idle fixed (0.4.8); presses still lost now and then while subagents run
+- **State:** fixed on the desktop (0.4.13): no press lost while a subagent ran; terminal to recheck
 - **Where:** `plugins/mods-hud`, detail pane (`session-detail`)
 
 ## Symptom
@@ -38,3 +38,7 @@ Presses were still lost on the desktop.
 ## Next
 - Batch the redraws while agents run: write agent rows at most once every 2-3 s instead of on each tool call.
 - Then repeat step 3 and compare the counted presses with the presses made.
+
+## 0.4.13 (issue 018)
+A tool call no longer writes any state, so nothing redraws the pane or the band mid-run. The per-call lines move in feed regions.
+Desktop check (2026-10-12, a subagent with four shell calls): `/mods-hud debug` showed `detail 32회(실패 0)`, and the user saw no press lost.

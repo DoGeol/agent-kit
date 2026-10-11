@@ -394,14 +394,42 @@ async function messagesOf($: Pick<CoreEngineInterface, 'session'>, key: string, 
   return msgs
 }
 
-// The calls list's lines: the newest `rows` calls, each cut to `columns`.
-const callLines = (msgs: SessionMessage[], rows: number, columns: number): FeedLine[] => {
-  const uses = msgs.flatMap(x => x.toolUses)
-  if (uses.length === 0) return [{ dim: true, text: '아직 도구 호출이 없음' }]
-  return uses.slice(-Math.max(1, rows)).map(u => {
-    const d = callDot(u)
-    return { mark: d.dot, color: d.color, text: clipCells(describeCall(u.tool, u.input), Math.max(4, columns - 3)) }
-  })
+// A call's duration in 5 cells: "0.4s", " 12s", "01:05".
+const tookText = (ms: number) => (ms < 10_000 ? `${(ms / 1000).toFixed(1)}s` : ms < 60_000 ? `${Math.floor(ms / 1000)}s` : durText(ms)).padStart(5)
+
+// When a call started and ended, as this load saw it (the transcript has no times); a call from before it shows none.
+type CallTime = { at: number; end?: number }
+
+// The calls list's lines, the newest `rows` of them, each cut to `columns`: a call reads
+// "✓ 12:03  1.2s  Bash npm test", its error's first line below it; with `asks`, each prompt heads the calls it led to.
+const callLines = (msgs: SessionMessage[], rows: number, columns: number, times: Map<string, CallTime>, now: number, asks: boolean): FeedLine[] => {
+  const out: FeedLine[] = []
+  for (const m of msgs) {
+    // a notice or another session's message (a <tag>) is no prompt of the user's
+    if (asks && m.role === 'user' && m.text.trim() && !m.text.trimStart().startsWith('<')) {
+      out.push({ dim: true, text: clipCells(`─ ${oneLine(m.text)}`, Math.max(4, columns - 1)) })
+    }
+    for (const u of m.toolUses) {
+      const d = callDot(u)
+      const t = times.get(u.tool_use_id)
+      const when = t ? `${hhmm(t.at)} ${tookText((t.end ?? now) - t.at)}` : `${'--:--'} ${''.padStart(5)}`
+      out.push({ mark: d.dot, color: d.color, text: clipCells(`${when}  ${describeCall(u.tool, u.input)}`, Math.max(4, columns - 3)) })
+      if (u.isError && u.text?.trim()) out.push({ dim: true, text: clipCells(`  ${oneLine(u.text)}`, Math.max(4, columns - 1)) })
+    }
+  }
+  if (!out.some(l => l.mark !== undefined)) return [{ dim: true, text: '아직 도구 호출이 없음' }]
+  return out.slice(-Math.max(1, rows))
+}
+
+// The calls since the newest prompt of the user's, and how many.
+const callsSinceAsk = (msgs: SessionMessage[]) => {
+  let n = 0
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    const m = msgs[i]!
+    if (m.role === 'user' && m.text.trim() && !m.text.trimStart().startsWith('<')) break
+    n += m.toolUses.length
+  }
+  return n
 }
 
 export const register: Register = on => {
@@ -446,6 +474,15 @@ export const register: Register = on => {
     const meta = [t.tools > 0 && `도구 ${t.tools}`, LIVE.has(t.status) && t.activity && `→ ${t.activity}`].filter(Boolean).join('  ')
     return meta ? [{ dim: true, text: clipCells(meta, Math.max(4, columns - 1)) }] : []
   }
+  // The live turn's line: its call count and latest call (topic `turn|main`).
+  const turnLines = (msgs: SessionMessage[], columns: number): FeedLine[] => {
+    const n = callsSinceAsk(msgs)
+    return [{ dim: true, text: clipCells([n > 0 && `도구 ${n}`, `→ ${mainStep || '…'}`].filter(Boolean).join('  '), Math.max(4, columns - 1)) }]
+  }
+  // Each call's start and end, newest 1000 (issue 018: the calls list shows when and how long).
+  const callTimes = new Map<string, CallTime>()
+  // The main loop's latest call this turn, for the live turn card and 지금.
+  let mainStep = ''
   // What each feed instance (`<requestId>|<key>`) was last handed, so an answer goes only when its lines moved.
   const feedSent = new Map<string, string>()
   // A feed region where the surface has one, plain rows elsewhere; its first lines come with the drawing.
@@ -1007,8 +1044,17 @@ export const register: Register = on => {
 
     // the calls list is a feed region: it reads the transcript again on its next ask, with no redraw;
     // once as the call starts (it shows ● running), once as it ends
+    const id = String((e as { tool_use_id?: unknown }).tool_use_id ?? '')
+    if (id) {
+      callTimes.set(id, { at: await $.clock.now() })
+      // ponytail: the oldest go first past 1000; the list shows far fewer
+      if (callTimes.size > 1000) callTimes.delete(callTimes.keys().next().value!)
+    }
+    if (e.agentId === undefined) mainStep = describeCall(String(e.tool), e as unknown as Record<string, unknown>)
     touchTranscript(e.agentId ?? 'main')
     const ran = await next(e)
+    const t = id ? callTimes.get(id) : undefined
+    if (t) callTimes.set(id, { ...t, end: await $.clock.now() })
     touchTranscript(e.agentId ?? 'main')
     return ran
   })
@@ -1032,6 +1078,7 @@ export const register: Register = on => {
 
   // Only the main loop raises turn.start (a subagent's run raises none): each opens a card.
   on('turn.start', async ($, e, next) => {
+    mainStep = ''
     await update($, phase, () => 'running' as const)
     // a turn a notice or another session's message started (its text is a <tag>) adds to the card before it
     if (String((e as { text?: unknown }).text ?? '').trimStart().startsWith('<')) return next(e)
@@ -1111,10 +1158,14 @@ export const register: Register = on => {
     t.heard += 1
     const columns = d.columns
     const [kind, id = '', rows = '1'] = d.topic.split('|')
+    const msgs = kind === 'calls' || kind === 'turn' ? await messagesOf($, id, transcriptV.get(id) ?? 0, transcriptCache) : []
+    const now = await $.clock.now()
     const lines =
       kind === 'calls'
-        ? callLines(await messagesOf($, id, transcriptV.get(id) ?? 0, transcriptCache), Number(rows) || 1, columns)
-        : agentLines(d.topic, columns)
+        ? callLines(msgs, Number(rows) || 1, columns, callTimes, now, id === 'main')
+        : kind === 'turn'
+          ? turnLines(msgs, columns)
+          : agentLines(d.topic, columns)
     const instance = `${e.requestId}|${e.element}`
     const json = JSON.stringify(lines)
     if (feedSent.get(instance) === json) return next(e)
@@ -1246,7 +1297,7 @@ export const register: Register = on => {
         const topic = `calls|${key}|${room}`
         return (
           <Box key="calls" flexDirection="column" width={width}>
-            {feedRegion(els, DETAIL, 'calls-feed', topic, fit(width), callLines(msgs, room, fit(width)))}
+            {feedRegion(els, DETAIL, 'calls-feed', topic, fit(width), callLines(msgs, room, fit(width), callTimes, now, key === 'main'))}
           </Box>
         )
       }
@@ -1260,6 +1311,16 @@ export const register: Register = on => {
         </Box>
       )
       const last = said && <Text key="said" wrap="truncate-end" dimColor>{clipCells(`“${oneLine(said)}”`, fit(width - 1))}</Text>
+      // a labeled line: "요청  …", the label dim
+      const labeled = (k: string, label: string, text: string) => (
+        <Box key={k} flexDirection="row" width={width}>
+          <Text dimColor>{`${label}  `}</Text>
+          <Text wrap="truncate-end">{clipCells(text || '—', fit(Math.max(4, width - cells(label) - 3)))}</Text>
+        </Box>
+      )
+      // the live turn's call count and latest call, in a feed region
+      const turnNow = (k: string, columns: number) =>
+        feedRegion(els, DETAIL, k, 'turn|main', fit(columns), turnLines(msgs, fit(columns)))
 
       if (agentId !== null) {
         lastDraw['detail-draw'] = `${agentId} msgs=${msgs.length} uses=${uses.length} at=${now}`
@@ -1267,14 +1328,15 @@ export const register: Register = on => {
           <Box flexDirection="column" rowGap={1} width={width}>
             {head}
             {back}
-            {calls(Math.max(3, bodyRows - 5))}
+            {a && labeled('ask', '요청', a.description)}
+            {calls(Math.max(3, bodyRows - 7))}
             {last}
           </Box>
         )
       }
 
       // The main view: three tabs, the turn history first. A desktop Button is native: the active one is marked in its label.
-      const tabs: [DetailTab, string][] = [['history', '히스토리'], ['calls', '도구 호출'], ['live', '현재']]
+      const tabs: [DetailTab, string][] = [['history', '턴'], ['calls', '도구'], ['live', '지금']]
       const labels = tabs.map(([k, l]) => (k === tab ? `● ${l}` : l))
       const isTight = labels.reduce((n, l) => n + cells(l), 0) > fit(width - 2)
       const tabRow = (
@@ -1312,9 +1374,26 @@ export const register: Register = on => {
         }
         const older = hist.length - fits
         const shown = showOlder ? hist : hist.slice(older)
+        // Each prompt's calls in the transcript; a card takes the newest unused prompt of its text (its ask), newest card first.
+        const groups: { text: string; n: number }[] = []
+        for (const x of msgs) {
+          if (x.role === 'user' && x.text.trim() && !x.text.trimStart().startsWith('<')) groups.push({ text: x.text.trim(), n: 0 })
+          else if (groups.length > 0) groups.at(-1)!.n += x.toolUses.length
+        }
+        const callsOf = new Map<number, number>()
+        for (let i = hist.length - 1, j = groups.length - 1; i >= 0 && j >= 0; i--) {
+          const ask = hist[i]!.ask.trim()
+          for (let k = j; k >= 0; k--) {
+            if (groups[k]!.text !== ask) continue
+            callsOf.set(hist[i]!.n, groups[k]!.n)
+            j = k - 1
+            break
+          }
+        }
         const card = (c: TurnCard) => {
           const isLive = c.endedAt === undefined
-          const top = [`─ 턴 ${c.n}`, hhmm(c.startedAt), durText((c.endedAt ?? now) - c.startedAt), modelTag(c.model, c.effort)].filter(Boolean).join(' · ')
+          const n = callsOf.get(c.n) ?? 0
+          const top = [`─ 턴 ${c.n}`, hhmm(c.startedAt), durText((c.endedAt ?? now) - c.startedAt), modelTag(c.model, c.effort), !isLive && n > 0 && `도구 ${n}`].filter(Boolean).join(' · ')
           return (
             <Box key={`card-${c.n}`} flexDirection="column" width={width}>
               <Text key="top" wrap="truncate-end" bold={isLive} dimColor={!isLive}>{clipCells(top, fit(width - 1))}</Text>
@@ -1322,10 +1401,18 @@ export const register: Register = on => {
                 <Text dimColor>{'  요청  '}</Text>
                 <Text wrap="truncate-end">{clipCells(c.ask || '—', fit(Math.max(4, width - 9)))}</Text>
               </Box>
-              <Box key="result" flexDirection="row" width={width}>
-                <Text dimColor>{'  결과  '}</Text>
-                <Text wrap="truncate-end">{clipCells(isLive ? '…' : (c.result ?? '…'), fit(Math.max(4, width - 9)))}</Text>
-              </Box>
+              {isLive ? (
+                // the live turn: its calls so far and the latest, moving with no redraw
+                <Box key="result" flexDirection="row" width={width}>
+                  <Text dimColor>{'  지금  '}</Text>
+                  {turnNow(`turn-${c.n}`, Math.max(4, width - 9))}
+                </Box>
+              ) : (
+                <Box key="result" flexDirection="row" width={width}>
+                  <Text dimColor>{'  결과  '}</Text>
+                  <Text wrap="truncate-end">{clipCells(c.result ?? '…', fit(Math.max(4, width - 9)))}</Text>
+                </Box>
+              )}
               {c.agents.map(x => {
                 const s = LOOK[agentPhase(x.status)]
                 const took = elapsedText(x, now)
@@ -1389,6 +1476,17 @@ export const register: Register = on => {
         <Box flexDirection="column" rowGap={1} width={width}>
           {tabRow}
           {head}
+          {hist.length > 0 && (
+            <Box key="now" flexDirection="column" width={width}>
+              {labeled('ask', '요청', hist.at(-1)!.ask)}
+              {hist.at(-1)!.endedAt === undefined && (
+                <Box key="step" flexDirection="row" width={width}>
+                  <Text dimColor>{'지금  '}</Text>
+                  {turnNow('turn-now', Math.max(4, width - 7))}
+                </Box>
+              )}
+            </Box>
+          )}
           {subs.length === 0 && peers.length === 0 && <Text key="none" dimColor>서브에이전트·오케스트레이션 없음</Text>}
           {subs.length > 0 && (
             <Box key="subs" flexDirection="column" width={width}>

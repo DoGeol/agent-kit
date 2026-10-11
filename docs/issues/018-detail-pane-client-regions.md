@@ -1,6 +1,6 @@
 # 018. Session detail on Client regions, with clearer tabs
 
-- **State:** stages 1 and 2 implemented (0.4.13), desktop to check; stage 3 open
+- **State:** stages 1-2 confirmed on the desktop (0.4.13); stage 3 implemented (0.4.14), desktop to check
 - **Where:** the detail pane in `hooks/register.tsx` (`DETAIL`), new surface modules next to `hooks/elapsed.tsx`
 - **Related:** [001](001-detail-pane-missed-press.md) (presses lost while agents run), [003](003-client-elapsed-clock.md) (Client clock, works on the desktop)
 
@@ -45,7 +45,16 @@
 - Topics: `step|<agent>` (the band's `→ step` line), `meta|<agent>` (the 현재 tab's `도구 N  → step`), `calls|<main or agent>|<rows>` (the calls list, read from the transcript cache).
 - `/mods-hud debug` shows `Client 왕복: feed <surface> 받음 N · 응답 M` (asks, answers sent) and `시계 <surface> ...`.
 - Terminal (2026-10-12, a subagent with four shell calls): `feed terminal 받음 25 · 응답 2`, no faults. The step line moved twice with no state write. The band still drew 33 times a minute: the terminal asks for the band on its own (typing, the spinner), not on our writes.
+- Desktop (2026-10-12, same run): `feed desktop 받음 42 · 응답 3`, `detail 32회(실패 0)`, no faults. The step line and the calls list moved; no press lost.
 - Validator rule met on the way: `$` can be passed only to functions declared at the top of the file (`messagesOf`).
+
+## Stage 3 (0.4.14)
+
+- Tabs: `턴` · `도구` · `지금`, fixed labels (same order and keys as before).
+- 도구: `✓ 12:03  1.2s  Bash npm test`. The time and duration come from this load's `tool.call` (the transcript has no times; a call from before a reload shows `--:--`). A running call's duration counts up. An error adds its first line below. In the main view, each prompt heads the calls it led to (`─ <prompt>`).
+- 턴: an ended card's top line ends with `도구 N` (the calls under its prompt in the transcript). The live card shows `지금  도구 N  → <latest call>` in a feed region instead of `결과 …`.
+- 지금: the current request, and the live turn's count and latest call, above the agents and sessions.
+- Agent view: `요청  <its task>` above its calls.
 
 ## Plan
 
