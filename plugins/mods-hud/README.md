@@ -37,6 +37,6 @@ Opus 5.5 high · 5h 16%(18:10) · w 81%(10/14 12:00) · ctx 58%      ← 터미�
 
 - 데스크탑 앱에서 Remote Control로 연 세션에는 현황판이 안 뜬다. 앱이 그려 달라고 요청하지 않는다. ([014](../../docs/issues/014-remote-control-no-band.md))
 - 분할 화면에서는 맨 왼쪽 칸에만 뜬다. ([015](../../docs/issues/015-split-view-right-pane.md))
-- 데스크탑 세션은 업데이트 후 `/reload-plugins`로 반영이 안 될 수 있다. 새 세션을 연다. ([016](../../docs/issues/016-desktop-reload-keeps-old-module.md))
+- 데스크탑 세션은 `/reload-plugins`로 반영되지 않는다. 업데이트 후 새 세션을 연다. ([016](../../docs/issues/016-desktop-reload-keeps-old-module.md))
 
 전체 목록: [docs/issues](../../docs/issues/README.md)

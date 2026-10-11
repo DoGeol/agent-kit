@@ -1079,11 +1079,15 @@ export const register: Register = on => {
       const bodyRows = e.props.scroll.bodyRows
       // ponytail: the desktop sets text in a proportional font where Hangul takes about 1.3 cells, not 2; cut by that there
       const fit = (n: number) => (e.surface === 'desktop' ? Math.floor(n * 1.3) : n)
-      const show = (kind: DetailView['kind'], id: string | null) => update($, detailAtom, () => ({ kind, id, at: now }))
+      // the pane's title follows what it shows (an open id retitles), as when the band opened it (issue 017)
+      const show = async (kind: DetailView['kind'], id: string | null, title: string) => {
+        await $.ui.open({ id: DETAIL, title })
+        await update($, detailAtom, () => ({ kind, id, at: now }))
+      }
       // back to the main view, on the tab it was left on
       const back = (
         <Box key="back" flexDirection="row">
-          <Button key="back" plain dimColor label="← 메인 세션" onPress={() => show('main', null)} />
+          <Button key="back" plain dimColor label="← 메인 세션" onPress={() => show('main', null, '세션 상세')} />
         </Box>
       )
 
@@ -1235,7 +1239,7 @@ export const register: Register = on => {
                         plain
                         dimColor={s.isDone}
                         label={clipCells(`${x.type}  ${x.summary}`, fit(Math.max(4, width - 8 - 2 - cells(took) - 1)))}
-                        onPress={() => show('agent', x.id)}
+                        onPress={() => show('agent', x.id, `${x.type} · ${x.summary}`)}
                       />
                     </Box>
                     <Box flexShrink={0}><Text dimColor>{`  ${took}`}</Text></Box>
@@ -1250,7 +1254,7 @@ export const register: Register = on => {
                     <Box flexShrink={0}><Text dimColor>{'    ↔ '}</Text></Box>
                     <Box flexShrink={0}><Text color={s.color} dimColor={s.dim}>{`${s.dot} `}</Text></Box>
                     <Box flexShrink={1} minWidth={0} overflow="hidden">
-                      <Button key={`h-sess-${c.n}-${x.name}`} plain label={clipCells(text, fit(Math.max(4, width - 9)))} onPress={() => show('session', x.name)} />
+                      <Button key={`h-sess-${c.n}-${x.name}`} plain label={clipCells(text, fit(Math.max(4, width - 9)))} onPress={() => show('session', x.name, clipCells(`세션 · ${x.title || x.name}`, 40))} />
                     </Box>
                   </Box>
                 )
@@ -1296,7 +1300,7 @@ export const register: Register = on => {
                 return (
                   <Box key={`sub-${x.id}`} flexDirection="column" width={width}>
                     {/* a pane is narrow: the whole first line is the press target, details go below it */}
-                    <Button key={`open-${x.id}`} plain onPress={() => show('agent', x.id)}>
+                    <Button key={`open-${x.id}`} plain onPress={() => show('agent', x.id, `${x.type} · ${x.description}`)}>
                       <Text color={s.color}>{`${s.dot} `}</Text>
                       <Text color={s.isDone ? undefined : 'suggestion'} dimColor={s.isDone}>{`${x.type} `}</Text>
                       <Text dimColor={s.isDone}>{clipCells(x.summary || x.description, fit(Math.max(4, width - 3 - cells(x.type))))}</Text>
@@ -1323,7 +1327,7 @@ export const register: Register = on => {
                       <Box flexShrink={0}><Text color={s.color} dimColor={s.dim}>{s.dot}</Text></Box>
                       <Box flexShrink={0}><Text color="suggestion">{name}</Text></Box>
                       <Box flexShrink={1} minWidth={0} overflow="hidden">
-                        <Button key={`open-s-${x.name}`} plain onPress={() => show('session', x.name)}>
+                        <Button key={`open-s-${x.name}`} plain onPress={() => show('session', x.name, clipCells(`세션 · ${x.title || x.name}`, 40))}>
                           <Text wrap="truncate-end">
                             {clipCells(x.summary || lastMsg?.text || '', fit(Math.max(4, width - 4 - cells(name) - cells(meta) - 4)))}
                           </Text>

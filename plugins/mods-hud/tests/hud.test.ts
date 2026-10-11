@@ -516,6 +516,8 @@ test('a press on a row opens the detail pane on it, with its recent calls', asyn
   await main.press({ key: 'open-a9' })
   expect((await main.findAll({ type: 'Text' })).map(t => t.text)).toContain('Grep "x"')
   await main.press({ key: 'back' })
+  // the title follows the view (issue 017)
+  expect(opened.slice(-2)).toEqual(['session-detail:Explore · 작업 a9', 'session-detail:세션 상세'])
   expect((await main.findAll({ type: 'Text' })).map(t => t.text)).toContain('서브에이전트 1')
   // /mods-hud debug counts the presses that reached the mod, per site, and the draws in the last minute
   const dbg = await $.command.run({ command: 'mods-hud', args: 'debug', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 90 } } as never)
