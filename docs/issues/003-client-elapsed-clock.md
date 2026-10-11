@@ -1,6 +1,6 @@
 # 003. A running clock in a Client region (partial rendering)
 
-- **State:** implemented, not checked on screen
+- **State:** confirmed on the desktop (2026-10-12)
 - **Where:** `hooks/elapsed.tsx`, the right side of an agent row
 
 ## What it is
@@ -11,6 +11,9 @@
 ## Tried (2026-10-11)
 A terminal session with an Explore subagent: it ended in 4 seconds, too fast to see the clock tick. Needs a subagent that runs for 10 seconds or more.
 
+## Checked (2026-10-12)
+On the desktop app, the clock on a running agent row ticks every second while the rest of the band stays put.
+
 ## Unverified
-- The test kit doesn't run the module. Whether it ticks by the second for real, and whether its surrounding layout shifts, needs checking on screen.
+- The terminal, with a subagent that runs 10 seconds or more.
 - If the module throws, the engine unmounts it, and the time cell goes blank.

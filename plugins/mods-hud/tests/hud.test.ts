@@ -901,6 +901,19 @@ test('a running agent clock ticks in its own Client region; an ended one is fixe
   expect(await ui.find({ type: 'Text', text: /^01:06$/ })).toBeDefined()
 })
 
+test('an agent clock posts every 2 s; the answer hands it a fresh now, and debug counts the round trip', async ($, on) => {
+  const clock = mock.clock(on, { now: NOW })
+  const w: World = { list: [{ id: 'a1', type: 'Explore', description: '작업 a1', status: 'running' }], forks: [] }
+  world(on, w)
+  await $.session.start({ cwd: '/tmp/x', surface: 'desktop', isInteractive: true })
+  await clock.advance(2000)
+  const ui = await $.ui.mount({ plugin: 'mods-hud', surface: 'desktop', component: 'AbovePrompt', props: BAND })
+  for (let i = 0; i < 6; i++) await ui.advance(1000)
+  const dbg = await $.command.run({ command: 'mods-hud', args: 'debug', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 90 } } as never)
+  expect((dbg as { text: string }).text).toContain('Client 왕복: desktop 받음 3 · 응답 도착 2')
+  await ui.unmount()
+})
+
 test('a terminal with too few rows drops the card and the usage line instead of being cut', async ($, on) => {
   const clock = mock.clock(on, { now: NOW })
   const w: World = { list: [{ id: 'a1', type: 'Explore', description: '작업 a1', status: 'running' }], forks: [] }
@@ -1079,32 +1092,32 @@ test('the tabs switch: 도구 호출 has the main calls, 현재 the live section
   await clock.advance(2000)
   const pane = await openMain($)
   const labels = async () => Promise.all(['history', 'calls', 'live'].map(async k => (await pane.find({ key: `tab-${k}` }))?.props.label))
-  expect(await labels()).toEqual(['● 히스토리', '도구 호출 2', '현재'])
+  expect(await labels()).toEqual(['● 히스토리', '도구 호출', '현재'])
   // the history holds no calls and no live sections
   expect(await texts(pane)).not.toContain('Read b.ts')
   expect(await pane.find({ key: 'open-a9' })).toBeUndefined()
   expect(await pane.find({ key: 'h-agent-a9' })).toBeDefined()
 
   await pane.press({ key: 'tab-calls' })
-  expect(await labels()).toEqual(['히스토리', '● 도구 호출 2', '현재'])
+  expect(await labels()).toEqual(['히스토리', '● 도구 호출', '현재'])
   expect(await texts(pane)).toEqual(expect.arrayContaining(['Read b.ts', 'Bash List files']))
   expect(await pane.find({ key: 'open-a9' })).toBeUndefined()
 
   await pane.press({ key: 'tab-live' })
-  expect(await labels()).toEqual(['히스토리', '도구 호출 2', '● 현재'])
+  expect(await labels()).toEqual(['히스토리', '도구 호출', '● 현재'])
   const live = await texts(pane)
   expect(live).toEqual(expect.arrayContaining(['메인 세션', '서브에이전트 1', '“메인 답”']))
   expect(live).not.toContain('Read b.ts')
   await pane.press({ key: 'open-a9' })
   expect(await texts(pane)).toContain('Grep "x"')
   await pane.press({ key: 'back' })
-  expect(await labels()).toEqual(['히스토리', '도구 호출 2', '● 현재'])
+  expect(await labels()).toEqual(['히스토리', '도구 호출', '● 현재'])
 
   await pane.press({ key: 'tab-calls' })
   await pane.press({ key: 'tab-history' })
   await pane.press({ key: 'h-agent-a9' })
   await pane.press({ key: 'back' })
-  expect(await labels()).toEqual(['● 히스토리', '도구 호출 2', '현재'])
+  expect(await labels()).toEqual(['● 히스토리', '도구 호출', '현재'])
 })
 
 test('older turns sit behind ▸ 이전 턴 N개, which reveals them', async ($, on) => {
@@ -1152,7 +1165,7 @@ test('a reload keeps the history, its agents as they ended, and the tab', async 
   await $.session.start({ cwd: '/tmp/x', surface: 'desktop', isInteractive: true })
   await clock.advance(2000)
   const pane = await openMain($)
-  expect((await pane.find({ key: 'tab-calls' }))?.props.label).toBe('● 도구 호출 0')
+  expect((await pane.find({ key: 'tab-calls' }))?.props.label).toBe('● 도구 호출')
   await pane.press({ key: 'tab-history' })
   expect((await pane.find({ key: 'result' }))?.text).toBe('  결과  파일 개수 확인 완료')
   expect((await pane.find({ key: 'h-a-bg1' }))?.text).toBe('    ⎿ ✓ Explore  파일 3개 찾음  00:20')
