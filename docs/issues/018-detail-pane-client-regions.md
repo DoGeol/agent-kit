@@ -33,6 +33,7 @@
 - The tab label no longer carries the call count (`도구 호출`).
 - Terminal (2026-10-12, a 15 s subagent): `받음 7 · 응답 도착 6`. The round trip works. M lags N by one because the module reports its count with its next post.
 - Desktop: to check. Same run, then `/mods-hud debug`. If `응답 도착` stays 0, the desktop drops answers, and Stage 1 can't move per-call fields out of the pane there.
+- Desktop, first try (0.4.11, the module confirmed loaded): `Client 왕복: 없음`. No post reached the hook. 0.4.12 also counts posts of the wrong shape and records `ui.fault` (`Client 오류`), to tell "never posts" from "fails".
 - Not probed yet: a Button inside a Client, and a Client taller than its region.
 
 ## Plan

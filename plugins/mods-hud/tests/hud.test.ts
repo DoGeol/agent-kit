@@ -910,7 +910,7 @@ test('an agent clock posts every 2 s; the answer hands it a fresh now, and debug
   const ui = await $.ui.mount({ plugin: 'mods-hud', surface: 'desktop', component: 'AbovePrompt', props: BAND })
   for (let i = 0; i < 6; i++) await ui.advance(1000)
   const dbg = await $.command.run({ command: 'mods-hud', args: 'debug', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 90 } } as never)
-  expect((dbg as { text: string }).text).toContain('Client 왕복: desktop 받음 3 · 응답 도착 2')
+  expect((dbg as { text: string }).text).toContain('Client 왕복: desktop 받음 3 · 응답 도착 2 · Client 오류: 없음')
   await ui.unmount()
 })
 

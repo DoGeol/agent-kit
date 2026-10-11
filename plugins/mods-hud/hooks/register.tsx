@@ -393,7 +393,9 @@ export const register: Register = on => {
   }
   let presses: Record<string, { n: number; failed: number; last: string }> = {}
   // Client round trips per surface (issue 018, stage 0): posts heard, and answers the module says reached it.
-  let trips: Record<string, { heard: number; got: number }> = {}
+  let trips: Record<string, { heard: number; bad: number; got: number }> = {}
+  // Client failures per surface, as ui.fault reports them: how many, and the last phase and reason.
+  let faults: Record<string, { n: number; last: string }> = {}
   // The transcript changes only when a call finishes or a turn ends: the pane reads it again only then.
   // (Reading thousands of messages on every redraw made the pane slow to answer a press.)
   const transcriptV = new Map<string, number>()
@@ -857,20 +859,22 @@ export const register: Register = on => {
     if (arg === 'debug reset') {
       presses = {}
       trips = {}
+      faults = {}
       return { text: '누름·Client 카운터 초기화.' }
     }
     if (arg === 'debug') {
       const now = Date.now()
       const perMin = Object.entries(drawTimes).map(([k, ts]) => `${k} ${ts.filter(t => now - t < 60_000).length}`).join(' · ') || '없음'
       const pressed = Object.entries(presses).map(([k, p]) => `${k} ${p.n}회(실패 ${p.failed}, 마지막 ${p.last})`).join(' · ') || '없음'
-      const tripped = Object.entries(trips).map(([k, t]) => `${k} 받음 ${t.heard} · 응답 도착 ${t.got}`).join(' · ') || '없음'
+      const tripped = Object.entries(trips).map(([k, t]) => `${k} 받음 ${t.heard}${t.bad ? `(형식 오류 ${t.bad})` : ''} · 응답 도착 ${t.got}`).join(' · ') || '없음'
+      const failed = Object.entries(faults).map(([k, f]) => `${k} ${f.n}회(마지막 ${f.last})`).join(' · ') || '없음'
       const surfaces = await $.session.surfaces()
       const draws = Object.entries(lastDraw).map(([k, v]) => `${k}: ${v}`).join(' | ') || '아직 한 번도 안 그림'
       const rows = (await read($, agents)).map(a => `${a.id.slice(0, 8)}:${a.type}:${a.status}`).join(', ') || '없음'
       const peers = (await read($, sessionsAtom)).map(x => `${x.title ?? x.name}:${x.state}:로그${x.log.length}`).join(', ') || '없음'
       const m = await read($, meter)
       const usage = m ? `${prettyModel(m.model) || '모델 없음'} ${m.effort ?? '-'} 한도${m.limits.length} ctx=${m.context ?? '-'}` : '없음'
-      return { text: `[진단] surfaces=${surfaces.join(',') || '없음'} · 입력=${e.origin?.kind ?? '?'} · 사용량: ${usage} · 에이전트: ${rows} · 세션: ${peers} · 최근 1분 그림: ${perMin} · 받은 누름: ${pressed} · Client 왕복: ${tripped} · 마지막 그림: ${draws}` }
+      return { text: `[진단] surfaces=${surfaces.join(',') || '없음'} · 입력=${e.origin?.kind ?? '?'} · 사용량: ${usage} · 에이전트: ${rows} · 세션: ${peers} · 최근 1분 그림: ${perMin} · 받은 누름: ${pressed} · Client 왕복: ${tripped} · Client 오류: ${failed} · 마지막 그림: ${draws}` }
     }
     $.clock.after(0, () => void refresh?.(''))
 
@@ -1027,12 +1031,23 @@ export const register: Register = on => {
   // An agent clock's post: answer with a fresh `now`, so its time stays true with no redraw of the band.
   on('ui.message', async ($, e, next) => {
     if (!e.module.endsWith('elapsed.tsx')) return next(e)
-    const d = e.data as { startedAt?: unknown; got?: unknown } | null
-    if (typeof d?.startedAt !== 'number' || typeof d.got !== 'number') return next(e)
-    const t = (trips[e.surface] ??= { heard: 0, got: 0 })
+    const t = (trips[e.surface] ??= { heard: 0, bad: 0, got: 0 })
     t.heard += 1
+    const d = e.data as { startedAt?: unknown; got?: unknown } | null
+    if (typeof d?.startedAt !== 'number' || typeof d.got !== 'number') {
+      t.bad += 1
+      return next(e)
+    }
     t.got = Math.max(t.got, d.got)
     return { props: { startedAt: d.startedAt, now: await $.clock.now(), answer: d.got + 1 } }
+  })
+
+  // A Client that failed, for /mods-hud debug; the engine then draws the site again without it.
+  on('ui.fault', async ($, e, next) => {
+    const f = (faults[e.surface] ??= { n: 0, last: '' })
+    f.n += 1
+    f.last = `${e.element} ${e.phase}: ${e.reason}`
+    return next(e)
   })
 
   // One hook for the band and the pane: the drawing is the same, only its room differs.
