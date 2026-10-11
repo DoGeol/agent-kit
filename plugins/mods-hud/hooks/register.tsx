@@ -1335,21 +1335,16 @@ export const register: Register = on => {
         )
       }
 
-      // The main view: three tabs, the turn history first. A desktop Button is native: the active one is marked in its label.
+      // The main view: three tabs, the turn history first. Their buttons are the same in every drawing: a desktop
+      // Button is native, a new label or dim made a new one, and a press right after a switch landed on the one
+      // being replaced (issue 001). The active tab is named beside them; a press on it writes nothing.
       const tabs: [DetailTab, string][] = [['history', '턴'], ['calls', '도구'], ['live', '지금']]
-      const labels = tabs.map(([k, l]) => (k === tab ? `● ${l}` : l))
-      const isTight = labels.reduce((n, l) => n + cells(l), 0) > fit(width - 2)
       const tabRow = (
         <Box key="tabs" flexDirection="row" columnGap={1} width={width}>
-          {tabs.map(([k], i) => (
-            <Button
-              key={`tab-${k}`}
-              plain
-              dimColor={k !== tab}
-              label={isTight ? clipCells(labels[i]!, fit(Math.max(4, Math.floor((width - 2) / 3)))) : labels[i]!}
-              onPress={() => update($, detailTabAtom, () => k)}
-            />
+          {tabs.map(([k, l]) => (
+            <Button key={`tab-${k}`} plain label={l} onPress={() => (k === tab ? undefined : update($, detailTabAtom, () => k))} />
           ))}
+          <Box key="tab-now" flexShrink={0}><Text color="suggestion">{`▸ ${tabs.find(([k]) => k === tab)?.[1] ?? ''}`}</Text></Box>
         </Box>
       )
       lastDraw['detail-draw'] = `main ${tab} msgs=${msgs.length} uses=${uses.length} cards=${hist.length} at=${now}`

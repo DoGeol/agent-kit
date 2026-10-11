@@ -996,7 +996,7 @@ test('a turn makes a history card: its ask, model, duration, and the session lin
   await turn($, 't1', '로그인 고쳐줘')
   await clock.advance(64_000)
   const pane = await openMain($)
-  expect((await pane.find({ key: 'tab-history' }))?.props.label).toBe('● 턴')
+  expect((await pane.find({ key: 'tab-now' }))?.text).toBe('▸ 턴')
   // running: its clock moves and the result waits
   const live = await pane.find({ type: 'Text', text: /^─ 턴 1 / })
   expect(live?.text).toBe('─ 턴 1 · 12:00 · 01:04 · Opus 5.5(high)')
@@ -1051,7 +1051,7 @@ test('an agent spawned in a turn lands in its card and stays there, its last lin
   await pane.press({ key: 'h-agent-bg1' })
   expect(await texts(pane)).toContain('Explore  텍스트 파일 653개 찾음')
   await pane.press({ key: 'back' })
-  expect((await pane.find({ key: 'tab-history' }))?.props.label).toBe('● 턴')
+  expect((await pane.find({ key: 'tab-now' }))?.text).toBe('▸ 턴')
   expect((await pane.find({ key: 'h-a-bg1' }))?.text).toBe(done)
 })
 
@@ -1103,33 +1103,36 @@ test('the tabs switch: 도구 호출 has the main calls, 현재 the live section
   await turn($, 't1', '해줘')
   await clock.advance(2000)
   const pane = await openMain($)
-  const labels = async () => Promise.all(['history', 'calls', 'live'].map(async k => (await pane.find({ key: `tab-${k}` }))?.props.label))
-  expect(await labels()).toEqual(['● 턴', '도구', '지금'])
+  const labels = async () => [
+    ...(await Promise.all(['history', 'calls', 'live'].map(async k => (await pane.find({ key: `tab-${k}` }))?.props.label))),
+    (await pane.find({ key: 'tab-now' }))?.text,
+  ]
+  expect(await labels()).toEqual(['턴', '도구', '지금', '▸ 턴'])
   // the history holds no calls and no live sections
   expect(await texts(pane)).not.toContain('Read b.ts')
   expect(await pane.find({ key: 'open-a9' })).toBeUndefined()
   expect(await pane.find({ key: 'h-agent-a9' })).toBeDefined()
 
   await pane.press({ key: 'tab-calls' })
-  expect(await labels()).toEqual(['턴', '● 도구', '지금'])
+  expect(await labels()).toEqual(['턴', '도구', '지금', '▸ 도구'])
   expect(await texts(pane)).toEqual(expect.arrayContaining(['Read b.ts', 'Bash List files']))
   expect(await pane.find({ key: 'open-a9' })).toBeUndefined()
 
   await pane.press({ key: 'tab-live' })
-  expect(await labels()).toEqual(['턴', '도구', '● 지금'])
+  expect(await labels()).toEqual(['턴', '도구', '지금', '▸ 지금'])
   const live = await texts(pane)
   expect(live).toEqual(expect.arrayContaining(['메인 세션', '서브에이전트 1', '“메인 답”']))
   expect(live).not.toContain('Read b.ts')
   await pane.press({ key: 'open-a9' })
   expect(await texts(pane)).toContain('Grep "x"')
   await pane.press({ key: 'back' })
-  expect(await labels()).toEqual(['턴', '도구', '● 지금'])
+  expect(await labels()).toEqual(['턴', '도구', '지금', '▸ 지금'])
 
   await pane.press({ key: 'tab-calls' })
   await pane.press({ key: 'tab-history' })
   await pane.press({ key: 'h-agent-a9' })
   await pane.press({ key: 'back' })
-  expect(await labels()).toEqual(['● 턴', '도구', '지금'])
+  expect(await labels()).toEqual(['턴', '도구', '지금', '▸ 턴'])
 })
 
 test('older turns sit behind ▸ 이전 턴 N개, which reveals them', async ($, on) => {
@@ -1177,7 +1180,7 @@ test('a reload keeps the history, its agents as they ended, and the tab', async 
   await $.session.start({ cwd: '/tmp/x', surface: 'desktop', isInteractive: true })
   await clock.advance(2000)
   const pane = await openMain($)
-  expect((await pane.find({ key: 'tab-calls' }))?.props.label).toBe('● 도구')
+  expect((await pane.find({ key: 'tab-now' }))?.text).toBe('▸ 도구')
   await pane.press({ key: 'tab-history' })
   expect((await pane.find({ key: 'result' }))?.text).toBe('  결과  파일 개수 확인 완료')
   expect((await pane.find({ key: 'h-a-bg1' }))?.text).toBe('    ⎿ ✓ Explore  파일 3개 찾음  00:20')

@@ -4,7 +4,7 @@ Issues found while building and testing `plugins/mods-hud`.
 
 | # | Issue | State |
 |---|---|---|
-| [001](001-detail-pane-missed-press.md) | Presses in the detail pane are sometimes lost | fixed on desktop (0.4.13), terminal to recheck |
+| [001](001-detail-pane-missed-press.md) | Presses in the detail pane are sometimes lost | lost again on tab switches (0.4.14); 0.4.15 to check |
 | [002](002-band-missed-press-and-flicker.md) | Band presses lost, and the app blinks | fixed; terminal checked, desktop not yet |
 | [003](003-client-elapsed-clock.md) | A running clock in a Client region (partial rendering) | confirmed on desktop |
 | [004](004-listagents-from-plugin.md) | Whether ListAgents works from a plugin | works (terminal) |

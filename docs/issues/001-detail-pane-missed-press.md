@@ -1,6 +1,6 @@
 # 001. Presses in the detail pane are sometimes lost
 
-- **State:** fixed on the desktop (0.4.13): no press lost while a subagent ran; terminal to recheck
+- **State:** open again on the desktop (0.4.14): a tab press right after a switch is lost; 0.4.15 tries fixed tab buttons
 - **Where:** `plugins/mods-hud`, detail pane (`session-detail`)
 
 ## Symptom
@@ -42,3 +42,11 @@ Presses were still lost on the desktop.
 ## 0.4.13 (issue 018)
 A tool call no longer writes any state, so nothing redraws the pane or the band mid-run. The per-call lines move in feed regions.
 Desktop check (2026-10-12, a subagent with four shell calls): `/mods-hud debug` showed `detail 32회(실패 0)`, and the user saw no press lost.
+
+## 0.4.14: lost again on tab switches
+Desktop (2026-10-12): switching 턴 / 도구 / 지금 back and forth, the second press did nothing. `/mods-hud debug`: `detail 14회(실패 0)` and `detail 33` draws in the last minute. Every press that reached the mod ran; the lost one never reached it.
+Guess: a tab press redraws the whole pane, and its labels changed (`● 턴` against `턴`, dim on and off). A desktop Button is native, so a changed one is made anew, and a press during that swap is lost.
+
+## 0.4.15: fixed tab buttons
+The three tab buttons keep the same label and look in every drawing. The active tab is named in a Text beside them (`▸ 도구`). A press on the active tab writes nothing, so it redraws nothing.
+If presses are still lost, the next step is the whole pane in one Client (tabs switched in the module, with no redraw of the pane), or no pane at all (issue 018).
