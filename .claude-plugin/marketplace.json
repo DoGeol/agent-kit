@@ -1,0 +1,14 @@
+{
+  "name": "dg-agent-kit",
+  "description": "DoGeol's agent kit: vendor-neutral skills (Agent Skills / SKILL.md) and Claude Code mods",
+  "owner": {
+    "name": "DoGeol"
+  },
+  "plugins": [
+    {
+      "name": "mods-hud",
+      "source": "./plugins/mods-hud",
+      "description": "Claude Code HUD: session summary, subagents, orchestration, usage limits"
+    }
+  ]
+}
