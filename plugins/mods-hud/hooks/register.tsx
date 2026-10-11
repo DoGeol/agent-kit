@@ -811,7 +811,7 @@ export const register: Register = on => {
       const peers = (await read($, sessionsAtom)).map(x => `${x.title ?? x.name}:${x.state}:로그${x.log.length}`).join(', ') || '없음'
       const m = await read($, meter)
       const usage = m ? `${prettyModel(m.model) || '모델 없음'} ${m.effort ?? '-'} 한도${m.limits.length} ctx=${m.context ?? '-'}` : '없음'
-      return { text: `[진단] surfaces=${surfaces.join(',') || '없음'} · 사용량: ${usage} · 에이전트: ${rows} · 세션: ${peers} · 마지막 그림: ${draws}` }
+      return { text: `[진단] surfaces=${surfaces.join(',') || '없음'} · 입력=${e.origin?.kind ?? '?'} · 사용량: ${usage} · 에이전트: ${rows} · 세션: ${peers} · 마지막 그림: ${draws}` }
     }
     $.clock.after(0, () => void refresh?.(''))
 
