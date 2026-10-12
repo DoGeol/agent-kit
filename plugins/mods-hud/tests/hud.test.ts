@@ -19,10 +19,6 @@ const BAND = {
 type World = { failUsage?: true; usage?: typeof USAGE; agentText?: string; completes?: string[]; perModel?: Record<string, { effortLevel: string }>; five?: number; statuses?: (string | undefined)[]; model?: string; effort?: string; forkText?: string; list: { id: string; type: string; description: string; status: 'running' | 'completed' | 'idle' }[]; forks: string[] }
 
 const world = (on: On, w: World) => {
-  on('ui.render', { component: 'SessionMode' }, ($, e) => {
-    const { Text } = $.ui.resolve(e)
-    return Text({ children: ['engine modes: ' + e.props.modes.join(' & ')] })
-  })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('session.model', () => ({ value: w.model ?? 'claude-opus-5-5' }))
@@ -62,7 +58,7 @@ const world = (on: On, w: World) => {
   })
 }
 
-test('summary line and recent agents on both surfaces without usage in the band', async ($, on) => {
+test('summary line, three recent agents, a rule, then the fixed status line', async ($, on) => {
   const clock = mock.clock(on, { now: NOW })
   const w: World = { list: [], forks: [] }
   world(on, w)
@@ -110,10 +106,13 @@ test('summary line and recent agents on both surfaces without usage in the band'
     // no drawn dividers: each figure is its own cell in a bordered block
     expect(await ui.find({ type: 'Text', text: /[│|─]/ })).toBeUndefined()
     if (surface === 'terminal') {
-      // The terminal card contains activity only; usage lives in the footer.
+      // one card holds the whole band in the terminal; the usage line sits inside it
       expect((await ui.find({ type: 'Box', key: 'band' }))?.props.borderStyle).toBe('round')
-      expect(await ui.find({ type: 'Box', key: 'status' })).toBeUndefined()
-      expect(await ui.find({ type: 'Text', text: /5h.*63%/ })).toBeUndefined()
+      expect((await ui.find({ type: 'Box', key: 'status' }))?.props.borderStyle).toBeUndefined()
+      expect(await ui.find({ type: 'Text', text: /^Opus 5\.5 high$/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /^· 5h 63%\(15:30\)$/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /^· w 77%\(10\/14 12:00\)$/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /^· ctx 18%$/ })).toBeDefined()
     }
 
     await ui.unmount()
@@ -187,9 +186,7 @@ test('model and effort changes show within a tick, before any request; states ar
   const idle = { ...BAND, isWorking: false }
   const look = async () => {
     const ui = await $.ui.mount({ plugin: 'mods-hud', surface: 'terminal', component: 'AbovePrompt', props: idle })
-    const usage = await $.command.run({ command: 'mods-hud', args: 'usage', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 90 } } as never)
-    const model = usage.text?.match(/모델 (.+) · effort (.+)/)
-    const all = [...await texts(ui), ...(model ? [model[1], `${model[1]} ${model[2]}`] : [])]
+    const all = await texts(ui)
     await ui.unmount()
     return all
   }
@@ -239,7 +236,7 @@ test('a long summary stays one line cut with …, with no toggle on any surface'
   }
 })
 
-test('desktop status fallback and both bands omit usage; terminal modes stay native', async ($, on) => {
+test('the desktop bar gets usage as status; the desktop band drops the box; the terminal keeps it', async ($, on) => {
   const clock = mock.clock(on, { now: NOW })
   const statuses: (string | undefined)[] = []
   const w: World = { list: [], forks: [], statuses }
@@ -254,11 +251,9 @@ test('desktop status fallback and both bands omit usage; terminal modes stay nat
   expect(await desk.find({ type: 'Box', key: 'status' })).toBeUndefined()
   expect(await desk.find({ type: 'Text', text: /5시간/ })).toBeUndefined()
   await desk.unmount()
-  const band = await $.ui.mount({ plugin: 'mods-hud', surface: 'terminal', component: 'AbovePrompt', props: BAND })
-  expect(await band.find({ key: 'status' })).toBeUndefined()
-  const term = await $.ui.mount({ plugin: 'mods-hud', surface: 'terminal', component: 'SessionMode', props: { modes: ['focus'] }, viewport: { columns: 140, rows: 40 } })
-  expect(await term.find({ type: 'Text', text: /^engine modes: focus$/ })).toBeDefined()
-  expect(await term.find({ key: 'status' })).toBeUndefined()
+  const term = await $.ui.mount({ plugin: 'mods-hud', surface: 'terminal', component: 'AbovePrompt', props: BAND })
+  expect(await term.find({ type: 'Text', text: /^Opus 5\.5 high$/ })).toBeDefined()
+  expect(await term.find({ type: 'Text', text: /^· 5h 63%/ })).toBeDefined()
 })
 
 test('the desktop footer draws colored usage and nothing hidden', async ($, on) => {
@@ -379,20 +374,23 @@ test('a moved figure flashes blue for a moment; usage goes gray after 5 minutes 
   await $.session.start({ cwd: '/tmp/x', surface: 'terminal', isInteractive: true })
   await $.turn.complete({ answer: 'x', durationMs: 5, isAborted: false, turnId: 'm1', reason: 'answer' })
   await clock.advance(2000)
-  const ui = await $.ui.mount({ plugin: 'mods-hud', surface: 'desktop', component: 'SessionMode', props: { modes: [] }, viewport: { columns: 140, rows: 40 } })
+  const ui = await $.ui.mount({ plugin: 'mods-hud', surface: 'terminal', component: 'AbovePrompt', props: { ...BAND, isWorking: false } })
   const color = async (re: RegExp) => (await ui.find({ type: 'Text', text: re }))?.props.color
 
   w.model = 'claude-fable-5-1'
   await clock.advance(2000)
+  expect(await color(/^Fable 5\.1$/)).toBe('suggestion')
   await $.session.measure({ context: { percent: 30 }, rateLimits: [{ kind: 'five_hour', percentUsed: 12 }], changed: ['rateLimits'] } as never)
   await clock.advance(2000)
   expect(await color(/^12%$/)).toBe('suggestion')
   await clock.advance(6000)
+  expect(await color(/^Fable 5\.1$/)).toBeUndefined()
   expect(await color(/^12%$/)).toBe('success')
   expect(await ui.find({ type: 'Text', text: /기준$/ })).toBeUndefined()
 
   await clock.advance(5 * 60_000)
   expect((await ui.find({ type: 'Text', text: /^12%$/ }))?.props.dimColor).toBe(true)
+  expect(await ui.find({ type: 'Text', text: /^· 12:00 기준$/ })).toBeDefined()
 })
 
 test('after /effort the pick shows within a fraction of a second', async ($, on) => {
@@ -403,12 +401,12 @@ test('after /effort the pick shows within a fraction of a second', async ($, on)
   world(on, w)
   await $.session.start({ cwd: '/tmp/x', surface: 'terminal', isInteractive: true })
   await clock.advance(2000)
+  const ui = await $.ui.mount({ plugin: 'mods-hud', surface: 'terminal', component: 'AbovePrompt', props: { ...BAND, isWorking: false } })
   await $.command.run({ command: 'effort', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 90 } } as never)
   await clock.advance(700)
   w.perModel = { 'claude-opus-5-5': { effortLevel: 'low' } }
   await clock.advance(200)
-  const usage = await $.command.run({ command: 'mods-hud', args: 'usage', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 90 } } as never)
-  expect(usage.text).toContain('effort low')
+  expect(await ui.find({ type: 'Text', text: /^ low$/ })).toBeDefined()
 })
 
 test('a narrow band shows states as colored dots alone, agents included', async ($, on) => {
@@ -805,7 +803,7 @@ test('an agent clock posts every 2 s; the answer hands it a fresh now, and debug
   await ui.unmount()
 })
 
-test('a terminal with too few rows drops the card; usage stays out of the band', async ($, on) => {
+test('a terminal with too few rows drops the card and the usage line instead of being cut', async ($, on) => {
   const clock = mock.clock(on, { now: NOW })
   const w: World = { list: [{ id: 'a1', type: 'Explore', description: '작업 a1', status: 'running' }], forks: [] }
   world(on, w)
@@ -814,7 +812,7 @@ test('a terminal with too few rows drops the card; usage stays out of the band',
   for (const [rows, card] of [[12, true], [4, false]] as const) {
     const ui = await $.ui.mount({ plugin: 'mods-hud', surface: 'terminal', component: 'AbovePrompt', props: { ...BAND, maxRows: rows } })
     expect((await ui.find({ type: 'Box', key: 'band' }))?.props.borderStyle).toBe(card ? 'round' : undefined)
-    expect(await ui.find({ type: 'Box', key: 'status' })).toBeUndefined()
+    expect(!!(await ui.find({ type: 'Box', key: 'status' }))).toBe(card)
     expect(await ui.find({ type: 'Text', text: /^작업 a1$/ })).toBeDefined()
     await ui.unmount()
   }
@@ -910,9 +908,8 @@ test('a usage read that fails at start still leaves the model and, after a respo
   world(on, { list: [], forks: [], failUsage: true })
   await $.session.start({ cwd: '/tmp/x', surface: 'terminal', isInteractive: true })
   await clock.advance(2000)
-  const ui = await $.ui.mount({ plugin: 'mods-hud', surface: 'desktop', component: 'SessionMode', props: { modes: [] }, viewport: { columns: 140, rows: 40 } })
-  const usage = await $.command.run({ command: 'mods-hud', args: 'usage', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 90 } } as never)
-  expect(usage.text).toContain('Opus 5.5')
+  const ui = await $.ui.mount({ plugin: 'mods-hud', surface: 'terminal', component: 'AbovePrompt', props: BAND })
+  expect(await ui.find({ type: 'Text', text: /^Opus 5\.5$/ })).toBeDefined()
   await $.session.measure({ context: { percent: 30 }, rateLimits: [{ kind: 'five_hour', percentUsed: 12 }], changed: ['rateLimits'] } as never)
   expect(await ui.find({ type: 'Text', text: /^12%$/ })).toBeDefined()
 })
