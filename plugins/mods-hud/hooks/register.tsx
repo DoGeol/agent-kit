@@ -660,7 +660,7 @@ export const register: Register = on => {
       }
       await publish?.()
 
-      // The desktop app shows usage in its bar under the prompt; a terminal keeps it in the band.
+      // Desktop fallback for clients that never request the footer.
       const surfaces: readonly string[] = await $.session.surfaces().catch(() => [])
       const m = await read($, meter)
       // Fallback only: where the desktop never asked us to draw its footer modes, use the status line.
@@ -994,6 +994,7 @@ export const register: Register = on => {
   })
 
   on('ui.render', async ($, e, next) => {
+    // Terminal usage uses the native statusLine, above the permission badges.
     // The desktop footer's mode labels: usage drawn there in color, no plugin name in front.
     if (e.component === 'SessionMode' && e.surface === 'desktop') {
       hasFooter = true
@@ -1057,7 +1058,7 @@ export const register: Register = on => {
     // a surface module's region, where the surface has one (terminal, desktop)
     const Client = 'Client' in els ? els.Client : undefined
     // The terminal draws chat and band in one stream: the band gets its own card so it reads apart.
-    // Too few rows for the card (its borders, the gap and the usage line take 4): plain rows, no usage,
+    // Too few rows for the card: use plain rows,
     // or the surface cuts the card to its top edge while its own agent list is up.
     const isTight = e.surface === 'terminal' && room.rows < 7
     const isCard = e.surface === 'terminal' && !isPane && !isTight
@@ -1082,12 +1083,12 @@ export const register: Register = on => {
     const ended = shownAgs.filter(isEnded)
     const isGrouped = shownAgs.length >= 2
     const isFolded = isGrouped && !showAgents
-    // Rows the band may take: the session line, the usage block outside the desktop, the fold line; the rest is the agents'.
+    // Reserve the session line, card borders, and fold lines; the rest is the agents'.
     // An agent's first line comes first, and one always shows; step lines only when every live row gets one.
     // (Halving the budget per agent made a lone agent blink whenever the surface gave a row more or less.)
     // Sessions are always one group: its fold line costs a row; unfolded, its rows take what the agents leave.
     const peers = sess.filter(s => !hiddenSess.includes(s.name))
-    const budget = Math.max(0, room.rows - 1 - (m && e.surface !== 'desktop' && !isTight ? 4 : 0) - (isGrouped ? 1 : 0) - (peers.length > 0 ? 1 : 0))
+    const budget = Math.max(0, room.rows - 1 - (isCard ? 2 : 0) - (isGrouped ? 1 : 0) - (peers.length > 0 ? 1 : 0))
     const rows = isFolded ? [] : [...live, ...ended].slice(0, Math.max(1, Math.min(MAX_AGENTS * 2, budget)))
     const liveShown = rows.filter(a => !isEnded(a))
     const withSteps = budget >= rows.length + liveShown.length
@@ -1281,43 +1282,6 @@ export const register: Register = on => {
       </Box>
     )
 
-    // The fixed line: its own bordered block, model and effort first, then the short usage.
-    const status = m && e.surface !== 'desktop' && !isTight && (() => {
-      const head = `${prettyModel(m.model)}${m.effort ? ` ${m.effort}` : ''}`
-      // its own border and padding take 4 cells outside the card, the model and its gap the rest
-      const parts = fitUsage(usageParts(m, now), width - (isCard ? 0 : 4) - cells(head) - 3 - (m.isStale ? 12 : 0))
-      return (
-        <Box
-          key="status"
-          flexDirection="row"
-          flexWrap="wrap"
-          columnGap={1}
-          {...(isCard ? {} : { borderStyle: 'round', borderDimColor: true, paddingX: 1 })}
-          width={width}
-        >
-          <Box key="model" flexShrink={0}>
-            <Text>
-              <Text bold color={isFresh(m.flash?.model, now) ? 'suggestion' : undefined}>{prettyModel(m.model)}</Text>
-              {m.effort && (isFresh(m.flash?.effort, now) ? <Text bold color="suggestion"> {m.effort}</Text> : <Text dimColor> {m.effort}</Text>)}
-            </Text>
-          </Box>
-          {parts.map(part => (
-            <Box key={part.label} flexShrink={0}>
-              <Text>
-                <Text dimColor>· {part.label} </Text>
-                <Text {...pctLook(m, part.percent, now)}>{Math.round(part.percent)}%</Text>
-                {part.reset && <Text dimColor>({part.reset})</Text>}
-              </Text>
-            </Box>
-          ))}
-          {m.isStale && (
-            <Box key="age" flexShrink={0}>
-              <Text dimColor>· {m.measuredAt === undefined ? '이전 값' : `${resetAt(new Date(m.measuredAt).toISOString(), now)} 기준`}</Text>
-            </Box>
-          )}
-        </Box>
-      )
-    })()
 
     return (
       <Box
@@ -1328,7 +1292,6 @@ export const register: Register = on => {
         width={room.width}
       >
         {activity}
-        {status}
       </Box>
     )
   })
