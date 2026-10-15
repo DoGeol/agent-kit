@@ -34,6 +34,24 @@
 - Orca로 Worker를 감독할 때는 설치된 Orca 버전의 가이드를 먼저 읽는다 (`orca skills get orchestration --full`). 이 문서에 Orca 명령 문법을 고정하지 않는다.
 - Worker를 시작하기 전에 같은 Task의 기존 Worker가 있는지 Orca에서 확인한다.
 
+## 모델과 effort
+
+[권장] 사용자 확정 전 초안이다. 프로젝트별로 `.ai/ORCHESTRATION.md`의 Override에서 바꾼다.
+
+- 정한 값이 없으면 넘기지 않는다. Worker는 사용자의 에이전트 기본 설정을 따른다.
+- 정할 때는 Provider 모델 ID와 effort를 함께 정한다. effort는 그 모델이 지원할 때만 쓴다.
+
+| 작업 | 모델 | effort |
+|---|---|---|
+| Coordinator | 사용자 기본 | 사용자 기본 |
+| 탐색·로그 분석·짧은 리뷰 (Subagent) | 빠른 모델 | low |
+| 기계적 수정 (이름 변경, 포맷, 템플릿 채우기) | 빠른 모델 | low |
+| 일반 구현 Worker | 사용자 기본 | medium ~ high |
+| 아키텍처 결정, 공통 계약 리뷰, 교차 검증 | 가장 강한 모델 | high 이상 |
+
+- 요청값과 실제 적용값을 구분한다. 실행 도구가 돌려준 실제 적용값(Orca는 `worker-start` 응답의 `launch.effective`)을 `TASKS.md`의 `실행 방식` 열에 적는다. 요청값만 보고 적용됐다고 쓰지 않는다.
+- 강한 모델과 높은 effort를 여러 Worker에 쓰는 계획은 비용이 크다. 사용자에게 먼저 보여준다.
+
 ## 완료의 세 단계
 
 | 단계 | 요건 | 기록 |

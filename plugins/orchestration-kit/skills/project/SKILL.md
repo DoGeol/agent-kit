@@ -40,8 +40,13 @@ description: 프로젝트의 중앙 Coordinator로 일할 때 사용한다. 프�
 ## 4. 실행 감독
 
 - Orca를 쓰기 전에 설치된 버전의 가이드를 읽는다: `orca skills get orchestration --full`. 명령 문법은 그 가이드를 따른다.
+- 저장소가 Orca에 등록돼 있지 않으면 Worker를 놓을 수 없다. 등록은 사용자에게 확인한 뒤 한다.
 - Worker를 시작하기 전에 같은 Task의 기존 Worker가 있는지 확인한다. 중복 실행하지 않는다.
+- Worker에게 주는 Task 명세는 그 자체로 완결돼야 한다: 대상, 변경, 제약(건드리지 말 것), 소유 범위, 관찰 가능한 수용 기준. 커밋은 Coordinator가 한다고 적는다.
+- 모델·effort는 [routing.md](../../policies/routing.md#모델과-effort)를 따른다. 실제 적용값을 `실행 방식` 열에 적는다.
 - Orca Run·Task·Dispatch ID를 `TASKS.md`의 `Orca 참조` 열에 적는다.
+- `worker_done`이 오면 Task·Dispatch ID가 기대한 것과 같은지 확인한다. 이것은 Worker 완료일 뿐이다 (`in-review`).
+- 수락하거나 실패를 확정하면 Worker마다 다음 소유자를 정한다: 같은 Worker에 후속 작업, 유지, 또는 release. 그다음 메시지를 확인 처리한다. 정리되지 않은 Worker가 남아 있으면 세션을 끝내지 않는다.
 - Worker끼리 자유롭게 협의하게 둔다. [permissions.md](../../policies/permissions.md)의 승인 대상 변경 요청(`DECISION_REQUEST`)이 오면 결정하고 `decisions/ADR-NNNN-<제목>.md`에 남긴 뒤 영향받는 Worker 모두에 알린다. 프로젝트 간 영향이 있으면 Portfolio 결정 사항으로 사용자에게 올린다.
 - 응답 없는 Worker는 상태와 생존 증거를 먼저 확인한다.
 
