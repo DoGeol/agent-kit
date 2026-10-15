@@ -30,24 +30,37 @@
 - 공통 계약을 먼저 합의한 뒤 독립 작업으로 나눈다.
 - 실패나 지연이 있어도 같은 편집 작업에 Worker를 중복 투입하지 않는다.
 - 다른 Worktree의 결과는 자동 공유되지 않는다. 병합 시점과 승인자를 정한다.
+- 새 Worktree의 Worker는 자기 브랜치에만 커밋한다. Push와 main 변경은 하지 않는다. 검증한 브랜치를 Coordinator가 병합한다.
+- 병렬 결과를 잇는 공유 파일 수정(링크, 목차 등)은 병합 뒤 Coordinator가 한다.
+- 병합이 끝난 Worktree를 정리할지는 사용자에게 확인한다.
 - Portfolio에서 위임받은 업무도 실행 방식은 Project Coordinator가 정한다.
 - Orca로 Worker를 감독할 때는 설치된 Orca 버전의 가이드를 먼저 읽는다 (`orca skills get orchestration --full`). 이 문서에 Orca 명령 문법을 고정하지 않는다.
 - Worker를 시작하기 전에 같은 Task의 기존 Worker가 있는지 Orca에서 확인한다.
 
 ## 모델과 effort
 
-[권장] 사용자 확정 전 초안이다. 프로젝트별로 `.ai/ORCHESTRATION.md`의 Override에서 바꾼다.
+작업마다 **등급**을 먼저 정하고, 등급을 Provider의 모델로 바꾼다.
 
-- 정한 값이 없으면 넘기지 않는다. Worker는 사용자의 에이전트 기본 설정을 따른다.
-- 정할 때는 Provider 모델 ID와 effort를 함께 정한다. effort는 그 모델이 지원할 때만 쓴다.
+- [확정] 추론이 크게 필요 없는 작업(테스트·PoC, 기계적 수정, 단순 문서)은 빠른 모델로 실행한다.
+- [권장] 나머지 등급과 effort 값. 프로젝트별로 `.ai/ORCHESTRATION.md`의 Override에서 바꾼다.
 
-| 작업 | 모델 | effort |
-|---|---|---|
-| Coordinator | 사용자 기본 | 사용자 기본 |
-| 탐색·로그 분석·짧은 리뷰 (Subagent) | 빠른 모델 | low |
-| 기계적 수정 (이름 변경, 포맷, 템플릿 채우기) | 빠른 모델 | low |
-| 일반 구현 Worker | 사용자 기본 | medium ~ high |
-| 아키텍처 결정, 공통 계약 리뷰, 교차 검증 | 가장 강한 모델 | high 이상 |
+| 등급 | 작업 | 모델 | effort |
+|---|---|---|---|
+| `fast` | 테스트·PoC, 기계적 수정(이름 변경, 포맷, 템플릿 채우기), 단순 문서, 탐색·로그 분석·짧은 리뷰 | 빠른 모델 | 지원하면 low, 아니면 생략 |
+| `default` | 일반 구현 Worker, Coordinator | 사용자 기본 (넘기지 않음) | 사용자 기본 |
+| `strong` | 아키텍처 결정, 공통 계약 리뷰, 교차 검증, 원인 불명 장애 분석 | 가장 강한 모델 | high 이상 |
+
+Provider별 모델 (별칭은 도구가 최신 버전으로 해석한다):
+
+| 등급 | Claude | Codex | AGY |
+|---|---|---|---|
+| `fast` | `haiku` | 미정 | 미정 |
+| `default` | 넘기지 않음 | 넘기지 않음 | 넘기지 않음 |
+| `strong` | `opus` | 미정 | 미정 |
+
+- `default`는 모델·effort를 넘기지 않는다. Worker는 사용자의 에이전트 기본 설정을 따른다.
+- effort는 그 모델이 지원할 때만 넘긴다. 지원 여부를 모르면 생략하고 실제 적용값을 확인한다.
+- `TASKS.md`의 `실행 방식` 열에 등급을 같이 적는다. 예: `Independent Session (Orca claude worker, fast: haiku, 새 Worktree)`.
 
 - 요청값과 실제 적용값을 구분한다. 실행 도구가 돌려준 실제 적용값(Orca는 `worker-start` 응답의 `launch.effective`)을 `TASKS.md`의 `실행 방식` 열에 적는다. 요청값만 보고 적용됐다고 쓰지 않는다.
 - 강한 모델과 높은 effort를 여러 Worker에 쓰는 계획은 비용이 크다. 사용자에게 먼저 보여준다.
