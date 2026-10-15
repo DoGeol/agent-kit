@@ -108,12 +108,19 @@ cmd_register() {
   old=$(printf '%s\n' "$rows" | awk -F'\t' -v id="$id" '$1 == id { print $2; exit }')
   if [ -n "$old" ]; then
     [ "$old" = "$path" ] && { echo "이미 등록됨: $id"; return 0; }
-    die "projectId 충돌: $id는 이미 $old로 등록됨"
+    die "projectId 충돌: ${id}는 이미 ${old}로 등록됨"
   fi
   other=$(printf '%s\n' "$rows" | awk -F'\t' -v p="$path" '$2 == p { print $1; exit }')
-  [ -z "$other" ] || die "같은 경로가 이미 $other로 등록됨"
+  [ -z "$other" ] || die "같은 경로가 이미 ${other}로 등록됨"
   printf '| %s | %s | active | - |\n' "$id" "$path" >> "$hub/portfolio/PROJECTS.md"
   echo "등록: $id -> $path"
+  prefix=$(fm taskPrefix < "$proj/.ai/ORCHESTRATION.md")
+  printf '%s\n' "$rows" | while IFS="$tab" read -r rid rpath _; do
+    [ -n "$rid" ] || continue
+    rconf="$(expand_path "$rpath")/.ai/ORCHESTRATION.md"
+    [ -f "$rconf" ] && [ "$(fm taskPrefix < "$rconf")" = "$prefix" ] &&
+      echo "주의: taskPrefix ${prefix}를 ${rid}도 쓴다. 구분하려면 $proj/.ai/ORCHESTRATION.md의 taskPrefix를 바꾼다."
+  done || true
 }
 
 # Prints why a report is invalid, or nothing when it is valid. Args: projectId name; content on stdin.

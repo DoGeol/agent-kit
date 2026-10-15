@@ -30,6 +30,10 @@ find "$root" -name '*.md' -not -path '*/tests/*' | while IFS= read -r f; do
 done
 ok "policy and template links resolve inside the plugin"
 
+# 3a. sh reads a non-ASCII byte after $name as part of the name; scripts must brace such expansions
+if LC_ALL=C grep -nE '\$[A-Za-z_][A-Za-z0-9_]*[^ -~]' "$root"/scripts/*.sh; then fail "unbraced \$name before non-ASCII text"; fi
+ok "variable expansions before Korean text are braced"
+
 # 3. No personal paths or secrets-looking strings
 if grep -rnE '/Users/|/home/[a-z]|api[_-]?key *[:=]' "$root" --exclude=run.sh; then fail "personal path or key"; fi
 ok "no personal paths"
@@ -90,8 +94,11 @@ done
 "$kit" register "$hub" "$app" | grep -q '이미 등록됨' || fail "re-register not idempotent"
 [ "$(grep -c '^| sample-app |' "$hub/portfolio/PROJECTS.md")" = 1 ] || fail "duplicate project row"
 dup="$tmp/dup"; mkdir "$dup"; "$kit" init project "$dup" sample-app > /dev/null
-if "$kit" register "$hub" "$dup" > /dev/null 2>&1; then fail "projectId conflict accepted"; fi
-ok "portfolio init; register is idempotent and rejects projectId conflicts"
+if "$kit" register "$hub" "$dup" > "$tmp/reg.err" 2>&1; then fail "projectId conflict accepted"; fi
+grep -q "projectId 충돌: sample-app는 이미" "$tmp/reg.err" || fail "conflict message: $(cat "$tmp/reg.err")"
+api="$tmp/api"; mkdir "$api"; "$kit" init project "$api" sample-api > /dev/null
+"$kit" register "$hub" "$api" | grep -q '주의: taskPrefix SAMPLE를 sample-app도 쓴다' || fail "taskPrefix clash not warned"
+ok "portfolio init; register is idempotent, rejects projectId conflicts, warns on shared taskPrefix"
 
 # 8. Delegation to report to pull, with duplicate protection
 mkdir -p "$hub/handoffs/outbox/sample-app"
