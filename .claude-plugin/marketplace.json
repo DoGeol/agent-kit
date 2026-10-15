@@ -9,6 +9,11 @@
       "name": "mods-hud",
       "source": "./plugins/mods-hud",
       "description": "Claude Code HUD: session summary, subagents, orchestration, usage limits"
+    },
+    {
+      "name": "orchestration-kit",
+      "source": "./plugins/orchestration-kit",
+      "description": "Portfolio / Project / Setup skills for multi-AI orchestration on Orca + Claude Code"
     }
   ]
 }

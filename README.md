@@ -29,8 +29,9 @@ git clone https://github.com/DoGeol/agent-kit.git ~/agent-kit
 | 플러그인 | 설명 |
 |---|---|
 | [mods-hud](plugins/mods-hud) | 입력창 위 현황판: 세션 요약, 서브에이전트, 오케스트레이션, 브랜치, 사용량 |
+| [orchestration-kit](plugins/orchestration-kit) | Orca + Claude Code 멀티 AI 오케스트레이션: Portfolio / Project / Setup Skill, 공통 정책, 초기화 템플릿 |
 
-업데이트: `claude plugin update mods-hud`
+설치: `/plugin install <플러그인> --marketplace DoGeol/agent-kit`. 업데이트: `claude plugin update <플러그인>`
 
 <details>
 <summary>로컬 개발</summary>
@@ -47,6 +48,9 @@ claude plugin install mods-hud@dg-agent-kit
 ```bash
 claude plugin validate plugins/mods-hud
 claude plugin test plugins/mods-hud
+
+claude plugin validate plugins/orchestration-kit
+plugins/orchestration-kit/tests/run.sh   # Skill 전용 Plugin이라 claude plugin test 대상(hooks)이 없다
 ```
 
 </details>

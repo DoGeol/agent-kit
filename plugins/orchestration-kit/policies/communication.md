@@ -1,0 +1,56 @@
+# 통신
+
+[← 공통 정책](README.md)
+
+## 경로
+
+| 흐름 | 경로 |
+|---|---|
+| Claude ↔ Claude (같은 프로젝트, 살아 있는 세션) | Claude Code cross-session messaging 우선 검토. 업무 대화용 |
+| Worker ↔ Project Coordinator, 다른 Provider 조합 | Orca 메시징 (`ask`, `worker_done` 등). Task 수명의 정식 경로 |
+| Portfolio → Project | 위임 명세 Markdown + 명시적 전달 ([delegation.md](delegation.md)) |
+| Project → Portfolio | 완료 보고 + Portfolio Pull ([reporting.md](reporting.md)) |
+| Project A ↔ Project B | Portfolio 경유. 다른 Orca Run에 메시지가 자동 전파된다고 가정하지 않는다 |
+
+Claude Native Messaging과 Orca 메시징은 다른 시스템이다.
+
+- Claude 메시지로 "끝났다"고 해도 Orca Task 완료가 아니다. 업무 대화는 자유롭게, Task 수명은 Orca로 관리한다.
+- 같은 메시지를 두 채널에 복제하지 않는다.
+- cross-session messaging은 원본 대화나 파일을 자동 전달하지 않는다. 경로를 함께 보낸다.
+- Orca 메시지 전송과 Codex·AGY의 수신·처리는 설치 버전에서 검증한 뒤 의존한다.
+
+## 협업
+
+- [확정] Worker끼리 질문·제안·리뷰·반박·범위 안의 합의를 자유롭게 한다.
+- 범위 안에서 합의하면 한 줄로 요약해 남기고 진행한다.
+- [권장] 2~3회 교환해도 합의하지 못하면 `DECISION_REQUEST`로 Coordinator에 올린다.
+- [permissions.md](permissions.md)의 승인 대상 변경은 합의했더라도 Coordinator 승인 뒤에 적용한다.
+- Coordinator는 결정을 `decisions/ADR-*.md` 또는 `STATUS.md`에 남기고 영향받는 Worker 모두에 알린다.
+
+## 기록 구분
+
+다음을 서로 다른 사실로 기록한다:
+
+1. 메시지 전송 성공
+2. 수신자 처리 완료
+3. Task 완료 (`worker_done`)
+4. 코드 수락 (Project 수락)
+
+파일을 썼다고 다른 세션이 실행되지 않는다.
+
+## 메시지 머리말
+
+[권장] 텍스트 메시지 앞부분을 다음 형식으로 쓴다.
+
+```text
+[PROJECT: <projectId>] [TASK: <projectTaskId>]
+FROM: <보내는 쪽>  TO: <받는 쪽>
+TYPE: QUESTION | FINDING | PROPOSAL | DECISION_REQUEST | DECISION | HANDOFF | BLOCKER | RESULT
+SUBJECT: <한 줄>
+```
+
+`TYPE`은 이 Kit의 규칙이며 Orca 내장 메시지 유형과 다르다. Orca로 보낼 때는 Orca CLI가 제공하는 필드를 쓴다.
+
+## 정보 경계
+
+자유 협업은 권한 공유가 아니다. 한 에이전트가 읽을 수 없는 비밀을 다른 에이전트에게 대신 읽게 하지 않는다. 메시지에 API 키·토큰·고객 정보를 넣지 않는다.
