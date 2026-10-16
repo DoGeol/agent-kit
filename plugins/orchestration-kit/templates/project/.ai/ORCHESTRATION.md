@@ -17,5 +17,5 @@ initializedAt: {{NOW}}
 - `reportsRef`: 정식 보고서와 확정 문서를 반영하는 기준 브랜치. Portfolio는 이 브랜치에서 보고서를 읽는다.
 
 ## 프로젝트별 Override
-<!-- 공통 정책의 [권장] 값을 이 프로젝트에서 바꿀 때만 적는다. 예: 동시 Worker 상한 2 / default 등급: claude sonnet, effort high -->
+<!-- 공통 정책의 [권장] 값을 이 프로젝트에서 바꿀 때만 적는다. 예: 동시 Worker 상한 2 / default 등급: claude sonnet, effort high. 역할 보강은 여기 말고 .ai/roles/<id>.md에 쓴다 -->
 없음

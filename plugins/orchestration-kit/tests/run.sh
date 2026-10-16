@@ -51,6 +51,18 @@ for h in Summary Changes 'Acceptance evidence' Decisions 'Risks / Blockers' Foll
 done
 ok "templates match protocol fields"
 
+# 4a. Role profiles: listed in policies/roles.md, required sections, short enough to inline in a spec
+for r in "$root"/roles/*.md; do
+  id=$(basename "$r" .md)
+  head -1 "$r" | grep -q "^# $id: " || fail "$r title must start with '# $id: '"
+  grep -q '^기본 등급: ' "$r" || fail "$r missing 기본 등급"
+  for h in 관점 산출물 '수용 기준' '하지 않는 것'; do grep -q "^## $h\$" "$r" || fail "$r missing section $h"; done
+  grep -q -- '- \[ \] ' "$r" || fail "$r has no acceptance checklist"
+  [ "$(wc -l < "$r")" -le 40 ] || fail "$r longer than 40 lines"
+  grep -q "](../roles/$id.md)" "$root/policies/roles.md" || fail "$id not listed in policies/roles.md"
+done
+ok "role profiles ($(ls "$root"/roles/*.md | wc -l | tr -d ' ')) have required sections and are listed"
+
 # 5. Project init keeps existing files and is idempotent
 app="$tmp/app"; mkdir -p "$app/.ai"
 git -C "$app" init -q -b main

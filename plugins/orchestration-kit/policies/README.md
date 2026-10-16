@@ -14,7 +14,8 @@ orchestration-kit의 **유일한 정책 원본**이다. 특정 에이전트에 �
 | 문서 | 내용 |
 |---|---|
 | [permissions.md](permissions.md) | 결정권, 승인, 문서 수정 권한, 안전 규칙 |
-| [routing.md](routing.md) | Direct / Subagent / Session / Worktree 선택, 완료의 세 단계 |
+| [routing.md](routing.md) | Direct / Subagent / Session / Worktree 선택, 모델·effort 등급, 완료의 세 단계 |
+| [roles.md](roles.md) | Worker 역할(frontend, designer 등) 선택·조합·명세 주입. 역할 원본은 [`../roles/`](../roles/) |
 | [lifecycle.md](lifecycle.md) | Coordinator 세션 수명, 재진입, 체크포인트, 업무 ID와 상태 값 |
 | [communication.md](communication.md) | 통신 경로, 메시지 규칙, 에스컬레이션 |
 | [delegation.md](delegation.md) | Portfolio → Project 위임 |

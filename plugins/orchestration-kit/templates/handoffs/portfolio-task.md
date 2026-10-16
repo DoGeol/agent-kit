@@ -22,6 +22,9 @@ createdAt: YYYY-MM-DDTHH:MM:SS+09:00
 - 공통 API 계약 변경은 Portfolio 승인 뒤에 한다.
 - 운영 배포·데이터 삭제는 사용자 승인 뒤에 한다.
 
+## 제안 역할
+<!-- 선택. 예: frontend + designer. 최종 선택은 Project Coordinator -->
+
 ## 관련 프로젝트·의존성
 <!-- 같은 PORT ID로 위임한 다른 프로젝트 -->
 

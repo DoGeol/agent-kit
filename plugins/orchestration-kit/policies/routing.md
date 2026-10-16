@@ -60,7 +60,7 @@ Provider별 모델 (별칭은 도구가 최신 버전으로 해석한다):
 
 - `default`는 모델·effort를 넘기지 않는다. Worker는 사용자의 에이전트 기본 설정을 따른다.
 - effort는 그 모델이 지원할 때만 넘긴다. 지원 여부를 모르면 생략하고 실제 적용값을 확인한다.
-- `TASKS.md`의 `실행 방식` 열에 등급을 같이 적는다. 예: `Independent Session (Orca claude worker, fast: haiku, 새 Worktree)`.
+- `TASKS.md`의 `실행 방식` 열에 역할([roles.md](roles.md))과 등급을 같이 적는다. 예: `Independent Session (Orca claude worker, role: frontend, fast: haiku, 새 Worktree)`.
 
 - 요청값과 실제 적용값을 구분한다. 실행 도구가 돌려준 실제 적용값(Orca는 `worker-start` 응답의 `launch.effective`)을 `TASKS.md`의 `실행 방식` 열에 적는다. 요청값만 보고 적용됐다고 쓰지 않는다.
 - 강한 모델과 높은 effort를 여러 Worker에 쓰는 계획은 비용이 크다. 사용자에게 먼저 보여준다.

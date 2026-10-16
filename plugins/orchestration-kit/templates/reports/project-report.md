@@ -19,6 +19,7 @@ coordinator: claude
 
 ## Acceptance evidence
 - 테스트: <종류, 결과>
+- 역할 체크리스트: <역할: 통과 항목 수/전체, 미통과·확인 못 한 항목>
 - Commit/PR: <참조>
 - 검증하지 않은 항목:
 

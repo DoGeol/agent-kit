@@ -11,6 +11,7 @@ description: 프로젝트의 중앙 Coordinator로 일할 때 사용한다. 프�
 
 - [../../policies/README.md](../../policies/README.md): 역할, 데이터 원본
 - [../../policies/routing.md](../../policies/routing.md): 실행 방식 선택, 완료의 세 단계
+- [../../policies/roles.md](../../policies/roles.md): Worker 역할 선택·조합·명세 주입
 - [../../policies/lifecycle.md](../../policies/lifecycle.md): 재진입, 체크포인트, ID, 상태 값
 - [../../policies/communication.md](../../policies/communication.md): Worker 협업, 메시지
 - [../../policies/permissions.md](../../policies/permissions.md): 결정권, 승인
@@ -33,9 +34,10 @@ description: 프로젝트의 중앙 Coordinator로 일할 때 사용한다. 프�
 
 1. 업무를 수용 기준이 있는 하위 작업으로 나눈다.
 2. 하위 작업마다 [routing.md](../../policies/routing.md)로 실행 주체(Direct / Subagent / Independent Session)와 위치(현재 / 새 Worktree)를 따로 정한다.
-3. 병렬 Worker는 파일 소유 범위를 정하고, 공유 파일 수정자를 한 명 지정한다. 기본 상한 3개.
-4. 비용이 드는 병렬화(새 Worker·Worktree)는 계획을 사용자에게 보여주고 진행한다.
-5. `TASKS.md`의 `실행 방식` 열에 선택을 적는다.
+3. 하위 작업마다 [roles.md](../../policies/roles.md)로 역할과 조합 방식(Worker 1개에 주·보조 역할 / 설계 → 구현 여러 Worker)을 정한다. 역할 원본은 [../../roles/](../../roles/), 프로젝트 보강은 `.ai/roles/<id>.md`.
+4. 병렬 Worker는 파일 소유 범위를 정하고, 공유 파일 수정자를 한 명 지정한다. 기본 상한 3개.
+5. 비용이 드는 병렬화(새 Worker·Worktree)는 계획을 사용자에게 보여주고 진행한다.
+6. `TASKS.md`의 `실행 방식` 열에 선택을 적는다. 역할도 같이 적는다 (`role: frontend+designer`).
 
 ## 4. 실행 감독
 
@@ -43,6 +45,7 @@ description: 프로젝트의 중앙 Coordinator로 일할 때 사용한다. 프�
 - 저장소가 Orca에 등록돼 있지 않으면 Worker를 놓을 수 없다. 등록은 사용자에게 확인한 뒤 한다.
 - Worker를 시작하기 전에 같은 Task의 기존 Worker가 있는지 확인한다. 중복 실행하지 않는다.
 - Worker에게 주는 Task 명세는 그 자체로 완결돼야 한다: 대상, 변경, 제약(건드리지 말 것), 소유 범위, 관찰 가능한 수용 기준. 커밋은 Coordinator가 한다고 적는다.
+- 명세 맨 앞에 역할 절을 넣는다. 역할 파일 본문을 읽어 그대로 붙인다 (경로만 주지 않는다). 순서와 형식은 [roles.md](../../policies/roles.md#명세에-넣기). Worker 시작 뒤 명세가 잘리지 않았는지 확인한다.
 - 하위 작업마다 등급(`fast` / `default` / `strong`)을 정하고 [routing.md](../../policies/routing.md#모델과-effort)의 Provider별 모델로 바꾼다. `.ai/ORCHESTRATION.md` Override가 있으면 그것을 따른다. 실제 적용값을 `실행 방식` 열에 적는다.
 - Orca Run·Task·Dispatch ID를 `TASKS.md`의 `Orca 참조` 열에 적는다.
 - `worker_done`이 오면 Task·Dispatch ID가 기대한 것과 같은지 확인한다. 이것은 Worker 완료일 뿐이다 (`in-review`).
@@ -52,14 +55,14 @@ description: 프로젝트의 중앙 Coordinator로 일할 때 사용한다. 프�
 
 ## 5. 검증과 수락
 
-`worker_done`이 오면 Task를 `in-review`로 바꾸고 [routing.md](../../policies/routing.md#완료의-세-단계)의 수락 절차를 따른다. 테스트·Diff를 직접 확인한다. 통과하면 병합하고 `completed`, 실패하면 재작업 또는 `failed`·`blocked`. 재작업은 맥락이 남아 있는 같은 Worker에 후속 Task로 맡기는 것을 먼저 검토한다. 결과가 형식은 맞아도 정책·계약과 어긋나면 수락하지 않는다.
+`worker_done`이 오면 Task를 `in-review`로 바꾸고 [routing.md](../../policies/routing.md#완료의-세-단계)의 수락 절차를 따른다. 테스트·Diff를 직접 확인하고, 명세에 넣은 역할의 수용 기준을 항목마다 확인한다. Worker가 통과라고 적은 항목도 직접 본다. 통과하면 병합하고 `completed`, 실패하면 재작업 또는 `failed`·`blocked`. 재작업은 맥락이 남아 있는 같은 Worker에 후속 Task로 맡기는 것을 먼저 검토한다. 결과가 형식은 맞아도 정책·계약과 어긋나면 수락하지 않는다.
 
 ## 6. 문서 갱신과 완료 보고
 
 1. 결정은 `decisions/`, 구조 변경은 `ARCHITECTURE.md`, 상태는 `STATUS.md`·`TASKS.md`에 반영한다.
 2. 의미 있는 Task 완료·블로커·취소 시 보고서를 쓴다: 템플릿 [../../templates/reports/project-report.md](../../templates/reports/project-report.md), 위치 `.ai/reports/<reportId>.md`, 규칙은 [reporting.md](../../policies/reporting.md).
    - `reportId` = `<projectId>-<projectTaskId>-r01`. 같은 Task의 다음 보고는 `-r02`.
-   - 검증하지 않은 항목을 숨기지 않는다.
+   - 검증하지 않은 항목을 숨기지 않는다. 역할 체크리스트 결과를 `Acceptance evidence`에 적는다.
    - 임시 파일에 쓴 뒤 이름을 바꾼다. 발행한 보고서는 고치지 않는다.
 3. 보고서와 문서 변경을 `reportsRef` 브랜치에 커밋할지 사용자에게 확인한다. Worker 브랜치에만 둔 보고서는 Portfolio가 읽지 않는다.
 4. Portfolio가 꺼져 있어도 된다. 다음 Pull에서 수집된다.
