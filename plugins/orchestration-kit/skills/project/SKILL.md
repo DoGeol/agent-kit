@@ -44,10 +44,11 @@ description: 프로젝트의 중앙 Coordinator로 일할 때 사용한다. 프�
 - Orca를 쓰기 전에 설치된 버전의 가이드를 읽는다: `orca skills get orchestration --full`. 명령 문법은 그 가이드를 따른다.
 - 저장소가 Orca에 등록돼 있지 않으면 Worker를 놓을 수 없다. 등록은 사용자에게 확인한 뒤 한다.
 - Worker를 시작하기 전에 같은 Task의 기존 Worker가 있는지 확인한다. 중복 실행하지 않는다.
-- Worker에게 주는 Task 명세는 그 자체로 완결돼야 한다: 대상, 변경, 제약(건드리지 말 것), 소유 범위, 관찰 가능한 수용 기준. 커밋은 Coordinator가 한다고 적는다.
+- Worker에게 주는 Task 명세는 그 자체로 완결돼야 한다: 대상, 변경, 제약(건드리지 말 것), 소유 범위, 관찰 가능한 수용 기준. 커밋은 Coordinator가 한다고 적는다. Worker가 테스트용 프로세스를 띄울 수 있으면 "종료는 자기가 띄운 PID만, 이름·패턴 종료(`pkill` 등) 금지"와 "Worktree와 임시 디렉터리 밖에 쓰지 않음"을 적는다. Worker의 샌드박스 설정이 넓을 수 있다.
 - 명세 맨 앞에 역할 절을 넣는다. 역할 파일 본문을 읽어 그대로 붙인다 (경로만 주지 않는다). 순서와 형식은 [roles.md](../../policies/roles.md#명세에-넣기). Worker 시작 뒤 명세가 잘리지 않았는지 확인한다.
 - 하위 작업마다 등급(`fast` / `default` / `strong`)을 정하고 [routing.md](../../policies/routing.md#모델과-effort)의 Provider별 모델로 바꾼다. `.ai/ORCHESTRATION.md` Override가 있으면 그것을 따른다. 실제 적용값을 `실행 방식` 열에 적는다.
 - Orca Run·Task·Dispatch ID를 `TASKS.md`의 `Orca 참조` 열에 적는다.
+- Worker 시작이 에이전트 준비 단계에서 막히면(예: Codex의 작업 폴더 신뢰 확인 `agent-trust-workspace`, 업데이트 안내 `agent-update-prompt`) 응답의 recovery대로 그 터미널을 release하고 사용자에게 알린다. 에이전트 설정 변경·업데이트는 사용자 결정이다. 해결 뒤 같은 Task를 `--retry-of`로 다시 시작한다.
 - `worker_done`이 오면 Task·Dispatch ID가 기대한 것과 같은지 확인한다. 이것은 Worker 완료일 뿐이다 (`in-review`).
 - 수락하거나 실패를 확정하면 Worker마다 다음 소유자를 정한다: 같은 Worker에 후속 작업, 유지, 또는 release. 그다음 메시지를 확인 처리한다. 정리되지 않은 Worker가 남아 있으면 세션을 끝내지 않는다.
 - Worker끼리 자유롭게 협의하게 둔다. [permissions.md](../../policies/permissions.md)의 승인 대상 변경 요청(`DECISION_REQUEST`)이 오면 결정하고 `decisions/ADR-NNNN-<제목>.md`에 남긴 뒤 영향받는 Worker 모두에 알린다. 프로젝트 간 영향이 있으면 Portfolio 결정 사항으로 사용자에게 올린다.

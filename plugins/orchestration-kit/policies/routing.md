@@ -54,12 +54,13 @@ Provider별 모델 (별칭은 도구가 최신 버전으로 해석한다):
 
 | 등급 | Claude | Codex | AGY |
 |---|---|---|---|
-| `fast` | `haiku` | 미정 | 미정 |
+| `fast` | `haiku` | 미정 (실험: 사용자 기본 모델 + effort `low`) | 미정 |
 | `default` | 넘기지 않음 | 넘기지 않음 | 넘기지 않음 |
 | `strong` | `opus` | 미정 | 미정 |
 
 - `default`는 모델·effort를 넘기지 않는다. Worker는 사용자의 에이전트 기본 설정을 따른다.
 - effort는 그 모델이 지원할 때만 넘긴다. 지원 여부를 모르면 생략하고 실제 적용값을 확인한다.
+- Orca는 `--effort`만 넘길 수 없다. `--model`이 같이 있어야 한다. effort만 바꾸려면 사용자 기본 모델 이름을 명시한다.
 - `TASKS.md`의 `실행 방식` 열에 역할([roles.md](roles.md))과 등급을 같이 적는다. 예: `Independent Session (Orca claude worker, role: frontend, fast: haiku, 새 Worktree)`.
 
 - 요청값과 실제 적용값을 구분한다. 실행 도구가 돌려준 실제 적용값(Orca는 `worker-start` 응답의 `launch.effective`)을 `TASKS.md`의 `실행 방식` 열에 적는다. 요청값만 보고 적용됐다고 쓰지 않는다.
