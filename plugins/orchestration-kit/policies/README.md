@@ -42,7 +42,7 @@ Orca: Run / Task / Dispatch / Worker / Worktree 실행 상태
 - [확정] 각 프로젝트에 논리적 Project Coordinator가 1개 있다. 프로젝트 내부 기술 결정은 Project Coordinator가 확정한다.
 - [확정] Portfolio는 하이브리드다. 조회·정리는 직접 하고, 개발은 Project Coordinator에 위임한다.
 - [확정] 사용자가 프로젝트 세션에서 직접 시작한 업무도 허용한다. Portfolio가 나중에 수집한다.
-- [권장] AGY는 먼저 읽기 전용 분석·리뷰로 쓴다. Worker 시작 → 메시지 → `worker_done` → 정리까지 로컬에서 통과한 뒤 구현에 쓴다. 읽기 전용 리뷰(Orca agent `antigravity`, `reviewer` 역할)는 이 흐름을 통과했다. 구현 Worker는 아직 검증 전이다.
+- [권장] AGY는 먼저 읽기 전용 분석·리뷰로 쓴다. Worker 시작 → 메시지 → `worker_done` → 정리까지 로컬에서 통과한 뒤 구현에 쓴다. 읽기 전용 리뷰(Orca agent `antigravity`, `reviewer` 역할)와 새 Worktree 구현 Worker(`backend` 역할)가 이 흐름을 통과했다.
 
 ## 데이터 원본
 

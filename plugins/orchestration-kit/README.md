@@ -50,7 +50,7 @@ Project Coordinator는 하위 작업마다 Worker 역할을 고른다: `frontend
 - 작은 UI 수정은 Worker 1개에 `frontend` + 보조 `designer`, 큰 개편은 `designer`가 설계 문서를 쓰고 `frontend`가 구현한다.
 - 프로젝트별 보강(스택, 디자인 시스템)은 프로젝트의 `.ai/roles/<id>.md`에 쓴다.
 
-규칙은 [policies/roles.md](policies/roles.md). Claude Worker(Haiku), Codex Worker, AGY Worker(읽기 전용 리뷰)에서 역할 명세 주입, 체크리스트 결과 보고, 체크리스트 기반 수락까지 확인했다. AGY 구현 Worker는 검증 필요.
+규칙은 [policies/roles.md](policies/roles.md). Claude Worker(Haiku), Codex Worker, AGY Worker(읽기 전용 리뷰, 새 Worktree 구현)에서 역할 명세 주입, 체크리스트 결과 보고, 체크리스트 기반 수락까지 확인했다.
 
 ## 설치
 
@@ -106,4 +106,4 @@ claude plugin validate .
 
 ## 아직 없는 것
 
-Orca 병렬 Worktree 자동 실행, Worker 협업 자동화, AGY 구현 Worker, 자동 Bootstrap, 자동 동기화·알림, Coordinator Provider 교체, 대시보드 UI. MCP 서버와 DB는 쓰지 않는다.
+Orca 병렬 Worktree 자동 실행, Worker 협업 자동화, 자동 Bootstrap, 자동 동기화·알림, Coordinator Provider 교체, 대시보드 UI. MCP 서버와 DB는 쓰지 않는다.
