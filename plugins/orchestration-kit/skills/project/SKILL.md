@@ -48,7 +48,7 @@ description: 프로젝트의 중앙 Coordinator로 일할 때 사용한다. 프�
 - 명세 맨 앞에 역할 절을 넣는다. 역할 파일 본문을 읽어 그대로 붙인다 (경로만 주지 않는다). 순서와 형식은 [roles.md](../../policies/roles.md#명세에-넣기). Worker 시작 뒤 명세가 잘리지 않았는지 확인한다.
 - 하위 작업마다 등급(`fast` / `default` / `strong`)을 정하고 [routing.md](../../policies/routing.md#모델과-effort)의 Provider별 모델로 바꾼다. `.ai/ORCHESTRATION.md` Override가 있으면 그것을 따른다. 실제 적용값을 `실행 방식` 열에 적는다.
 - Orca Run·Task·Dispatch ID를 `TASKS.md`의 `Orca 참조` 열에 적는다.
-- Worker 시작이 에이전트 준비 단계에서 막히면(예: Codex의 작업 폴더 신뢰 확인 `agent-trust-workspace`, 업데이트 안내 `agent-update-prompt`) 응답의 recovery대로 그 터미널을 release하고 사용자에게 알린다. 에이전트 설정 변경·업데이트는 사용자 결정이다. 해결 뒤 같은 Task를 `--retry-of`로 다시 시작한다. Codex 신뢰는 경로마다 따로 정해진다. 상위 폴더를 신뢰해도 그 아래 새 Worktree에는 적용되지 않았다. 해결되지 않으면 같은 Task를 다른 Provider로 다시 시작할 수 있다.
+- Worker 시작이 에이전트 준비 단계에서 막히면(예: Codex의 작업 폴더 신뢰 확인 `agent-trust-workspace`, 업데이트 안내 `agent-update-prompt`) 응답의 recovery대로 그 터미널을 release하고 사용자에게 알린다. 에이전트 설정 변경·업데이트는 사용자 결정이다. 해결 뒤 같은 Task를 `--retry-of`로 다시 시작한다. Codex는 Worktree의 신뢰를 원본 저장소 경로로 판단한다. 원본 저장소 경로를 신뢰 목록에 한 번 등록하면 새 Worktree에서도 막히지 않는다 (setup Skill). Worktree 상위 폴더를 신뢰하는 것으로는 해결되지 않았다. 해결되지 않으면 같은 Task를 다른 Provider로 다시 시작할 수 있다.
 - Coordinator 하나는 한 번에 Run 하나에 바인딩된다. 새 Run을 만들면 바인딩이 옮겨 가서 앞 Run의 `worker-start`가 거부된다 (`consumer_fenced`). 앞 Run의 Worker를 모두 정리한 뒤 `run-use`로 바꾼다. 여러 프로젝트를 동시에 감독하려면 프로젝트마다 Coordinator 세션을 따로 둔다.
 - `worker_done`이 오면 Task·Dispatch ID가 기대한 것과 같은지 확인한다. 이것은 Worker 완료일 뿐이다 (`in-review`).
 - 수락하거나 실패를 확정하면 Worker마다 다음 소유자를 정한다: 같은 Worker에 후속 작업, 유지, 또는 release. 그다음 메시지를 확인 처리한다. 정리되지 않은 Worker가 남아 있으면 세션을 끝내지 않는다.
