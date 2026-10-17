@@ -57,6 +57,7 @@ Project는 Portfolio 파일을 쓰지 않는다. Portfolio는 Project 파일을 
 - `CLAUDE.md`·`AGENTS.md`에는 진입점 문구를 **덧붙이기만** 한다. 사용자에게 문구를 보여주고 승인받은 뒤에만 한다.
 - 프로젝트 등록과 Portfolio 연결은 사용자가 확인한 경우에만 한다.
 - 비밀 키·토큰·고객 원문·내부 URL·호스트 이름을 Markdown·보고서·메시지에 저장하지 않는다. 경로는 `projectId`나 저장소 기준 상대 경로로 적는다. `portfolio/PROJECTS.md`의 저장소 경로만 예외다 (홈 아래는 `~/`로 적는다).
+- 사용자 작업이 진행 중인 checkout(미커밋 변경이 있거나 다른 작업 브랜치가 checkout된 원본)에서는 Kit 작업을 하지 않는다. 원격 기준 브랜치에서 새 Worktree를 만들어 거기서 한다.
 - 병합과 보고서 커밋은 대상 브랜치가 checkout된 Worktree(예: 원본 checkout)에서, 그 작업 트리가 깨끗할 때만 한다. 충돌하면 멈추고 사용자에게 알린다. 기존 변경을 reset·stash·checkout으로 버리지 않는다.
 - Worker를 release하거나 Worktree·브랜치를 지우기 전에 미커밋 변경과 미병합 커밋을 확인한다. 있으면 사용자 승인 없이 지우지 않는다.
 - 근거 없는 진행률(%)을 만들지 않는다.

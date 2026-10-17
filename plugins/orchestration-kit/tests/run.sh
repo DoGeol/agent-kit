@@ -164,6 +164,20 @@ git -C "$wtbase" worktree add -q -b feat/worker-x "$tmp/wt"
 grep -q '^reportsRef: main$' "$tmp/wt/.ai/ORCHESTRATION.md" || fail "worktree reportsRef: $(grep reportsRef "$tmp/wt/.ai/ORCHESTRATION.md")"
 ok "init in a linked worktree uses the main worktree branch as reportsRef"
 
+# 8d. A pull-request project reads reports from a remote-tracking reportsRef, not the local branch
+pr="$tmp/prproj"; mkdir "$pr"; git -C "$pr" init -q -b main; "$kit" init project "$pr" pr-app PRA > /dev/null
+grep -q '^integration: unset$' "$pr/.ai/ORCHESTRATION.md" || fail "integration field missing"
+sed -i.bak 's|^reportsRef: main$|reportsRef: origin/main|; s|^integration: unset$|integration: pull-request|' "$pr/.ai/ORCHESTRATION.md"; rm "$pr/.ai/ORCHESTRATION.md.bak"
+git_commit "$pr" setup; git -C "$pr" update-ref refs/remotes/origin/main HEAD
+"$kit" register "$hub" "$pr" > /dev/null
+git -C "$pr" checkout -q -b pra-0001-x
+sed 's/sample-app/pr-app/g; s/SAMPLE-/PRA-/g' "$root/tests/fixtures/sample-app-SAMPLE-0001-r01.md" > "$pr/.ai/reports/pr-app-PRA-0001-r01.md"
+git_commit "$pr" report-in-pr
+if "$kit" pending "$hub" | grep -q 'pr-app-PRA-0001-r01'; then fail "report on an unmerged PR branch listed"; fi
+git -C "$pr" update-ref refs/remotes/origin/main HEAD
+"$kit" pending "$hub" | grep -q '^pending	pr-app	pr-app-PRA-0001-r01	completed	' || fail "report not read from origin/main after merge"
+ok "pull-request project: report on the PR branch is invisible until origin/main has it"
+
 # 8c. Usage readers against stub orca, claude, codex and agy (no real provider is called)
 if command -v jq > /dev/null; then
   bin="$tmp/bin"; mkdir "$bin"; nowms=$(( $(date +%s) * 1000 )); reset=$(( $(date +%s) + 3600 ))

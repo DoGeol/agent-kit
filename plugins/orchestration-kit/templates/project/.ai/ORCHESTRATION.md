@@ -4,6 +4,7 @@ role: project
 projectId: {{PROJECT_ID}}
 taskPrefix: {{TASK_PREFIX}}
 reportsRef: {{REPORTS_REF}}
+integration: unset
 policyVersion: {{POLICY_VERSION}}
 initializedAt: {{NOW}}
 ---
@@ -14,7 +15,9 @@ initializedAt: {{NOW}}
 
 - `projectId`: 바꾸지 않는다. 저장소를 옮겨도 그대로 쓴다.
 - `taskPrefix`: `projectTaskId` 접두어 (`{{TASK_PREFIX}}-0001`).
-- `reportsRef`: 정식 보고서와 확정 문서를 반영하는 기준 브랜치. Portfolio는 이 브랜치에서 보고서를 읽는다.
+- `reportsRef`: 정식 보고서와 확정 문서를 반영하는 기준 브랜치. Portfolio는 이 브랜치에서 보고서를 읽는다. PR로 반영하는 프로젝트는 원격 추적 브랜치(`origin/main`)로 둔다.
+- `integration`: 결과를 기준 브랜치에 넣는 방식. `direct-merge` 또는 `pull-request`. `unset`이면 첫 Task 전에 Coordinator가 정한다.
+- 반영 방식 근거: 없음
 
 ## 프로젝트별 Override
 <!-- 공통 정책의 [권장] 값을 이 프로젝트에서 바꿀 때만 적는다. 예: 동시 Worker 상한 2 / default 등급: claude sonnet, effort high / Provider 순서: codex, claude / 제외 Provider: antigravity / reviewer: claude. 역할 보강은 여기 말고 .ai/roles/<id>.md에 쓴다 -->

@@ -47,7 +47,7 @@ frontmatter 필수 필드:
 트리거: 사용자 요청 또는 Portfolio 세션 시작. 자동 감시·알림은 MVP 범위 밖이다.
 
 1. 미처리 보고서 목록을 만든다. `scripts/kit.sh pending <hub>`가 `portfolio/PROJECTS.md`의 `active` 프로젝트마다 다음을 한다:
-   - Git 저장소면 `reportsRef` 커밋에서 `.ai/reports/`를 읽는다. 커밋되지 않은 작업 트리 파일은 정식 보고가 아니다. Git이 아니면 폴더를 직접 읽는다.
+   - Git 저장소면 `reportsRef` 커밋에서 `.ai/reports/`를 읽는다. `reportsRef`가 원격 추적 브랜치(`origin/main` 등)면 Portfolio가 먼저 `git fetch`한다. `kit.sh`는 네트워크를 쓰지 않는다. 커밋되지 않은 작업 트리 파일은 정식 보고가 아니다. Git이 아니면 폴더를 직접 읽는다.
    - frontmatter 필수 필드, 파일 이름 = `reportId`, `status` 값을 검사한다. 어긋나면 `invalid`로 내보낸다.
    - `handoffs/processed/<reportId>.md`가 있으면 건너뛴다.
 2. `invalid` 보고는 처리하지 않고 사용자에게 보여준다. 사용자가 확인하면 `outcome: invalid` 마커를 남겨 다음 Pull에 다시 나오지 않게 한다. 정정은 Project가 새 개정번호로 낸다.

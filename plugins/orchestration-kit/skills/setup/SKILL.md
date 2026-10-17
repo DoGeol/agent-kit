@@ -42,6 +42,8 @@ description: 저장소를 orchestration-kit의 Portfolio(workspace-hub) 또는 P
 - 없는 파일만 만든다. 있는 파일은 `skip`으로 표시하고 건드리지 않는다.
 - 이미 다른 `role`·`projectId`로 초기화된 저장소는 거부한다. 이때 바꾸지 말고 사용자에게 알린다.
 - 출력의 `reportsRef`(정식 보고서를 올릴 기준 브랜치)를 사용자에게 확인한다. 다르면 `.ai/ORCHESTRATION.md`만 고친다.
+- [반영 방식](../../policies/routing.md#반영-방식)(`integration`)을 정한다. 저장소 규칙과 병합 기록이 분명하면 값과 근거를 적고, 아니면 `unset`으로 두고 사용자에게 알린다. `pull-request`면 `reportsRef`를 원격 추적 브랜치(예: `origin/main`)로 바꾼다.
+- 저장소가 기준 브랜치 직접 커밋을 막으면(`pull-request`) 초기화 파일도 PR로 반영한다. 사용자 작업이 진행 중인 checkout이면 원격 기준 브랜치에서 새 Worktree를 만들어 거기서 초기화한다 ([permissions.md](../../policies/permissions.md#안전-규칙)).
 
 ## 4. CLAUDE.md / AGENTS.md 진입점
 

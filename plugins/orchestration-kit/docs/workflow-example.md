@@ -69,7 +69,10 @@ Project Coordinator가 하는 일:
    이 Worker 계획(3개, codex·claude, `strong` 1개)을 사용자에게 보여 주고 승인받는다.
 3. **실행**: 역할 파일 본문과 Worker 제한(쓰기 범위, 커밋·Push 금지)을 Task 명세에 넣고 Orca Worker를 시작해 감독한다. 시작 직전에 `kit.sh usage codex`로 사용량을 읽고, 도는 동안 `kit.sh usage-watch codex`를 백그라운드로 띄워 둔다. 감시가 주의나 한도 임박으로 멈추면 Worker에 중단을 요청하고 다음 Provider로 넘긴다.
 4. **검증**: Worker가 "통과"라고 적어도 Coordinator가 테스트와 동작을 직접 확인하고, 역할 수용 기준을 하나씩 대조한다.
-5. **커밋·병합·보고**: Coordinator가 커밋하고 기준 브랜치에 병합한 뒤 `.ai/reports/shop-api-API-0012-r01.md`를 커밋한다. Push·PR은 사용자 승인 뒤에 한다.
+5. **커밋·반영·보고**: 반영 방식(`.ai/ORCHESTRATION.md`의 `integration`)에 따른다.
+   - `direct-merge`: Coordinator가 커밋하고 기준 브랜치에 병합한 뒤 `.ai/reports/shop-api-API-0012-r01.md`를 커밋한다. Push는 사용자 승인 뒤에 한다.
+   - `pull-request`: 작업 브랜치에 결과와 보고서를 커밋하고, 사용자 승인을 받아 Push와 PR을 연다. 병합은 프로젝트 규칙대로 하고 Coordinator가 스스로 하지 않는다. PR이 병합되면 Portfolio가 보고서를 읽는다.
+   - 값이 없으면 Coordinator가 저장소 규칙과 병합 기록으로 정하고, 분명하지 않으면 Portfolio에 묻는다.
 
 `shop-web`도 같은 방식으로 진행한다. 화면 변경이 크면 Worker를 나눈다.
 

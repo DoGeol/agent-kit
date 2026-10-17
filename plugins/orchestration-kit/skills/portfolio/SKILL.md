@@ -57,7 +57,7 @@ Project Coordinator가 사용량 때문에 등급·Provider·일정을 바꿔도
 
 [reporting.md](../../policies/reporting.md#portfolio-pull) 절차를 따른다.
 
-1. 미처리 보고서 목록:
+1. 미처리 보고서 목록. `reportsRef`가 원격 추적 브랜치(`origin/...`)인 프로젝트는 먼저 그 저장소에서 `git fetch`를 실행한다 (읽기만 한다):
 
    ```sh
    ../../scripts/kit.sh pending <hubDir>
