@@ -51,7 +51,7 @@ description: 프로젝트의 중앙 Coordinator로 일할 때 사용한다. 프�
 - Orca `--worktree current`는 Coordinator 세션의 Worktree다. 셸의 현재 폴더가 아니다. 다른 저장소에서 일을 시키려면 그 저장소의 Worktree를 고르거나, 명세에 절대 경로를 적는다.
 - Orca Run·Task·Dispatch ID를 `TASKS.md`의 `Orca 참조` 열에 적는다.
 - Worker 시작이 에이전트 준비 단계에서 막히면(예: Codex의 작업 폴더 신뢰 확인 `agent-trust-workspace`, 업데이트 안내 `agent-update-prompt`) 응답의 recovery대로 그 터미널을 release하고 사용자에게 알린다. 에이전트 설정 변경·업데이트는 사용자 결정이다. 해결 뒤 같은 Task를 `--retry-of`로 다시 시작한다. Codex는 Worktree의 신뢰를 원본 저장소 경로로 판단한다. 원본 저장소 경로를 신뢰 목록에 한 번 등록하면 새 Worktree에서도 막히지 않는다 (setup Skill). Worktree 상위 폴더를 신뢰하는 것으로는 해결되지 않았다. Orca는 Worker를 시작할 때 Worktree 경로를 각 에이전트 신뢰 목록에 더하고, Worktree를 지워도 그 항목을 지우지 않는다. 정리할지는 사용자에게 묻는다. 해결되지 않으면 같은 Task를 다른 Provider로 다시 시작할 수 있다. 승인한 후보 순서 밖의 Provider로 바꾸는 것은 계획 변경이므로 승인을 받는다 ([routing.md](../../policies/routing.md#provider-선택)).
-- Coordinator 하나는 한 번에 Run 하나에 바인딩된다. 새 Run을 만들면 바인딩이 옮겨 가서 앞 Run의 `worker-start`가 거부된다 (`consumer_fenced`). 앞 Run의 Worker를 모두 정리한 뒤 `run-use`로 바꾼다. 여러 프로젝트를 동시에 감독하려면 프로젝트마다 Coordinator 세션을 따로 둔다.
+- Coordinator 하나는 한 번에 Run 하나에 바인딩된다. 새 Run을 만들면 바인딩이 옮겨 가서 앞 Run의 `worker-start`와 `check`가 거부된다 (`consumer_fenced`). 앞 Run의 Worker를 모두 정리한 뒤 `run-use`로 바꾼다. 여러 프로젝트를 동시에 감독하려면 프로젝트마다 Coordinator 세션을 따로 둔다.
 - `worker_done`이 오면 Task·Dispatch ID가 기대한 것과 같은지 확인한다. 이것은 Worker 완료일 뿐이다 (`in-review`).
 - 수락하거나 실패를 확정하면 Worker마다 다음 소유자를 정한다: 같은 Worker에 후속 작업, 유지, 또는 release. release·Worktree 정리 전에 미커밋 변경과 미병합 커밋을 확인한다 ([permissions.md](../../policies/permissions.md#안전-규칙)). 그다음 메시지를 확인 처리한다. 정리되지 않은 Worker가 남아 있으면 세션을 끝내지 않는다.
 - Worker끼리 자유롭게 협의하게 둔다. [permissions.md](../../policies/permissions.md)의 승인 대상 변경 요청(`DECISION_REQUEST`)이 오면 결정하고 `decisions/ADR-NNNN-<제목>.md`에 남긴 뒤 영향받는 Worker 모두에 알린다. 프로젝트 간 영향이 있으면 Portfolio 결정 사항으로 사용자에게 올린다.

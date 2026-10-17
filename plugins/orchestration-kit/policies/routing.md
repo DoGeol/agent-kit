@@ -54,12 +54,14 @@ Provider별 모델 (별칭은 도구가 최신 버전으로 해석한다):
 
 | 등급 | Claude | Codex | AGY |
 |---|---|---|---|
-| `fast` | `haiku` | `gpt-6-luna` + effort `low` | 미정 |
+| `fast` | `haiku` | `gpt-6-luna` + effort `low` | `gemini-3.8-flash-low` |
 | `default` | 넘기지 않음 | 넘기지 않음 | 넘기지 않음 |
-| `strong` | `opus` | 미정 | 미정 |
+| `strong` | `opus` | `gpt-6-astra` + effort `high` | `gemini-4-argon-high` |
 
 - `default`는 모델·effort를 넘기지 않는다. Worker는 사용자의 에이전트 기본 설정을 따른다.
-- Codex 모델 ID는 별칭이 없어 세대마다 바뀐다. 쓸 수 있는 ID와 설명은 Codex 모델 목록에서 확인한다 ("Fast and affordable" 계열을 `fast`로). Orca Codex Worker에서 `gpt-6-luna` + `low`가 실제 적용되고 완료까지 동작했다.
+- Codex 모델 ID는 별칭이 없어 세대마다 바뀐다. 쓸 수 있는 ID와 설명은 Codex 모델 목록에서 확인한다 ("Fast and affordable" 계열을 `fast`로). Orca Codex Worker에서 `gpt-6-luna` + `low`가 실제 적용되고 완료까지 동작했다. `strong`은 "Frontier intelligence" 계열(`gpt-6-astra`)이다.
+- AGY 모델 ID는 effort를 이름에 담는다 (`-low`·`-medium`·`-high`). effort를 따로 넘기지 않는다. 목록은 `agy models`로 확인한다. Gemini 계열과 Claude·GPT 계열은 AGY 안에서 한도를 따로 쓰므로, AGY에서는 Gemini 계열을 기본으로 한다.
+- [검증됨] Codex `strong`, AGY `fast`·`strong`은 Orca Worker에서 실제 적용값(`launch.effective`)과 읽기 전용 작업 완료까지 확인했다. 등급에 맞는 품질은 아직 비교하지 않았다.
 - effort는 그 모델이 지원할 때만 넘긴다. 지원 여부를 모르면 생략하고 실제 적용값을 확인한다.
 - Orca는 `--effort`만 넘길 수 없다. `--model`이 같이 있어야 한다. effort만 바꾸려면 사용자 기본 모델 이름을 명시한다.
 - `TASKS.md`의 `실행 방식` 열에 역할([roles.md](roles.md))과 등급을 같이 적는다. 예: `Independent Session (Orca claude worker, role: frontend, fast: haiku, 새 Worktree)`.
@@ -152,6 +154,7 @@ scripts/kit.sh usage-watch [--interval 120] [--until caution] [--for 240] <provi
 - 기다리는 동안은 셸과 `sleep`만 남는다. 읽을 때만 위 표의 명령이 잠깐 돈다. AGY(7초)와 Claude 대체 경로(5초)는 상대적으로 무거우므로, 가볍게 하려면 그 Provider만 따로 띄우고 `--interval`을 늘린다. Claude Worker가 긴 도구 실행 하나에 오래 머물면 Orca 값이 15분을 넘겨 대체 경로로 읽힐 수 있다.
 - 백그라운드로 실행하고 끝나면 알림을 받는 기능이 있으면 감시를 그렇게 띄우고, Worker 완료 대기(`check --wait`)도 같은 방식으로 띄운다. 둘 중 먼저 끝나는 쪽에 반응하므로 대기 중에 Coordinator가 깨어날 필요가 없다. 이 기능이 없으면 완료 대기를 10~15분으로 나누고 깰 때마다 `kit.sh usage`로 읽는다.
 - 감시가 멈추면 아래 기준과 작업 중 한도 대응을 따른다. 실행 중인 Worker가 남아 있으면 감시를 다시 띄우고, Worker가 모두 끝나면 감시를 멈춘다.
+- [검증됨] `sample-api`의 Claude Worker로 두 갈래를 확인했다. 감시가 먼저 멈춘 경우: 깨어남 → 중단 요청 → Worker가 진행 파일을 쓰고 `failed`로 완료 → 같은 Worktree에서 `--retry-of`로 재시작 → 진행 파일을 보고 끝난 단계를 건너뜀. 완료 대기가 먼저 끝난 경우: 결과 처리 뒤 감시를 멈춤.
 
 ### 기준
 
@@ -186,6 +189,12 @@ Coordinator가 쓰는 Provider가 위험이면:
 4. 재개는 초기화 뒤 같은 Provider로, 또는 사용자가 계정을 바꾼 새 세션에서 한다.
 
 예고 없이 한도에 걸렸을 때: Worker가 진행 없이 멈추면 Orca `worker-read`로 출력을 보고 한도 문구(Claude: `You've hit your session limit`)를 찾고 `kit.sh usage`로 읽는다. 한도면 위 Worker 절차의 2번부터 따른다.
+
+Claude의 자동 재개: Claude Code 대화형 세션(claude.ai 구독 로그인)은 5시간 한도에 걸리면 기본으로 그 자리에서 기다렸다가 초기화 뒤 하던 일을 이어 간다 (설정 `autoContinueAtUsageLimit`, Claude Code 2.1.234 이상). `claude -p`는 기다리지 않는다. Orca가 띄운 Claude Worker에서 실제로 이어 가는지는 확인하지 않았다.
+
+- 한도에 걸린 Claude Worker는 초기화 뒤 스스로 이어 갈 수 있다. 다른 Provider로 같은 일을 재시작하기 전에 원래 Worker를 먼저 release하거나 멈춘다. 두 Worker가 같은 Worktree를 고치지 않게 한다.
+- 초기화까지 기다리기로 했으면 Claude Worker는 그대로 둬도 된다. 초기화 뒤 진행이 없으면 위 Worker 절차를 따른다.
+- 기다리는 화면에 나오는 `/usage-credits` 같은 결제 선택지는 쓰지 않는다 ([쓰지 않는 것](#쓰지-않는-것)).
 
 ### Portfolio 확인
 
