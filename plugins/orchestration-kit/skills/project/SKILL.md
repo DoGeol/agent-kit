@@ -53,7 +53,7 @@ description: 프로젝트의 중앙 Coordinator로 일할 때 사용한다. 프�
 - Orca를 쓰기 전에 설치된 버전의 가이드를 읽는다: `orca skills get orchestration --full`. 명령 문법은 그 가이드를 따른다.
 - 저장소가 Orca에 등록돼 있지 않으면 Worker를 놓을 수 없다. 등록은 사용자에게 확인한 뒤 한다.
 - Worker를 시작하기 전에 같은 Task의 기존 Worker가 있는지 확인한다. 중복 실행하지 않는다.
-- Worker에게 주는 Task 명세는 그 자체로 완결돼야 한다: 대상, 변경, 제약(건드리지 말 것), 소유 범위, 관찰 가능한 수용 기준. [permissions.md](../../policies/permissions.md#worker-권한)의 Worker 제한(쓰기 범위, 프로세스 종료, 커밋·Push 금지)을 항상 적는다. 여러 단계인 작업은 "단계마다 진행 상황을 `.orch-progress/<Task>.md`에 적고, 확인 지점마다 후속 메시지(중단 요청)를 본다"를 적는다. 진행 파일은 커밋하지 않는다.
+- Worker에게 주는 Task 명세는 그 자체로 완결돼야 한다: 대상, 변경, 제약(건드리지 말 것), 소유 범위, 관찰 가능한 수용 기준. [permissions.md](../../policies/permissions.md#worker-권한)의 Worker 제한(쓰기 범위, 프로세스 종료, 커밋·Push 금지, 샌드박스 밖에서 실행해도 되는 명령)을 항상 적는다. 여러 단계인 작업은 "단계마다 진행 상황을 `.orch-progress/<Task>.md`에 적고, 확인 지점마다 후속 메시지(중단 요청)를 본다"를 적는다. 진행 파일은 커밋하지 않는다.
 - 명세 맨 앞에 역할 절을 넣는다. 역할 파일 본문을 읽어 그대로 붙인다 (경로만 주지 않는다). 순서와 형식은 [roles.md](../../policies/roles.md#명세에-넣기). Worker 시작 뒤 명세가 잘리지 않았는지 확인한다.
 - 하위 작업마다 등급(`fast` / `default` / `strong`)을 정하고, [Provider 선택](../../policies/routing.md#provider-선택) 순서로 Provider를 고른 뒤 [routing.md](../../policies/routing.md#모델과-effort)의 Provider별 모델로 바꾼다. 고른 이유를 `실행 방식` 열에 적는다. 사용량은 판단할 때마다 새로 읽는다. `.ai/ORCHESTRATION.md` Override가 있으면 그것을 따른다. 실제 적용값을 `실행 방식` 열에 적는다.
 - Orca `--worktree current`는 Coordinator 세션의 Worktree다. 셸의 현재 폴더가 아니다. 다른 저장소에서 일을 시키려면 그 저장소의 Worktree를 고르거나, 명세에 절대 경로를 적는다.

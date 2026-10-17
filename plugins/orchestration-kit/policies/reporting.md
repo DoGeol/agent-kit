@@ -47,7 +47,7 @@ frontmatter 필수 필드:
 트리거: 사용자 요청 또는 Portfolio 세션 시작. 자동 감시·알림은 MVP 범위 밖이다.
 
 1. 미처리 보고서 목록을 만든다. `scripts/kit.sh pending <hub>`가 `portfolio/PROJECTS.md`의 `active` 프로젝트마다 다음을 한다:
-   - 개인 모드 프로젝트(hub에 `projects/<projectId>/.ai/`가 있음)는 hub의 `HEAD`에서 읽는다.
+   - 개인 모드 프로젝트(hub에 `projects/<projectId>/.ai/`가 있음)는 hub의 `HEAD`에서 읽는다. [검증됨] tila-agent-kit 보고서 하나를 이 경로로 읽어 Portfolio 업무 등록, `DASHBOARD.md` 갱신, 처리 마커까지 마쳤고, 다시 수집해도 같은 보고서가 나오지 않았다.
    - Git 저장소면 `reportsRef` 커밋에서 `.ai/reports/`를 읽는다. `reportsRef`가 원격 추적 브랜치(`origin/main` 등)면 Portfolio가 먼저 `git fetch`한다. `kit.sh`는 네트워크를 쓰지 않는다. 커밋되지 않은 작업 트리 파일은 정식 보고가 아니다. Git이 아니면 폴더를 직접 읽는다.
    - frontmatter 필수 필드, 파일 이름 = `reportId`, `status` 값을 검사한다. 어긋나면 `invalid`로 내보낸다.
    - `handoffs/processed/<reportId>.md`가 있으면 건너뛴다.
