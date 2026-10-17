@@ -54,11 +54,12 @@ Provider별 모델 (별칭은 도구가 최신 버전으로 해석한다):
 
 | 등급 | Claude | Codex | AGY |
 |---|---|---|---|
-| `fast` | `haiku` | 미정 (실험: 사용자 기본 모델 + effort `low`) | 미정 |
+| `fast` | `haiku` | `gpt-6-luna` + effort `low` | 미정 |
 | `default` | 넘기지 않음 | 넘기지 않음 | 넘기지 않음 |
 | `strong` | `opus` | 미정 | 미정 |
 
 - `default`는 모델·effort를 넘기지 않는다. Worker는 사용자의 에이전트 기본 설정을 따른다.
+- Codex 모델 ID는 별칭이 없어 세대마다 바뀐다. 쓸 수 있는 ID와 설명은 Codex 모델 목록에서 확인한다 ("Fast and affordable" 계열을 `fast`로). Orca Codex Worker에서 `gpt-6-luna` + `low`가 실제 적용되고 완료까지 동작했다.
 - effort는 그 모델이 지원할 때만 넘긴다. 지원 여부를 모르면 생략하고 실제 적용값을 확인한다.
 - Orca는 `--effort`만 넘길 수 없다. `--model`이 같이 있어야 한다. effort만 바꾸려면 사용자 기본 모델 이름을 명시한다.
 - `TASKS.md`의 `실행 방식` 열에 역할([roles.md](roles.md))과 등급을 같이 적는다. 예: `Independent Session (Orca claude worker, role: frontend, fast: haiku, 새 Worktree)`.

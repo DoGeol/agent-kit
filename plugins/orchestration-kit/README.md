@@ -29,7 +29,7 @@ orchestration-kit/
 └─ tests/run.sh                 로컬 검사
 ```
 
-Skill은 Plugin 폴더 안의 상대 경로(`../../policies/...`)로 정책을 읽는다. Plugin을 설치하면 폴더 전체가 함께 복사되므로 설치 위치에서도 그대로 읽힌다. 정책은 `policies/`에만 있고 Skill에 복제하지 않는다.
+Skill은 Plugin 폴더 안의 상대 경로(`../../policies/...`)로 정책을 읽는다. Plugin을 설치하면 폴더 전체가 함께 복사되므로 설치 위치에서도 그대로 읽힌다 (GitHub 마켓플레이스 설치본에서 Skill의 정책 읽기와 `kit.sh init`을 확인했다). 정책은 `policies/`에만 있고 Skill에 복제하지 않는다.
 
 ## Skill
 

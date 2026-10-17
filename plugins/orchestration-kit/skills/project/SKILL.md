@@ -47,6 +47,7 @@ description: 프로젝트의 중앙 Coordinator로 일할 때 사용한다. 프�
 - Worker에게 주는 Task 명세는 그 자체로 완결돼야 한다: 대상, 변경, 제약(건드리지 말 것), 소유 범위, 관찰 가능한 수용 기준. 커밋은 Coordinator가 한다고 적는다. Worker가 테스트용 프로세스를 띄울 수 있으면 "종료는 자기가 띄운 PID만, 이름·패턴 종료(`pkill` 등) 금지"와 "Worktree와 임시 디렉터리 밖에 쓰지 않음"을 적는다. Worker의 샌드박스 설정이 넓을 수 있다.
 - 명세 맨 앞에 역할 절을 넣는다. 역할 파일 본문을 읽어 그대로 붙인다 (경로만 주지 않는다). 순서와 형식은 [roles.md](../../policies/roles.md#명세에-넣기). Worker 시작 뒤 명세가 잘리지 않았는지 확인한다.
 - 하위 작업마다 등급(`fast` / `default` / `strong`)을 정하고 [routing.md](../../policies/routing.md#모델과-effort)의 Provider별 모델로 바꾼다. `.ai/ORCHESTRATION.md` Override가 있으면 그것을 따른다. 실제 적용값을 `실행 방식` 열에 적는다.
+- Orca `--worktree current`는 Coordinator 세션의 Worktree다. 셸의 현재 폴더가 아니다. 다른 저장소에서 일을 시키려면 그 저장소의 Worktree를 고르거나, 명세에 절대 경로를 적는다.
 - Orca Run·Task·Dispatch ID를 `TASKS.md`의 `Orca 참조` 열에 적는다.
 - Worker 시작이 에이전트 준비 단계에서 막히면(예: Codex의 작업 폴더 신뢰 확인 `agent-trust-workspace`, 업데이트 안내 `agent-update-prompt`) 응답의 recovery대로 그 터미널을 release하고 사용자에게 알린다. 에이전트 설정 변경·업데이트는 사용자 결정이다. 해결 뒤 같은 Task를 `--retry-of`로 다시 시작한다. Codex는 Worktree의 신뢰를 원본 저장소 경로로 판단한다. 원본 저장소 경로를 신뢰 목록에 한 번 등록하면 새 Worktree에서도 막히지 않는다 (setup Skill). Worktree 상위 폴더를 신뢰하는 것으로는 해결되지 않았다. Orca는 Worker를 시작할 때 Worktree 경로를 각 에이전트 신뢰 목록에 더하고, Worktree를 지워도 그 항목을 지우지 않는다. 정리할지는 사용자에게 묻는다. 해결되지 않으면 같은 Task를 다른 Provider로 다시 시작할 수 있다.
 - Coordinator 하나는 한 번에 Run 하나에 바인딩된다. 새 Run을 만들면 바인딩이 옮겨 가서 앞 Run의 `worker-start`가 거부된다 (`consumer_fenced`). 앞 Run의 Worker를 모두 정리한 뒤 `run-use`로 바꾼다. 여러 프로젝트를 동시에 감독하려면 프로젝트마다 Coordinator 세션을 따로 둔다.
