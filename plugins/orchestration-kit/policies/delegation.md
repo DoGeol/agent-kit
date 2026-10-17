@@ -28,7 +28,7 @@ frontmatter 필수 필드:
 | `priority` | `high` \| `medium` \| `low` |
 | `createdAt` | ISO 8601 |
 
-본문 필수 절: `목표`, `완료 조건`, `제약`. 선택 절: `제안 역할` ([roles.md](roles.md)의 역할 이름. Project Coordinator는 참고만 한다).
+본문 필수 절: `목표`, `완료 조건`, `제약`. 선택 절: `제안 역할` ([roles.md](roles.md)의 역할 이름. Project Coordinator는 참고만 한다), `제안 Provider` (Provider·모델 지정. Project는 따르고, 쓸 수 없으면 Portfolio에 알린다. [routing.md](routing.md#provider-선택)).
 
 명세의 `status`는 작성 시점 값이며 다시 고치지 않는다. 이후 상태의 원본은 `portfolio/TASKS.md`다. 명세에는 `전달 기록`만 덧붙인다.
 

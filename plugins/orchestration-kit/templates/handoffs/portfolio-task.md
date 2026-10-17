@@ -25,6 +25,9 @@ createdAt: YYYY-MM-DDTHH:MM:SS+09:00
 ## 제안 역할
 <!-- 선택. 예: frontend + designer. 최종 선택은 Project Coordinator -->
 
+## 제안 Provider
+<!-- 선택. 예: 구현 codex, 리뷰 claude opus. 비우면 Project가 정한다 -->
+
 ## 관련 프로젝트·의존성
 <!-- 같은 PORT ID로 위임한 다른 프로젝트 -->
 

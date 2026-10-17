@@ -38,12 +38,13 @@ Portfolio 저장소에서 일한다. `.ai/ORCHESTRATION.md`가 없거나 `role: 
 - 새 요청은 `TASKS.md`에 `PORT-NNNN`으로 등록한다 (마지막 번호 + 1, 상태 `backlog`).
 - 프로젝트 내부 Subtask는 적지 않는다. 사용자 관점의 업무·마일스톤 단위로만 관리한다.
 - 우선순위·프로젝트 간 의존성·프로젝트 간 계약 문제는 `PRIORITIES.md`에 정리한다. 프로젝트 간 계약 결정은 관련 Project의 영향 분석을 받은 뒤 사용자와 확정한다.
+- 주간 사용량(`orca account list --json`의 `rateLimits`)을 보고 이번 주 Provider 비중을 `PRIORITIES.md`에 적을 수 있다 (예: Codex 주간 60% 이상이면 우선순위 high 업무에만). Project는 이것을 Provider 순서에 반영한다.
 
 ## 4. 위임
 
 [delegation.md](../../policies/delegation.md) 절차를 따른다.
 
-1. 템플릿 [../../templates/handoffs/portfolio-task.md](../../templates/handoffs/portfolio-task.md)로 `handoffs/outbox/<projectId>/<portfolioTaskId>.md`를 만든다. 결과와 완료 조건만 적고 구현 방식은 적지 않는다. 주된 산출물로 역할을 알 수 있으면(서버 구현 → `backend`, 화면 → `frontend` + `designer`) `제안 역할`에 [역할 목록](../../policies/roles.md#역할-목록)의 이름을 적는다. 모르면 비운다. 최종 선택은 Project Coordinator가 한다.
+1. 템플릿 [../../templates/handoffs/portfolio-task.md](../../templates/handoffs/portfolio-task.md)로 `handoffs/outbox/<projectId>/<portfolioTaskId>.md`를 만든다. 결과와 완료 조건만 적고 구현 방식은 적지 않는다. 주된 산출물로 역할을 알 수 있으면(서버 구현 → `backend`, 화면 → `frontend` + `designer`) `제안 역할`에 [역할 목록](../../policies/roles.md#역할-목록)의 이름을 적는다. 모르면 비운다. 최종 선택은 Project Coordinator가 한다. 사용자가 Provider·모델을 지정했으면 `제안 Provider`에 적는다. Project는 이것을 따른다.
 2. `TASKS.md` 상태를 `assigned`로 바꾼다.
 3. 전달한다: 대상 프로젝트의 Coordinator 세션이 살아 있으면 세션 간 메시지로 명세 경로를 보낸다 (사용자가 원할 때. 받는 세션이 분명하지 않으면 묻는다). 없으면 사용자에게 Coordinator 세션을 시작하거나 명세 경로를 전달하도록 안내한다. 파일만 만들고 전달된 것으로 기록하지 않는다. 전달하면 명세의 `전달 기록`을 채운다.
 4. 수락(`accepted`)은 다음 Pull에서 프로젝트 `.ai/TASKS.md`의 연결을 보고 기록한다. Project 행이 `blocked`면 수락이 아니다 ([delegation.md](../../policies/delegation.md#절차)).

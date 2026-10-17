@@ -65,7 +65,51 @@ Provider별 모델 (별칭은 도구가 최신 버전으로 해석한다):
 - `TASKS.md`의 `실행 방식` 열에 역할([roles.md](roles.md))과 등급을 같이 적는다. 예: `Independent Session (Orca claude worker, role: frontend, fast: haiku, 새 Worktree)`.
 
 - 요청값과 실제 적용값을 구분한다. 실행 도구가 돌려준 실제 적용값(Orca는 `worker-start` 응답의 `launch.effective`)을 `TASKS.md`의 `실행 방식` 열에 적는다. 요청값만 보고 적용됐다고 쓰지 않는다.
-- Worker 계획(Worker 수, Provider, `strong` 등급)은 Task마다 사용자 승인을 받는다 ([permissions.md](permissions.md#결정권)).
+- Worker 계획(Worker 수, Provider 후보 순서, `strong` 등급)은 Task마다 사용자 승인을 받는다 ([permissions.md](permissions.md#결정권)). Provider 고르는 법은 [Provider 선택](#provider-선택).
+
+## Provider 선택
+
+역할과 등급을 정한 뒤 하위 작업마다 Provider를 고른다. 역할 명세는 Provider와 무관하므로 어느 Provider든 같은 명세를 받는다.
+
+### 정하는 순서
+
+1. **요청에 지정이 있으면 따른다.**
+   - 사용자가 지정하면 그대로 쓴다 (예: "이건 codex로", "리뷰는 opus로").
+   - 위임 명세의 `제안 Provider`는 Portfolio 결정으로 보고 따른다. 쓸 수 없으면(한도, 준비 안 됨) Portfolio에 알린다.
+   - `.ai/ORCHESTRATION.md` Override에 역할별 지정이 있으면 따른다 (예: `reviewer: claude`).
+2. **지정이 없으면 Coordinator가 고른다.**
+   1. 후보: Provider 순서(Override, 없으면 아래 기본 순서) 중 그 등급의 모델이 있는 Provider.
+   2. 뺀다: 준비 안 됨(설치 안 됨, Codex 원본 저장소 신뢰 미등록 등), 사용량 주의 이상이거나 예상 소모를 더하면 85%를 넘음, Coordinator 몫 보호 대상.
+   3. 리뷰·교차 검증은 그 결과를 만든 Provider가 아닌 후보를 먼저 고른다.
+   4. 남은 후보 중 순서상 첫 번째를 쓴다. 후보가 없으면 기다리거나 Portfolio에 확인한다.
+3. **고른 이유를 남긴다.** `TASKS.md`의 `실행 방식` 열에 한 줄로 적는다. 예: `codex (자동: claude 5h 72%로 제외, 순서 2번째)`.
+
+Worker 계획 승인([permissions.md](permissions.md#결정권))은 이 후보 순서까지 포함한다. 작업 중에 같은 등급 안에서 순서상 다음 후보로 바꾸는 것은 다시 묻지 않는다. 순서 밖 Provider나 등급 낮추기는 [Portfolio 확인](#portfolio-확인)을 거친다.
+
+### 기본 순서
+
+[권장] 모든 등급에서 `claude` → `codex` → `antigravity`. 프로젝트는 Override의 `Provider 순서`, `제외 Provider`로 바꾼다. Portfolio는 주간 사용량을 보고 `PRIORITIES.md`에 이번 주 Provider 비중을 적을 수 있고, Project는 그것을 순서에 반영한다.
+
+### 역할별 검증 현황
+
+[검증됨] 이 Kit의 PoC에서 완료와 수락까지 확인한 조합이다.
+
+| Provider | 확인한 역할 |
+|---|---|
+| Claude (`haiku`) | `frontend`+`designer`, `qa`, `docs` |
+| Codex | `backend` |
+| AGY | `reviewer`(읽기 전용), `backend` |
+
+표에 없는 조합도 쓸 수 있다. 쓰면 결과를 다른 Provider가 리뷰하거나 Coordinator가 평소보다 자세히 확인하고, 수락하면 이 표에 더한다.
+
+### 소모량 기록과 예상
+
+- Worker를 시작할 때와 끝날 때 그 Provider의 5시간 사용률을 `실행 방식` 열에 적는다. 예: `codex 5h 30→42%`.
+- 예상 소모는 같은 역할·등급의 최근 기록으로 잡는다. [권장] 기록이 없으면 15%로 본다.
+
+### Coordinator 몫
+
+[권장] Coordinator와 같은 Provider의 Worker는 그 Provider의 5시간 사용률이 70% 이상이면 새로 시작하지 않는다. Coordinator가 먼저 멈추는 것을 막는다.
 
 ## 사용량
 
@@ -103,7 +147,7 @@ Worker가 쓰는 Provider가 위험이면:
 2. Worktree와 미커밋 변경은 지우지 않는다.
 3. 이어갈 방법을 고른다. 품질이나 일정에 영향이 있으면 아래 Portfolio 확인을 거친다.
    - 초기화 시각까지 기다린 뒤 같은 Provider로 재시작
-   - 다른 Provider로 재시작 (같은 역할 명세와 진행 파일 경로)
+   - 다른 Provider로 재시작 (같은 역할 명세와 진행 파일 경로). 후보 순서 안의 다음 Provider면 확인 없이 한다
    - 다른 계정으로 전환한 뒤 재시작 (사용자가 Orca 화면에서 전환한다. 새 세션부터 적용된다)
    - 등급 낮추기
 4. 같은 Task를 같은 Worktree에서 `--retry-of`로 다시 시작한다. 명세에 진행 파일 경로와 "이미 끝낸 단계는 다시 하지 않는다"를 넣는다.
@@ -119,7 +163,7 @@ Coordinator가 쓰는 Provider가 위험이면:
 
 ### Portfolio 확인
 
-등급 낮추기, 계획에 없던 Provider, 기다림으로 인한 일정 지연처럼 품질이나 일정에 영향이 있는 선택은 Project Coordinator가 Portfolio에 확인을 요청한다. Portfolio 세션이 살아 있으면 세션 간 메시지로, 없으면 사용자에게 묻는다. 요청에 적는다: Task, Provider별 사용량과 초기화 시각, 남은 일, 선택지마다 품질·일정 영향. 결정은 `TASKS.md`의 `실행 방식`과 `STATUS.md`(또는 `decisions/`)에 남긴다.
+등급 낮추기, 후보 순서 밖의 Provider, 기다림으로 인한 일정 지연처럼 품질이나 일정에 영향이 있는 선택은 Project Coordinator가 Portfolio에 확인을 요청한다. Portfolio 세션이 살아 있으면 세션 간 메시지로, 없으면 사용자에게 묻는다. 요청에 적는다: Task, Provider별 사용량과 초기화 시각, 남은 일, 선택지마다 품질·일정 영향. 결정은 `TASKS.md`의 `실행 방식`과 `STATUS.md`(또는 `decisions/`)에 남긴다.
 
 ### 쓰지 않는 것
 

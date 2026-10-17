@@ -9,7 +9,7 @@
 | 담당 Task 범위 안의 구현 세부 | Worker | 범위 밖이면 Project Coordinator |
 | 프로젝트 내부 설계·통합·병합 | Project Coordinator | 프로젝트 간 계약에 영향이 있으면 Portfolio로 상향 |
 | 프로젝트 간 일정·프로젝트 간 계약(API·공유 스키마) | Portfolio Coordinator | 관련 Project의 영향 분석을 먼저 받는다 |
-| Worker 계획 (Worker 수, Provider, `strong` 등급) | 사용자 | Task마다 한 번 승인. 승인한 범위 안의 Worker 시작·재시작은 다시 묻지 않는다 |
+| Worker 계획 (Worker 수, Provider 후보 순서, `strong` 등급) | 사용자 | Task마다 한 번 승인. 승인한 범위 안의 Worker 시작·재시작과 후보 순서 안의 Provider 교체는 다시 묻지 않는다 |
 | Push, PR 생성, 저장소 밖으로 공유 | 사용자 | 매번 명시적 승인 |
 | 운영 배포, 데이터 삭제, 외부 비용(유료 서비스·결제), 권한 변경, 민감정보 접근 | 사용자 | 매번 명시적 승인 |
 | 에이전트 계정 전환 | 사용자 | 사용자가 Orca 화면에서 한다. 한도 초기화 크레딧·추가 사용량 결제는 쓰지 않는다 ([routing.md](routing.md#쓰지-않는-것)) |
