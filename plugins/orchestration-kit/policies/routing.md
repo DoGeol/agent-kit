@@ -190,7 +190,7 @@ Coordinator가 쓰는 Provider가 위험이면:
 
 예고 없이 한도에 걸렸을 때: Worker가 진행 없이 멈추면 Orca `worker-read`로 출력을 보고 한도 문구(Claude: `You've hit your session limit`)를 찾고 `kit.sh usage`로 읽는다. 한도면 위 Worker 절차의 2번부터 따른다.
 
-Claude의 자동 재개: Claude Code 대화형 세션(claude.ai 구독 로그인)은 5시간 한도에 걸리면 기본으로 그 자리에서 기다렸다가 초기화 뒤 하던 일을 이어 간다 (설정 `autoContinueAtUsageLimit`, Claude Code 2.1.234 이상). `claude -p`는 기다리지 않는다. Orca가 띄운 Claude Worker에서 실제로 이어 가는지는 확인하지 않았다.
+Claude의 자동 재개: Claude Code 대화형 세션(claude.ai 구독 로그인)은 5시간 한도에 걸리면 기본으로 그 자리에서 기다렸다가 초기화 뒤 하던 일을 이어 간다 (설정 `autoContinueAtUsageLimit`, Claude Code 2.1.234 이상). `claude -p`는 기다리지 않는다. Orca는 Claude Worker를 사용자 기본값대로 터미널(대화형)로 띄우고 `--settings`를 넘기지 않으므로 이 조건에 맞는다 (설정 확인). 실제로 이어 가는지는 한도에 걸렸을 때 관찰해 이 문장을 고친다.
 
 - 한도에 걸린 Claude Worker는 초기화 뒤 스스로 이어 갈 수 있다. 다른 Provider로 같은 일을 재시작하기 전에 원래 Worker를 먼저 release하거나 멈춘다. 두 Worker가 같은 Worktree를 고치지 않게 한다.
 - 초기화까지 기다리기로 했으면 Claude Worker는 그대로 둬도 된다. 초기화 뒤 진행이 없으면 위 Worker 절차를 따른다.
@@ -245,7 +245,7 @@ Claude의 자동 재개: Claude Code 대화형 세션(claude.ai 구독 로그인
 `worker_done`만 보고 완료로 처리하지 않는다. Project 수락 절차:
 
 1. 결과가 정확한 Task·Dispatch와 연결되는지 확인한다.
-2. Diff, 테스트 결과, 남은 이슈를 확보한다.
+2. Diff, 테스트 결과, 남은 문제를 확보한다.
 3. 다른 Worker의 계약과 충돌하지 않는지 검토한다.
 4. 필요하면 추가 리뷰나 통합 테스트를 한다.
 5. Coordinator가 병합을 결정하고 확정 문서를 갱신한다.

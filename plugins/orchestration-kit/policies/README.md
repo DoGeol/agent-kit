@@ -10,6 +10,18 @@ orchestration-kit의 **유일한 정책 원본**이다. 특정 에이전트에 �
 
 미구현 기능(자동 동기화, 상주 감시, 자동 Bootstrap, UI·DB·MCP 서버)을 구현된 것처럼 말하지 않는다.
 
+## 용어
+
+헷갈리기 쉬운 말은 아래 뜻으로만 쓴다.
+
+| 용어 | 뜻 | 기록 위치 |
+|---|---|---|
+| 이슈 | GitHub 저장소의 Issues. 다른 뜻으로 쓰지 않는다 | GitHub. 검토 기록은 `ISSUES.md` (issue-review Skill) |
+| 블로커 | Task 진행을 막는 것. Task 상태 `blocked` | `TASKS.md`, 보고서 `Risks / Blockers` |
+| 남은 문제·위험 | 완료했지만 알려야 할 한계나 위험 | 보고서 `Risks / Blockers` |
+| 후속 업무 | 이번 Task 밖에서 할 일 | 보고서 `Follow-ups`, `backlog` |
+| 결정 요청 | Worker가 Coordinator에게 승인을 구하는 변경 | 메시지 `DECISION_REQUEST`, `decisions/` |
+
 ## 문서
 
 | 문서 | 내용 |

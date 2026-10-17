@@ -17,7 +17,8 @@ orchestration-kit/
 ├─ skills/                      Agent Skills 형식. 정책을 실행하는 Adapter
 │  ├─ portfolio/SKILL.md
 │  ├─ project/SKILL.md
-│  └─ setup/SKILL.md
+│  ├─ setup/SKILL.md
+│  └─ issue-review/SKILL.md
 ├─ policies/                    공통 정책 원본 (벤더 중립)
 ├─ roles/                       Worker 역할 프로필 (frontend, designer, backend, qa, reviewer, docs)
 ├─ templates/                   초기화·위임·보고 템플릿
@@ -39,6 +40,7 @@ Skill은 Plugin 폴더 안의 상대 경로(`../../policies/...`)로 정책을 �
 | setup | `/orchestration-kit:setup` | 저장소를 Portfolio 또는 Project로 초기화, 환경 점검, `CLAUDE.md`·`AGENTS.md` 진입점 제안, Portfolio 연결 |
 | project | `/orchestration-kit:project` | 컨텍스트 확인, 작업 분해, Direct/Subagent/Session/Worktree 선택, Orca Worker 감독, 검증, 완료 보고 |
 | portfolio | `/orchestration-kit:portfolio` | 프로젝트 등록·목록, 업무·우선순위, 위임, 완료 보고 Pull, 전체 요약 |
+| issue-review | `/orchestration-kit:issue-review` | GitHub 저장소 이슈를 마지막 확인 이후분만 모아 분류·검토하고 다음 행동 제안. 요청할 때만, 댓글·닫기는 승인 뒤 |
 
 "이 저장소 오케스트레이션 초기화해줘", "전체 현황 보여줘"처럼 말해도 description으로 골라진다.
 

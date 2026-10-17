@@ -17,8 +17,8 @@ for s in "$root"/skills/*/SKILL.md; do
   [ "$keys" = "description name " ] || fail "$s frontmatter keys: $keys"
   grep -q "^name: $dir\$" "$s" || fail "$s name != $dir"
 done
-[ "$(ls -d "$root"/skills/*/ | wc -l | tr -d ' ')" = 3 ] || fail "expected 3 skills"
-ok "skill frontmatter (portfolio, project, setup)"
+[ "$(ls -d "$root"/skills/*/ | wc -l | tr -d ' ')" = 4 ] || fail "expected 4 skills"
+ok "skill frontmatter (portfolio, project, setup, issue-review)"
 
 # 2. Relative Markdown links resolve inside the plugin
 find "$root" -name '*.md' -not -path '*/tests/*' | while IFS= read -r f; do
