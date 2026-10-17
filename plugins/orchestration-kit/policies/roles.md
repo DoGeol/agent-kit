@@ -45,6 +45,24 @@ Worker·Subagent에 맡길 일마다 **역할**을 정한다. 역할은 관점, 
 - Plugin에 없는 `<id>`는 그 프로젝트만의 역할이 된다. 형식은 위 규격을 따른다.
 - `.ai/roles/`는 필요할 때 만든다. 초기화하지 않는다.
 
+## 직군 지식 (Skill)
+
+역할 파일은 명세에 통째로 들어가므로 짧게 둔다. 길어지는 직군 지식(점검표, 설계 규칙, 도구 사용법)은 Agent Skill로 만들고 명세에는 Skill 이름만 적는다.
+
+- [확정] Orca Worker가 새 Worktree에서 불러오는 Skill 위치:
+
+  | Worker | 저장소 `.agents/skills/` | 저장소 `.claude/skills/` | Claude Plugin Skill |
+  |---|---|---|---|
+  | Claude | 못 읽음 | 읽음 | 읽음 |
+  | Codex | 읽음 | 못 읽음 | 못 읽음 |
+  | AGY | 읽음 | 못 읽음 | 못 읽음 |
+
+- [확정] 세 Provider가 같이 쓰려면 원본을 `.agents/skills/<이름>/SKILL.md`에 두고 `.claude/skills/<이름>`을 `../../.agents/skills/<이름>`으로 가리키는 symlink로 둔다. Claude Worker가 symlink로 불러오는 것을 확인했다.
+- [확정] Orca가 띄운 Codex는 사용자 폴더의 Codex Skill(`~/.codex/skills`)을 보지 못한다 (Orca 전용 `CODEX_HOME`을 쓴다). 사용자 폴더 설치에 기대지 않고 저장소에 둔다.
+- [확정] 명세에 `쓸 Skill: <이름> (작업 전에 실행한다)` 한 줄을 넣으면 Claude Worker가 그 Skill을 실행했다.
+- [권장] 효과는 작업마다 다르다. 넣기 전과 뒤를 같은 Task·역할 수용 기준으로 비교한다. 접근성 Skill로 도움말 대화상자를 만든 비교(Claude `haiku` 2:2)에서는 채점 10항목이 양쪽 모두 만점이라 차이가 없었다. 모델이 이미 아는 내용이면 Skill이 더하는 것이 없다. 프로젝트 고유 규칙이나 모델이 모르는 사내 지식부터 Skill로 만든다.
+- Skill 추가는 저장소 파일을 늘리는 일이므로 사용자 승인을 받는다. 형식은 Agent Skills 규격(frontmatter는 `name`, `description`)을 따른다.
+
 ## 고르기
 
 1. 하위 작업마다 주 역할 1개를 정한다. 산출물이 무엇인지로 고른다 (화면 코드 → `frontend`, 화면 설계 → `designer`).
@@ -71,6 +89,7 @@ Worker·Subagent에 맡길 일마다 **역할**을 정한다. 역할은 관점, 
 <roles/<주 역할>.md 본문>
 <.ai/roles/<주 역할>.md 본문, 있으면>
 <보조 역할의 관점과 수용 기준, 있으면>
+쓸 Skill: <이름> (작업 전에 실행한다), 있으면
 
 ## 작업
 <대상, 변경, 제약, 소유 범위, 수용 기준. project Skill의 명세 규칙>
