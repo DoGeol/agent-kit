@@ -53,12 +53,15 @@ frontmatter 필수 필드:
    - `handoffs/processed/<reportId>.md`가 있으면 건너뛴다.
 2. `invalid` 보고는 처리하지 않고 사용자에게 보여준다. 사용자가 확인하면 `outcome: invalid` 마커를 남겨 다음 Pull에 다시 나오지 않게 한다. 정정은 Project가 새 개정번호로 낸다.
 3. 같은 `projectTaskId`의 보고가 여럿이면 개정번호 순으로 처리한다. 더 높은 개정번호가 이미 처리됐으면 상태를 바꾸지 않고 `outcome: superseded` 마커만 남긴다. 오래된 보고가 최신 상태를 덮지 않는다.
-4. 대상 업무를 찾는다. `origin: portfolio`는 `portfolioTaskId`로 찾는다. `project-direct`는 새 Portfolio 업무를 만들거나 기존 업무에 연결한다. 불분명하면 사용자에게 묻는다.
+4. `portfolio/TASKS.md`의 보고서 열에 이 `reportId`가 이미 있으면 이전 Pull이 마커 직전에 끊긴 것이다. 갱신을 건너뛰고 7단계 마커만 만든다. 없으면 대상 업무를 찾는다. `origin: portfolio`는 `portfolioTaskId`로 찾는다. `project-direct`는 새 Portfolio 업무를 만들거나 기존 업무에 연결한다. 불분명하면 사용자에게 묻는다.
 5. 상태를 정한다. 증거 없는 `completed`, Portfolio 상태와 충돌하는 보고는 `needs-review`로 받는다. 자동으로 덮어쓰지 않는다.
 6. `portfolio/TASKS.md`, `DASHBOARD.md`, 필요하면 `PRIORITIES.md`를 갱신한다.
-7. 6단계가 끝난 뒤에만 처리 마커를 만든다: `scripts/kit.sh mark <hub> <projectId> <reportId> <outcome> [메모]` (`outcome`: `applied` \| `superseded` \| `needs-review` \| `invalid`). 중간에 실패하면 마커를 만들지 않는다. 다음 Pull에서 다시 처리된다.
+7. 6단계가 끝난 뒤에만 처리 마커를 만든다: `scripts/kit.sh mark <hub> <projectId> <reportId> <outcome> [메모]` (`outcome`: `applied` \| `superseded` \| `needs-review` \| `invalid`). 6단계 변경과 마커는 한 커밋에 넣는다. 중간에 실패하면 마커를 만들지 않는다. 다음 Pull에서 다시 처리된다.
 8. 각 프로젝트의 `.ai/TASKS.md`에서 위임 수락(`portfolioTaskId` 연결)을 확인하고, `.ai/STATUS.md`를 `DASHBOARD.md`에 요약한다. 관찰 시각을 같이 적는다.
 9. `PROJECTS.md`의 `lastPulled`를 갱신한다.
+10. `DASHBOARD.md`의 `Last pull`을 지금 시각과 처리·남긴 건수로 바꾼다.
+
+Portfolio 체크포인트: Portfolio에는 `STATUS.md`가 없다. `DASHBOARD.md`의 `Last pull`과 `진행 중`·`블로커` 절이 체크포인트다. `portfolio/TASKS.md` 상태를 바꿀 때마다 같은 커밋에서 이 절들을 맞춘다 ([lifecycle.md](lifecycle.md#체크포인트)).
 
 상위 업무 종결: 같은 `portfolioTaskId`로 위임한 모든 프로젝트의 `completed` 보고가 처리돼야 `completed`로 바꾼다.
 

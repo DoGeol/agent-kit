@@ -68,7 +68,7 @@ description: 프로젝트의 중앙 Coordinator로 일할 때 사용한다. 프�
 
 ## 5. 검증과 수락
 
-`worker_done`이 오면 Task를 `in-review`로 바꾸고 [routing.md](../../policies/routing.md#완료의-세-단계)의 수락 절차를 따른다. 테스트·Diff를 직접 확인하고, 명세에 넣은 역할의 수용 기준을 항목마다 확인한다. Worker가 통과라고 적은 항목도 직접 본다. 소유 범위 밖 변경이 없는지도 본다. 통과하면 Coordinator가 커밋하고 [반영 방식](../../policies/routing.md#반영-방식)대로 반영한다: `direct-merge`는 병합한 뒤 `completed`, `pull-request`는 PR을 연 뒤 `in-review`, 병합되면 `completed`. 실패하면 재작업 또는 `failed`·`blocked`. 재작업은 맥락이 남아 있는 같은 Worker에 후속 Task로 맡기는 것을 먼저 검토한다. 결과가 형식은 맞아도 정책·계약과 어긋나면 수락하지 않는다.
+`worker_done`이 오면 Task를 `in-review`로 바꾸고 [routing.md](../../policies/routing.md#완료의-세-단계)의 수락 절차를 따른다. 테스트·Diff를 직접 확인하고, 명세에 넣은 역할의 수용 기준을 항목마다 확인한다. Worker가 통과라고 적은 항목도 직접 본다. 소유 범위 밖 변경이 없는지도 본다. 통과하면 Coordinator가 커밋하고 [반영 방식](../../policies/routing.md#반영-방식)대로 반영한다: `direct-merge`는 병합한 뒤 `completed`, `pull-request`는 PR을 연 뒤 `in-review`, 병합되면 `completed`. 실패하면 재작업 또는 `failed`·`blocked`. 재작업은 맥락이 남아 있는 같은 Worker에 후속 Task로 맡기는 것을 먼저 검토한다. [권장] 같은 Task를 두 번 재작업해도 수락하지 못하면 `failed`로 두고 사용자에게 알린다. 결과가 형식은 맞아도 정책·계약과 어긋나면 수락하지 않는다.
 
 ## 6. 문서 갱신과 완료 보고
 
