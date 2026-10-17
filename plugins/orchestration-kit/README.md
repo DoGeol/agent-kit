@@ -25,6 +25,7 @@ orchestration-kit/
 │  ├─ portfolio/                Portfolio 저장소에 만들 파일
 │  ├─ handoffs/                 위임 명세
 │  └─ reports/                  완료 보고
+├─ docs/                        사용 예시
 ├─ scripts/kit.sh               초기화·등록·미처리 보고 목록·처리 마커 (POSIX sh, 덮어쓰기 없음)
 └─ tests/run.sh                 로컬 검사
 ```
@@ -89,6 +90,8 @@ $kit register ~/workspace/workspace-hub ~/workspace/sample-app
 1. Portfolio: 업무 `PORT-0001` 등록 → `handoffs/outbox/<projectId>/PORT-0001.md` 위임 명세 → 사용자가 대상 프로젝트의 Coordinator 세션에 전달.
 2. Project: 수락하면 `.ai/TASKS.md`에 `SAMPLE-0001` 연결 → 라우팅·실행·검증 → `.ai/reports/sample-app-SAMPLE-0001-r01.md` 발행 → 기준 브랜치에 커밋.
 3. Portfolio: `kit.sh pending`으로 미처리 보고 확인 → `TASKS.md`·`DASHBOARD.md` 갱신 → `kit.sh mark`로 처리 마커. 같은 보고는 다시 목록에 나오지 않는다.
+
+예시 하나로 처음부터 끝까지 따라가는 설명과 Worker 모델·effort 정하는 순서는 [docs/workflow-example.md](docs/workflow-example.md).
 
 Portfolio가 꺼져 있어도 Project는 일하고 보고서를 남긴다. 자동 알림은 없다. Pull은 사용자 요청이나 Portfolio 세션 시작 때 한다.
 
