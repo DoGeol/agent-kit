@@ -1,6 +1,6 @@
 {
   "name": "orchestration-kit",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Multi-AI orchestration on Orca + Claude Code: Portfolio / Project / Setup skills over vendor-neutral Markdown policies and templates",
   "author": { "name": "DoGeol" },
   "license": "MIT",

@@ -79,10 +79,10 @@ Provider별 모델 (별칭은 도구가 최신 버전으로 해석한다):
    - `.ai/ORCHESTRATION.md` Override에 역할별 지정이 있으면 따른다 (예: `reviewer: claude`).
 2. **지정이 없으면 Coordinator가 고른다.**
    1. 후보: Provider 순서(Override, 없으면 아래 기본 순서) 중 그 등급의 모델이 있는 Provider.
-   2. 뺀다: 준비 안 됨(설치 안 됨, Codex 원본 저장소 신뢰 미등록 등), 사용량 주의 이상이거나 예상 소모를 더하면 85%를 넘음, Coordinator 몫 보호 대상.
+   2. 뺀다: 준비 안 됨(설치 안 됨, Codex 원본 저장소 신뢰 미등록 등), 방금 읽은 사용량이 주의 이상([기준](#기준), 소모 속도 반영), Coordinator 몫 보호 대상.
    3. 리뷰·교차 검증은 그 결과를 만든 Provider가 아닌 후보를 먼저 고른다.
    4. 남은 후보 중 순서상 첫 번째를 쓴다. 후보가 없으면 기다리거나 Portfolio에 확인한다.
-3. **고른 이유를 남긴다.** `TASKS.md`의 `실행 방식` 열에 한 줄로 적는다. 예: `codex (자동: claude 5h 72%로 제외, 순서 2번째)`.
+3. **고른 이유를 남긴다.** `TASKS.md`의 `실행 방식` 열에 한 줄로 적는다. 예: `codex (자동: claude 5h 72%로 제외, 순서 2번째)`. 적은 사용률은 그때의 근거일 뿐이고 다음 판단에 쓰지 않는다.
 
 Worker 계획 승인([permissions.md](permissions.md#결정권))은 이 후보 순서까지 포함한다. 작업 중에 같은 등급 안에서 순서상 다음 후보로 바꾸는 것은 다시 묻지 않는다. 순서 밖 Provider나 등급 낮추기는 [Portfolio 확인](#portfolio-확인)을 거친다.
 
@@ -102,11 +102,6 @@ Worker 계획 승인([permissions.md](permissions.md#결정권))은 이 후보 �
 
 표에 없는 조합도 쓸 수 있다. 쓰면 결과를 다른 Provider가 리뷰하거나 Coordinator가 평소보다 자세히 확인하고, 수락하면 이 표에 더한다.
 
-### 소모량 기록과 예상
-
-- Worker를 시작할 때와 끝날 때 그 Provider의 5시간 사용률을 `실행 방식` 열에 적는다. 예: `codex 5h 30→42%`.
-- 예상 소모는 같은 역할·등급의 최근 기록으로 잡는다. [권장] 기록이 없으면 15%로 본다.
-
 ### Coordinator 몫
 
 [권장] Coordinator와 같은 Provider의 Worker는 그 Provider의 5시간 사용률이 70% 이상이면 새로 시작하지 않는다. Coordinator가 먼저 멈추는 것을 막는다.
@@ -121,6 +116,8 @@ Worker 계획 승인([permissions.md](permissions.md#결정권))은 이 후보 �
 - 값은 Provider별 활성 계정 기준이다. 다른 계정은 `inactiveClaudeAccounts`·`inactiveCodexAccounts`에 나온다 (계정이 하나뿐인 환경이라 검증 필요).
 - Orca에 연결할 수 없을 때: Claude는 `claude -p "/usage" --output-format stream-json --verbose`의 `usage_report.rate_limits` (비용 0), Codex는 세션 기록 `sessions/**/rollout-*.jsonl`의 `rate_limits` (마지막 Codex 실행 시점 값). AGY는 대체 방법이 없다.
 - Claude Coordinator와 Claude Worker는 같은 계정 한도를 나눠 쓴다.
+- 판단할 때마다 새로 읽는다. 전에 읽은 값이나 `TASKS.md`에 적은 값으로 판단하지 않는다.
+- [권장] `updatedAt`이 15분보다 오래됐으면 대체 방법으로 다시 읽는다. 다시 못 읽으면 한 단계 높은 상태로 본다.
 
 ### 확인 시점
 
