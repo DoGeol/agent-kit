@@ -15,11 +15,11 @@ frontmatter 필수 필드:
 | `schema` | `project-report/v1` |
 | `reportId` | `<projectId>-<projectTaskId>-rNN` |
 | `projectId` | `.ai/ORCHESTRATION.md`의 값 |
-| `portfolioTaskId` | `origin: portfolio`이면 `PORT-NNNN`, `project-direct`이면 `null` |
+| `portfolioTaskId` | `origin: portfolio`이면 `PORT-NNNN`, `project-direct`이면 `null` (`TASKS.md`의 `-`도 보고서에서는 `null`) |
 | `projectTaskId` | `<taskPrefix>-NNNN` |
 | `origin` | `portfolio` \| `project-direct` |
 | `status` | `completed` \| `blocked` \| `needs-review` \| `cancelled` |
-| `verifiedAt` | Project가 검증을 마친 시각, ISO 8601 |
+| `verifiedAt` | `completed`는 Project가 검증을 마친 시각, 그 밖의 상태는 판단한 시각. ISO 8601 |
 | `coordinator` | 보고한 Coordinator의 Provider (`claude`, `codex`, `agy`) |
 
 본문 필수 절: `Summary`, `Changes`, `Acceptance evidence`, `Decisions`, `Risks / Blockers`, `Follow-ups`, `References`.
@@ -50,12 +50,12 @@ frontmatter 필수 필드:
    - Git 저장소면 `reportsRef` 커밋에서 `.ai/reports/`를 읽는다. 커밋되지 않은 작업 트리 파일은 정식 보고가 아니다. Git이 아니면 폴더를 직접 읽는다.
    - frontmatter 필수 필드, 파일 이름 = `reportId`, `status` 값을 검사한다. 어긋나면 `invalid`로 내보낸다.
    - `handoffs/processed/<reportId>.md`가 있으면 건너뛴다.
-2. `invalid` 보고는 처리하지 않고 사용자에게 보여준다.
+2. `invalid` 보고는 처리하지 않고 사용자에게 보여준다. 사용자가 확인하면 `outcome: invalid` 마커를 남겨 다음 Pull에 다시 나오지 않게 한다. 정정은 Project가 새 개정번호로 낸다.
 3. 같은 `projectTaskId`의 보고가 여럿이면 개정번호 순으로 처리한다. 더 높은 개정번호가 이미 처리됐으면 상태를 바꾸지 않고 `outcome: superseded` 마커만 남긴다. 오래된 보고가 최신 상태를 덮지 않는다.
 4. 대상 업무를 찾는다. `origin: portfolio`는 `portfolioTaskId`로 찾는다. `project-direct`는 새 Portfolio 업무를 만들거나 기존 업무에 연결한다. 불분명하면 사용자에게 묻는다.
 5. 상태를 정한다. 증거 없는 `completed`, Portfolio 상태와 충돌하는 보고는 `needs-review`로 받는다. 자동으로 덮어쓰지 않는다.
 6. `portfolio/TASKS.md`, `DASHBOARD.md`, 필요하면 `PRIORITIES.md`를 갱신한다.
-7. 6단계가 끝난 뒤에만 처리 마커를 만든다: `scripts/kit.sh mark <hub> <reportId> <outcome> [메모]`. 중간에 실패하면 마커를 만들지 않는다. 다음 Pull에서 다시 처리된다.
+7. 6단계가 끝난 뒤에만 처리 마커를 만든다: `scripts/kit.sh mark <hub> <projectId> <reportId> <outcome> [메모]` (`outcome`: `applied` \| `superseded` \| `needs-review` \| `invalid`). 중간에 실패하면 마커를 만들지 않는다. 다음 Pull에서 다시 처리된다.
 8. 각 프로젝트의 `.ai/TASKS.md`에서 위임 수락(`portfolioTaskId` 연결)을 확인하고, `.ai/STATUS.md`를 `DASHBOARD.md`에 요약한다. 관찰 시각을 같이 적는다.
 9. `PROJECTS.md`의 `lastPulled`를 갱신한다.
 
@@ -74,7 +74,7 @@ outcome: applied
 PORT-0001: in-progress → completed
 ```
 
-`outcome`: `applied` | `superseded` | `needs-review`.
+`outcome`: `applied` | `superseded` | `needs-review` | `invalid`.
 
 동시성: [권장] Portfolio 파일은 한 번에 Portfolio 세션 하나만 갱신한다. 여러 작성자가 필요해지면 잠금 전략을 따로 정한다 (미결정).
 

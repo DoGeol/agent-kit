@@ -5,10 +5,12 @@
 #   kit.sh init portfolio <dir>
 #   kit.sh register <hubDir> <projectDir>
 #   kit.sh pending <hubDir>
-#   kit.sh mark <hubDir> <projectId> <reportId> <applied|superseded|needs-review> [note]
+#   kit.sh mark <hubDir> <projectId> <reportId> <applied|superseded|needs-review|invalid> [note]
 set -eu
 root=$(cd "$(dirname "$0")/.." && pwd)
 tab=$(printf '\t')
+nl='
+'
 
 die() { echo "kit.sh: $*" >&2; exit 1; }
 matches() { printf '%s\n' "$1" | grep -Eq "$2"; }
@@ -16,6 +18,7 @@ now() { date +%Y-%m-%dT%H:%M:%S%z | sed 's/\(..\)$/:\1/'; }
 # Print a YAML frontmatter value (flat `key: value` only) from stdin.
 fm() {
   awk -v k="$1" '
+    { sub(/\r$/, "") }
     NR == 1 && $0 != "---" { exit }
     NR > 1 && $0 == "---" { exit }
     NR > 1 { i = index($0, ":"); if (i && substr($0, 1, i - 1) == k) {
@@ -49,9 +52,10 @@ cmd_init() {
     ref=
     if is_git "$dir"; then
       ref=$(git -C "$dir" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true); ref=${ref#origin/}
-      [ -n "$ref" ] || ref=$(git -C "$dir" symbolic-ref --quiet --short HEAD 2>/dev/null || true)
+      # No remote default: use the main worktree's branch, not a linked worktree's (a Worker branch).
+      [ -n "$ref" ] || ref=$(git -C "$dir" worktree list --porcelain 2>/dev/null | awk '/^$/ { exit } /^branch / { sub("refs/heads/", "", $2); print $2 }')
     fi
-    matches "$ref" '^[A-Za-z0-9._/-]+$' || ref=main
+    matches "$ref" '^[A-Za-z0-9._/-]+$' || { ref=main; echo "주의: 기준 브랜치를 찾지 못해 reportsRef를 main으로 둔다. .ai/ORCHESTRATION.md에서 확인한다." >&2; }
   fi
   conf="$dir/.ai/ORCHESTRATION.md"
   if [ -f "$conf" ]; then
@@ -112,6 +116,7 @@ cmd_register() {
   fi
   other=$(printf '%s\n' "$rows" | awk -F'\t' -v p="$path" '$2 == p { print $1; exit }')
   [ -z "$other" ] || die "같은 경로가 이미 ${other}로 등록됨"
+  [ -z "$(tail -c 1 "$hub/portfolio/PROJECTS.md")" ] || echo >> "$hub/portfolio/PROJECTS.md"
   printf '| %s | %s | active | - |\n' "$id" "$path" >> "$hub/portfolio/PROJECTS.md"
   echo "등록: $id -> $path"
   prefix=$(fm taskPrefix < "$proj/.ai/ORCHESTRATION.md")
@@ -157,7 +162,9 @@ cmd_pending() {
     if is_git "$p"; then
       git -C "$p" rev-parse --verify --quiet "$ref^{commit}" >/dev/null ||
         { printf 'error\t%s\t-\t%s\n' "$id" "reportsRef '$ref' 커밋 없음"; continue; }
-      files=$(git -C "$p" ls-tree --name-only "$ref" -- .ai/reports/)
+      # --full-name: paths from the repo root, so `git show ref:path` also works for a project in a monorepo subfolder.
+      files=$(git -c core.quotePath=false -C "$p" ls-tree --full-name --name-only "$ref" -- .ai/reports/) ||
+        { printf 'error\t%s\t-\t%s\n' "$id" "reportsRef '$ref'에서 .ai/reports 읽기 실패"; continue; }
     else
       files=$(cd "$p" && ls .ai/reports/*.md 2>/dev/null || true)
     fi
@@ -166,7 +173,9 @@ cmd_pending() {
       case $name in .*|*.tmp) continue ;; *.md) ;; *) continue ;; esac
       name=${name%.md}
       [ -e "$hub/handoffs/processed/$name.md" ] && continue
-      if is_git "$p"; then content=$(git -C "$p" show "$ref:$f"); src="$path@$ref:$f"
+      if is_git "$p"; then
+        content=$(git -C "$p" show "$ref:$f" 2>/dev/null) || { printf 'error\t%s\t%s\t%s\n' "$id" "$f" "보고서 읽기 실패"; continue; }
+        src="$path@$ref:$f"
       else content=$(cat "$p/$f"); src="$path/$f"; fi
       why=$(printf '%s\n' "$content" | check_report "$id" "$name")
       if [ -n "$why" ]; then printf 'invalid\t%s\t%s\t%s\n' "$id" "$f" "$why"
@@ -179,8 +188,16 @@ cmd_mark() {
   hub=${1:-}; id=${2:-}; rid=${3:-}; outcome=${4:-}; note=${5:-}
   [ -d "$hub" ] || die "usage: kit.sh mark <hubDir> <projectId> <reportId> <outcome> [note]"
   require_role "$hub" portfolio
-  case $outcome in applied|superseded|needs-review) ;; *) die "outcome은 applied|superseded|needs-review" ;; esac
-  matches "$rid" "^$id-[A-Z][A-Z0-9]*-[0-9]{4}-r[0-9]{2}\$" || die "reportId가 projectId와 맞지 않음: $rid"
+  case $outcome in applied|superseded|needs-review|invalid) ;; *) die "outcome은 applied|superseded|needs-review|invalid" ;; esac
+  case $id$rid in *"$nl"*) die "줄바꿈이 든 값은 받지 않음" ;; esac
+  matches "$id" '^[a-z0-9][a-z0-9-]*$' || die "잘못된 projectId: '$id'"
+  projects "$hub" | cut -f1 | grep -qxF "$id" || die "등록되지 않은 projectId: $id"
+  if [ "$outcome" = invalid ]; then
+    # Invalid reports may have a malformed name: accept the plain file name (without .md) that pending printed.
+    matches "$rid" '^[A-Za-z0-9][A-Za-z0-9._-]*$' || die "파일 이름 형식 오류: $rid"
+  else
+    matches "$rid" "^$id-[A-Z][A-Z0-9]*-[0-9]{4}-r[0-9]{2}\$" || die "reportId가 projectId와 맞지 않음: $rid"
+  fi
   mkdir -p "$hub/handoffs/processed"
   marker="$hub/handoffs/processed/$rid.md"
   [ -e "$marker" ] && { echo "이미 처리됨: $rid"; return 0; }

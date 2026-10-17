@@ -41,7 +41,7 @@ Worker·Subagent에 맡길 일마다 **역할**을 정한다. 역할은 관점, 
 
 프로젝트에 맞는 내용(스택, 디자인 시스템, lint 규칙, 금지 패턴)은 프로젝트의 `.ai/roles/<id>.md`에 적는다.
 
-- 같은 `<id>`의 Plugin 역할 뒤에 덧붙여 쓴다. 둘이 충돌하면 프로젝트 내용을 따른다.
+- 같은 `<id>`의 Plugin 역할 뒤에 덧붙여 쓴다. 보강은 더하기만 한다: 프로젝트 고유 관점·산출물·수용 기준·금지 사항을 추가할 수 있지만, Plugin 역할의 내용과 [permissions.md](permissions.md) 제한을 빼거나 풀 수 없다. 그런 내용이 있으면 명세에 넣지 않고 사용자에게 알린다.
 - Plugin에 없는 `<id>`는 그 프로젝트만의 역할이 된다. 형식은 위 규격을 따른다.
 - `.ai/roles/`는 필요할 때 만든다. 초기화하지 않는다.
 
@@ -49,7 +49,7 @@ Worker·Subagent에 맡길 일마다 **역할**을 정한다. 역할은 관점, 
 
 역할 파일은 명세에 통째로 들어가므로 짧게 둔다. 길어지는 직군 지식(점검표, 설계 규칙, 도구 사용법)은 Agent Skill로 만들고 명세에는 Skill 이름만 적는다.
 
-- [확정] Orca Worker가 새 Worktree에서 불러오는 Skill 위치:
+- [검증됨] Orca Worker가 새 Worktree에서 불러오는 Skill 위치:
 
   | Worker | 저장소 `.agents/skills/` | 저장소 `.claude/skills/` | Claude Plugin Skill |
   |---|---|---|---|
@@ -57,16 +57,16 @@ Worker·Subagent에 맡길 일마다 **역할**을 정한다. 역할은 관점, 
   | Codex | 읽음 | 못 읽음 | 못 읽음 |
   | AGY | 읽음 | 못 읽음 | 못 읽음 |
 
-- [확정] 세 Provider가 같이 쓰려면 원본을 `.agents/skills/<이름>/SKILL.md`에 두고 `.claude/skills/<이름>`을 `../../.agents/skills/<이름>`으로 가리키는 symlink로 둔다. Claude Worker가 symlink로 불러오는 것을 확인했다.
-- [확정] Orca가 띄운 Codex는 사용자 폴더의 Codex Skill(`~/.codex/skills`)을 보지 못한다 (Orca 전용 `CODEX_HOME`을 쓴다). 사용자 폴더 설치에 기대지 않고 저장소에 둔다.
-- [확정] 명세에 `쓸 Skill: <이름> (작업 전에 실행한다)` 한 줄을 넣으면 Claude Worker가 그 Skill을 실행했다.
+- [검증됨] 세 Provider가 같이 쓰려면 원본을 `.agents/skills/<이름>/SKILL.md`에 두고 `.claude/skills/<이름>`을 `../../.agents/skills/<이름>`으로 가리키는 symlink로 둔다. Claude Worker가 symlink로 불러오는 것을 확인했다.
+- [검증됨] Orca가 띄운 Codex는 사용자 폴더의 Codex Skill(`~/.codex/skills`)을 보지 못한다 (Orca 전용 `CODEX_HOME`을 쓴다). 사용자 폴더 설치에 기대지 않고 저장소에 둔다.
+- [검증됨] 명세에 `쓸 Skill: <이름> (작업 전에 실행한다)` 한 줄을 넣으면 Claude Worker가 그 Skill을 실행했다.
 - [권장] 효과는 작업마다 다르다. 넣기 전과 뒤를 같은 Task·역할 수용 기준으로 비교한다. 접근성 Skill로 도움말 대화상자를 만든 비교(Claude `haiku` 2:2)에서는 채점 10항목이 양쪽 모두 만점이라 차이가 없었다. 모델이 이미 아는 내용이면 Skill이 더하는 것이 없다. 프로젝트 고유 규칙이나 모델이 모르는 사내 지식부터 Skill로 만든다.
 - Skill 추가는 저장소 파일을 늘리는 일이므로 사용자 승인을 받는다. 형식은 Agent Skills 규격(frontmatter는 `name`, `description`)을 따른다.
 
 ## 고르기
 
 1. 하위 작업마다 주 역할 1개를 정한다. 산출물이 무엇인지로 고른다 (화면 코드 → `frontend`, 화면 설계 → `designer`).
-2. 다른 관점이 꼭 필요하면 보조 역할을 더한다. 보조 역할은 `관점`과 `수용 기준`만 쓰고, 파일 소유 범위는 주 역할을 따른다.
+2. 다른 관점이 꼭 필요하면 보조 역할을 더한다. 보조 역할은 `관점`과 `수용 기준`만 쓰고, 파일 소유 범위는 주 역할을 따른다. 보조 역할의 수용 기준 중 그 역할의 산출물(예: designer의 설계 문서)이 있어야 하는 항목은 `해당 없음`과 이유를 적는다.
 3. Direct로 처리하는 작은 수정은 역할을 생략해도 된다.
 4. Portfolio 위임 명세의 `제안 역할`은 참고만 한다. 최종 선택은 Project Coordinator가 한다.
 

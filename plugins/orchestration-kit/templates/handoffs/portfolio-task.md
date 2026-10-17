@@ -19,7 +19,7 @@ createdAt: YYYY-MM-DDTHH:MM:SS+09:00
 
 ## 제약
 - 구현 방식과 Worker·Worktree 선택은 Project Coordinator가 정한다.
-- 공통 API 계약 변경은 Portfolio 승인 뒤에 한다.
+- 프로젝트 간 계약(다른 프로젝트가 의존하는 API·스키마) 변경은 Portfolio 승인 뒤에 한다.
 - 운영 배포·데이터 삭제는 사용자 승인 뒤에 한다.
 
 ## 제안 역할

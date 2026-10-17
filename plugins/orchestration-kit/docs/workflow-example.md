@@ -26,8 +26,8 @@ claude plugin install orchestration-kit@dg-agent-kit
 | 어디서 | 말하기 | 결과 |
 |---|---|---|
 | `workspace-hub` | "이 저장소 오케스트레이션 Portfolio로 초기화해줘" | `portfolio/PROJECTS.md`, `TASKS.md`, `DASHBOARD.md` 등 생성 |
-| `shop-api` | "Project로 초기화하고 hub에 연결해줘" | `.ai/` 생성, hub에 등록 |
-| `shop-web` | 같은 요청 | 같은 결과 |
+| `shop-api` | "Project로 초기화하고 hub에 연결해줘. taskPrefix는 API" | `.ai/` 생성, hub에 등록 |
+| `shop-web` | 같은 요청, taskPrefix는 WEB | 같은 결과 |
 
 - 없는 파일만 만든다. 기존 `CLAUDE.md`, `AGENTS.md`는 덮어쓰지 않는다. 진입점 문구 추가는 승인을 받는다.
 - Orca 저장소 등록은 확인을 받고 한다.
@@ -57,7 +57,7 @@ Portfolio는 코드를 고치지 않는다. 나누고 맡기고 결과를 모은
 
 Project Coordinator가 하는 일:
 
-1. **수락**: `.ai/TASKS.md`에 `API-0012`를 만들고 `PORT-0010`과 연결한다.
+1. **수락**: 명세의 `projectId`가 `shop-api`인지 확인하고, `.ai/TASKS.md`에 `API-0012`를 만들어 `PORT-0010`과 연결한다. 수락하지 못하면 같은 ID를 `blocked`로 두고 `blocked` 보고를 낸다.
 2. **라우팅**: 하위 작업마다 실행 방식, 위치, 역할, 등급, Provider를 정한다.
 
    | 하위 작업 | 실행 방식 | 역할 | 등급 / Provider |
@@ -66,9 +66,10 @@ Project Coordinator가 하는 일:
    | 테스트 보강 | Orca Worker, 새 Worktree | `qa` | `fast` / claude `haiku` |
    | 계약 리뷰 | Orca Worker, 읽기 전용 | `reviewer` | `strong` / claude `opus` |
 
-3. **실행**: 역할 파일 본문을 Task 명세 맨 앞에 넣고 Orca Worker를 시작해 감독한다.
+   이 Worker 계획(3개, codex·claude, `strong` 1개)을 사용자에게 보여 주고 승인받는다.
+3. **실행**: 역할 파일 본문과 Worker 제한(쓰기 범위, 커밋·Push 금지)을 Task 명세에 넣고 Orca Worker를 시작해 감독한다.
 4. **검증**: Worker가 "통과"라고 적어도 Coordinator가 테스트와 동작을 직접 확인하고, 역할 수용 기준을 하나씩 대조한다.
-5. **병합·보고**: 병합한 뒤 `.ai/reports/shop-api-API-0012-r01.md`를 커밋한다.
+5. **커밋·병합·보고**: Coordinator가 커밋하고 기준 브랜치에 병합한 뒤 `.ai/reports/shop-api-API-0012-r01.md`를 커밋한다. Push·PR은 사용자 승인 뒤에 한다.
 
 `shop-web`도 같은 방식으로 진행한다. 화면 변경이 크면 Worker를 나눈다.
 
@@ -101,13 +102,13 @@ Coordinator가 하위 작업마다 아래 순서로 정한다. 표와 값의 원
 1. **등급을 고른다.** 일의 성격으로 `fast` / `default` / `strong` 중 하나를 고른다. 역할 파일의 `기본 등급`은 힌트일 뿐이다.
    - `fast`: 테스트·PoC, 기계적 수정, 단순 문서, 탐색·짧은 리뷰
    - `default`: 일반 구현 Worker, Coordinator
-   - `strong`: 아키텍처 결정, 공통 계약 리뷰, 교차 검증, 원인 불명 장애 분석
+   - `strong`: 아키텍처 결정, 계약(프로젝트 내부·프로젝트 간) 리뷰, 교차 검증, 원인 불명 장애 분석
 2. **Provider를 고른다.** 역할·등급과 따로 정한다. 다른 시각이 필요하면 Codex·AGY를 고려한다.
 3. **등급을 모델로 바꾼다.** routing.md의 Provider별 표를 따른다. 예: Claude `fast`는 `haiku`, Codex `fast`는 `gpt-6-luna` + effort `low`. `default`는 모델과 effort를 넘기지 않고 사용자 기본 설정을 쓴다. 표에 "미정"으로 남은 칸은 정하지 않았다는 뜻이다.
 4. **프로젝트 Override를 확인한다.** `.ai/ORCHESTRATION.md`의 `프로젝트별 Override`에 값이 있으면 그것을 따른다. 예: `default 등급: claude sonnet, effort high`.
 5. **effort는 지원할 때만 넘긴다.** Orca는 `--effort`만 넘길 수 없고 `--model`과 함께 넘긴다.
 6. **실제 적용값을 기록한다.** Orca `worker-start` 응답의 `launch.effective`를 `TASKS.md`의 `실행 방식` 열에 적는다. 예: `Independent Session (Orca codex worker, role: backend, fast: gpt-6-luna + low, 새 Worktree)`.
-7. **비용을 먼저 보여 준다.** 강한 모델이나 높은 effort를 여러 Worker에 쓰는 계획은 실행 전에 사용자에게 보여 준다.
+7. **Worker 계획을 승인받는다.** Task마다 Worker 수, Provider, `strong` 등급 사용을 사용자에게 보여 주고 승인받는다. 승인한 범위 안에서는 다시 묻지 않는다.
 
 ## 아직 사람이 하는 일
 

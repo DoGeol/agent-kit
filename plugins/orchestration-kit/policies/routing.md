@@ -27,12 +27,12 @@
 
 - [권장] 동시 Worker는 프로젝트당 최대 3개.
 - Worker마다 파일 소유 범위를 정한다. lockfile·공유 타입처럼 공유 파일은 수정자를 한 명 지정한다.
-- 공통 계약을 먼저 합의한 뒤 독립 작업으로 나눈다.
+- 프로젝트 내부 계약을 먼저 합의한 뒤 독립 작업으로 나눈다.
 - 실패나 지연이 있어도 같은 편집 작업에 Worker를 중복 투입하지 않는다.
 - 다른 Worktree의 결과는 자동 공유되지 않는다. 병합 시점과 승인자를 정한다.
-- 새 Worktree의 Worker는 자기 브랜치에만 커밋한다. Push와 main 변경은 하지 않는다. 검증한 브랜치를 Coordinator가 병합한다.
+- Worker는 커밋·브랜치 변경·Push를 하지 않는다. Coordinator가 검증한 뒤 그 Worktree에서 소유 범위 파일만 이름으로 지정해 커밋하고(`git add -A` 금지) 기준 브랜치에 병합한다. 커밋 메시지와 브랜치 이름은 프로젝트 규칙(`.ai/PROJECT.md`, 기존 기여 문서)을 따른다. 병합 조건은 [permissions.md](permissions.md#안전-규칙).
 - 병렬 결과를 잇는 공유 파일 수정(링크, 목차 등)은 병합 뒤 Coordinator가 한다.
-- 병합이 끝난 Worktree를 정리할지는 사용자에게 확인한다.
+- 병합이 끝난 Worktree를 정리할지는 사용자에게 확인한다. 미커밋·미병합 작업이 있는 Worktree는 [permissions.md](permissions.md#안전-규칙)를 따른다.
 - Portfolio에서 위임받은 업무도 실행 방식은 Project Coordinator가 정한다.
 - Orca로 Worker를 감독할 때는 설치된 Orca 버전의 가이드를 먼저 읽는다 (`orca skills get orchestration --full`). 이 문서에 Orca 명령 문법을 고정하지 않는다.
 - Worker를 시작하기 전에 같은 Task의 기존 Worker가 있는지 Orca에서 확인한다.
@@ -48,7 +48,7 @@
 |---|---|---|---|
 | `fast` | 테스트·PoC, 기계적 수정(이름 변경, 포맷, 템플릿 채우기), 단순 문서, 탐색·로그 분석·짧은 리뷰 | 빠른 모델 | 지원하면 low, 아니면 생략 |
 | `default` | 일반 구현 Worker, Coordinator | 사용자 기본 (넘기지 않음) | 사용자 기본 |
-| `strong` | 아키텍처 결정, 공통 계약 리뷰, 교차 검증, 원인 불명 장애 분석 | 가장 강한 모델 | high 이상 |
+| `strong` | 아키텍처 결정, 계약(프로젝트 내부·프로젝트 간) 리뷰, 교차 검증, 원인 불명 장애 분석 | 가장 강한 모델 | high 이상 |
 
 Provider별 모델 (별칭은 도구가 최신 버전으로 해석한다):
 
@@ -65,7 +65,7 @@ Provider별 모델 (별칭은 도구가 최신 버전으로 해석한다):
 - `TASKS.md`의 `실행 방식` 열에 역할([roles.md](roles.md))과 등급을 같이 적는다. 예: `Independent Session (Orca claude worker, role: frontend, fast: haiku, 새 Worktree)`.
 
 - 요청값과 실제 적용값을 구분한다. 실행 도구가 돌려준 실제 적용값(Orca는 `worker-start` 응답의 `launch.effective`)을 `TASKS.md`의 `실행 방식` 열에 적는다. 요청값만 보고 적용됐다고 쓰지 않는다.
-- 강한 모델과 높은 effort를 여러 Worker에 쓰는 계획은 비용이 크다. 사용자에게 먼저 보여준다.
+- Worker 계획(Worker 수, Provider, `strong` 등급)은 Task마다 사용자 승인을 받는다 ([permissions.md](permissions.md#결정권)).
 
 ## 완료의 세 단계
 

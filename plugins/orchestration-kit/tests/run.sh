@@ -135,7 +135,34 @@ m1=$(cksum < "$marker")
 [ "$m1" = "$(cksum < "$marker")" ] || fail "marker overwritten"
 if "$kit" pending "$hub" | grep -q 'SAMPLE-0001-r01'; then fail "processed report listed again"; fi
 if "$kit" mark "$hub" sample-app other-app-X-0001-r01 applied > /dev/null 2>&1; then fail "foreign reportId marked"; fi
-ok "pending lists committed reports only, flags invalid ones; mark is idempotent; processed reports are not listed again"
+if "$kit" mark "$hub" ghost-app ghost-app-G-0001-r01 applied > /dev/null 2>&1; then fail "unregistered projectId marked"; fi
+if "$kit" mark "$hub" '.*' '../escaped-A-0001-r01' applied > /dev/null 2>&1; then fail "regex projectId marked"; fi
+"$kit" mark "$hub" sample-app sample-app-SAMPLE-0001-r02 invalid > /dev/null
+if "$kit" mark "$hub" sample-app "sample-app-SAMPLE-0001-r03
+../../x" applied > /dev/null 2>&1; then fail "reportId with newline marked"; fi
+if "$kit" pending "$hub" | grep -q 'SAMPLE-0001-r02'; then fail "invalid-marked report listed again"; fi
+ok "pending lists committed reports only, flags invalid ones; mark is idempotent, accepts invalid, rejects unregistered projects"
+
+# 8a. A project in a monorepo subfolder is read, and does not stop the projects after it
+mono="$tmp/mono"; mkdir -p "$mono/svc"; git -C "$mono" init -q -b main
+"$kit" init project "$mono/svc" svc-app SVC > /dev/null
+sed 's/sample-app/svc-app/g; s/SAMPLE-/SVC-/g' "$root/tests/fixtures/sample-app-SAMPLE-0001-r01.md" > "$mono/svc/.ai/reports/svc-app-SVC-0001-r01.md"
+git_commit "$mono" mono
+"$kit" register "$hub" "$mono/svc" > /dev/null
+cp "$root/tests/fixtures/sample-app-SAMPLE-0001-r01.md" "$api/.ai/reports/sample-api-SAMPLE-0009-r01.md"
+sed -i.bak 's/sample-app/sample-api/g; s/SAMPLE-0001/SAMPLE-0009/g' "$api/.ai/reports/sample-api-SAMPLE-0009-r01.md"; rm "$api/.ai/reports/sample-api-SAMPLE-0009-r01.md.bak"
+git -C "$api" init -q -b main; git_commit "$api" api
+out=$("$kit" pending "$hub")
+printf '%s\n' "$out" | grep -q '^pending	svc-app	svc-app-SVC-0001-r01	completed	' || fail "monorepo report not listed: $out"
+printf '%s\n' "$out" | grep -q '^pending	sample-api	sample-api-SAMPLE-0009-r01	' || fail "project after monorepo not listed: $out"
+ok "pending reads a monorepo subfolder project and keeps going"
+
+# 8b. Init inside a linked worktree records the main branch, not the Worker branch
+wtbase="$tmp/wtbase"; mkdir "$wtbase"; git -C "$wtbase" init -q -b main; printf x > "$wtbase/x"; git_commit "$wtbase" base
+git -C "$wtbase" worktree add -q -b feat/worker-x "$tmp/wt"
+"$kit" init project "$tmp/wt" wt-app > /dev/null
+grep -q '^reportsRef: main$' "$tmp/wt/.ai/ORCHESTRATION.md" || fail "worktree reportsRef: $(grep reportsRef "$tmp/wt/.ai/ORCHESTRATION.md")"
+ok "init in a linked worktree uses the main worktree branch as reportsRef"
 
 # 9. Marketplace keeps the existing plugin and registers this one
 mp="$root/../../.claude-plugin/marketplace.json"
