@@ -18,11 +18,12 @@
 
 ## 재진입 절차
 
-1. `.ai/ORCHESTRATION.md`, `PROJECT.md`, `ARCHITECTURE.md`, `STATUS.md`, `TASKS.md`를 읽는다.
+1. 상태 폴더를 찾는다 (`scripts/kit.sh where <저장소>`, 공유 모드는 저장소, 개인 모드는 hub의 `projects/<projectId>/`). 그 안의 `.ai/ORCHESTRATION.md`, `PROJECT.md`, `ARCHITECTURE.md`, `STATUS.md`, `TASKS.md`를 읽는다.
 2. `STATUS.md`의 `## 체크포인트`를 읽는다.
-3. Orca를 쓰는 경우 체크포인트의 Run에 다시 바인딩하고(`run-use`) 쌓인 메시지를 받은 뒤, Orca 상태를 조회해 진행 중 Task·Worker와 맞춘다. 다르면 Orca를 따른다. Orca에 연결할 수 없으면 그 사실을 기록하고, 실행 상태를 확정하지 않는다.
-4. 종료 증거가 없는 Worker를 다시 실행하지 않는다.
-5. 미해결 결정과 사용자 승인 대기 항목을 먼저 보여준다.
+3. `in-review` Task에 PR 주소가 있으면 PR 상태를 확인한다. 병합됐으면 `completed`로 바꾸고 보고서를 반영한다 ([routing.md](routing.md#pr-흐름-pull-request)).
+4. Orca를 쓰는 경우 체크포인트의 Run에 다시 바인딩하고(`run-use`) 쌓인 메시지를 받은 뒤, Orca 상태를 조회해 진행 중 Task·Worker와 맞춘다. 다르면 Orca를 따른다. Orca에 연결할 수 없으면 그 사실을 기록하고, 실행 상태를 확정하지 않는다.
+5. 종료 증거가 없는 Worker를 다시 실행하지 않는다.
+6. 미해결 결정과 사용자 승인 대기 항목을 먼저 보여준다.
 
 ## 체크포인트
 

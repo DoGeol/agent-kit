@@ -90,6 +90,17 @@ Project Coordinator가 하는 일:
 
 양쪽 보고서를 읽고 `PORT-0010`을 `completed`로 바꾼다. `DASHBOARD.md`와 후속 업무를 갱신한다. 같은 보고서는 다시 처리하지 않는다.
 
+## 다른 사람과 같이 쓰는 저장소 (개인 모드)
+
+팀 저장소에 Kit 파일을 넣고 싶지 않으면 setup에서 개인 모드를 고른다.
+
+> 이 저장소 개인 모드로 초기화하고 hub에 연결해줘
+
+- 상태 폴더는 내 hub의 `projects/<projectId>/.ai/`에 생긴다. 팀 저장소의 파일은 그대로다.
+- Coordinator 세션은 저장소(또는 그 Worktree)에서 project Skill로 시작한다. Skill이 `kit.sh where`로 상태 폴더를 찾는다.
+- 브랜치·커밋·PR은 그 저장소 관례만 따른다. Kit ID나 Kit 이야기는 넣지 않는다. 동료에게는 평소처럼 올린 PR만 보인다.
+- 보고서는 hub에 커밋한다. Portfolio는 hub에서 바로 읽는다.
+
 ## Portfolio 없이 쓰기
 
 한 저장소 안의 작은 일은 그 저장소 세션에서 바로 시킨다.

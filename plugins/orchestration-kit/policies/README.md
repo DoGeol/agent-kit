@@ -49,7 +49,7 @@ Orca: Run / Task / Dispatch / Worker / Worktree 실행 상태
 
 | 데이터 | 원본 위치 |
 |---|---|
-| 기술 설계, 결정(ADR), 프로젝트 Task·검증 | Project Repo `.ai/` |
+| 기술 설계, 결정(ADR), 프로젝트 Task·검증 | Project 상태 폴더 `.ai/` (공유 모드는 Project Repo, 개인 모드는 hub `projects/<projectId>/`) |
 | 프로젝트 간 업무, 우선순위, 프로젝트 등록, 통합 상태 | Portfolio Repo `portfolio/` |
 | 실행 중인 Worker·Task·Dispatch 상태 | Orca 조회 결과 |
 | 대화 기록 | 각 도구의 Session·Transcript (영구 원본 아님) |
@@ -57,7 +57,23 @@ Orca: Run / Task / Dispatch / Worker / Worktree 실행 상태
 
 - [확정] 프로젝트 지식과 업무 기록은 Markdown 중심으로 남긴다. 세션이 끝나도 Markdown으로 복구할 수 있어야 한다.
 - Markdown과 Orca가 다르면 실행 상태는 Orca를 따른다.
-- Worktree 안의 `.ai/` 변경은 다른 Worktree에 보이지 않는다. 확정 문서와 보고서는 Project Coordinator가 기준 브랜치(`.ai/ORCHESTRATION.md`의 `reportsRef`)에 반영한다.
+- Worktree 안의 `.ai/` 변경은 다른 Worktree에 보이지 않는다. 확정 문서와 보고서는 Project Coordinator가 기준 브랜치(`.ai/ORCHESTRATION.md`의 `reportsRef`)에 반영한다. 개인 모드는 아래를 따른다.
+
+### 공유 모드와 개인 모드
+
+프로젝트마다 setup에서 한 번 정한다.
+
+| | 공유 모드 (`mode: shared`) | 개인 모드 (`mode: personal`) |
+|---|---|---|
+| 상태 폴더(`.ai/`) | 프로젝트 저장소 안 | Portfolio hub의 `projects/<projectId>/.ai/` |
+| 프로젝트 저장소에 남는 것 | `.ai/`, 진입점 문구 | 없음. Git 공통 폴더의 상태 경로 파일(`orchestration-kit-state`)과 로컬 무시 목록(`info/exclude`)의 `.orch-progress/` 한 줄뿐이며 둘 다 커밋되지 않는다 |
+| 보고서 발행 | `reportsRef` 브랜치에 커밋 | hub의 현재 브랜치에 커밋 |
+| 맞는 저장소 | 개인 저장소, 팀 전체가 Kit을 쓰는 저장소 | 다른 사람과 같이 쓰는 저장소 (조직·팀 저장소, 원격 소유자가 본인이 아님) |
+
+- 상태 폴더는 `scripts/kit.sh where <저장소>`로 찾는다. Worktree에서도 같은 결과가 나온다. `.ai/` 경로가 나오는 모든 규칙은 이 상태 폴더의 `.ai/`를 뜻한다.
+- 개인 모드의 hub는 사용자 개인의 비공개 저장소여야 한다. 팀이 같이 쓰는 hub면 개인 모드 상태도 팀에 보인다.
+- 개인 모드는 저장소당 프로젝트 하나다. 새로 `clone`한 저장소에는 상태 경로 파일이 없으므로 다시 초기화한다 (`init`은 같은 hub 상태 폴더를 다시 가리킨다).
+- 모드 전환은 수동이며 사용자 승인을 받는다. 개인 → 공유: hub의 상태 폴더를 저장소 `.ai/`로 옮겨 커밋하고 상태 경로 파일을 지운다. 공유 → 개인: 반대로 옮기고 저장소에서 `.ai/`를 지우는 커밋을 낸다.
 - Portfolio에는 프로젝트 기술 문서를 복제하지 않는다. 요약·링크·증거만 둔다.
 - 채팅을 그대로 옮기지 않는다. 결정, 실행 근거, 남은 일만 요약한다.
 

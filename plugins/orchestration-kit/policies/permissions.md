@@ -50,6 +50,14 @@ Worker끼리 합의했어도 위 변경은 승인 전에 적용하지 않는다.
 
 Project는 Portfolio 파일을 쓰지 않는다. Portfolio는 Project 파일을 읽기만 한다.
 
+개인 모드([README.md](README.md#공유-모드와-개인-모드))에서는 Project 상태가 hub의 `projects/<projectId>/`에 있다:
+
+- `projects/<projectId>/`는 그 Project Coordinator 소유다. Portfolio는 읽기만 한다. 그 밖의 hub 파일은 Project가 쓰지 않는다.
+- Project는 hub에 자기 경로만 커밋한다: `git add -- projects/<projectId>` 뒤 `git commit -m "<메시지>" -- projects/<projectId>`. `git add -A`나 다른 경로를 쓰지 않는다. 깨끗한 작업 트리 조건도 자기 경로만 본다.
+- `index.lock` 때문에 커밋이 실패하면 잠시 뒤 한 번 다시 한다. lock 파일을 지우지 않는다. 다시 실패하면 사용자에게 알린다.
+- Project는 hub를 Push하지 않는다.
+- 프로젝트 저장소에는 Kit 파일·Kit ID·Kit 언급을 남기지 않는다. 브랜치 이름, 커밋 메시지, PR 제목·본문은 그 저장소의 관례만 따른다.
+
 ## 안전 규칙
 
 - 설치 ≠ 초기화 ≠ 실행. Plugin을 설치해도 Coordinator·Worker를 자동 실행하지 않는다.

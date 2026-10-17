@@ -28,7 +28,7 @@ frontmatter 필수 필드:
 
 - `completed` 보고는 Project 수락 뒤에만 쓴다. `blocked`·`cancelled`·`needs-review`는 그 시점에 쓴다.
 - `Acceptance evidence`에 테스트 종류·결과와 Commit·PR 참조를 적는다. 검증하지 않은 항목은 따로 적는다.
-- 발행: 같은 폴더의 임시 파일에 쓴 뒤 이름을 바꾸고, `reportsRef` 브랜치에 커밋한다. Worker 브랜치에만 있는 보고서는 정식 보고가 아니다.
+- 발행: 같은 폴더의 임시 파일에 쓴 뒤 이름을 바꾸고, `reportsRef` 브랜치에 커밋한다. 개인 모드는 hub의 현재 브랜치에 자기 경로만 커밋한다 ([permissions.md](permissions.md#문서-수정-권한)). Worker 브랜치에만 있는 보고서는 정식 보고가 아니다.
 - 발행한 보고서는 고치지 않는다. 정정·추가는 개정번호를 올린 새 보고서(`-r02`)로 낸다.
 - 비밀·개인정보·원문 로그를 넣지 않는다.
 - 같은 내용을 `.ai/STATUS.md`·`TASKS.md`에도 반영한다.
@@ -47,6 +47,7 @@ frontmatter 필수 필드:
 트리거: 사용자 요청 또는 Portfolio 세션 시작. 자동 감시·알림은 MVP 범위 밖이다.
 
 1. 미처리 보고서 목록을 만든다. `scripts/kit.sh pending <hub>`가 `portfolio/PROJECTS.md`의 `active` 프로젝트마다 다음을 한다:
+   - 개인 모드 프로젝트(hub에 `projects/<projectId>/.ai/`가 있음)는 hub의 `HEAD`에서 읽는다.
    - Git 저장소면 `reportsRef` 커밋에서 `.ai/reports/`를 읽는다. `reportsRef`가 원격 추적 브랜치(`origin/main` 등)면 Portfolio가 먼저 `git fetch`한다. `kit.sh`는 네트워크를 쓰지 않는다. 커밋되지 않은 작업 트리 파일은 정식 보고가 아니다. Git이 아니면 폴더를 직접 읽는다.
    - frontmatter 필수 필드, 파일 이름 = `reportId`, `status` 값을 검사한다. 어긋나면 `invalid`로 내보낸다.
    - `handoffs/processed/<reportId>.md`가 있으면 건너뛴다.

@@ -224,15 +224,15 @@ Claude의 자동 재개: Claude Code 대화형 세션(claude.ai 구독 로그인
 
 ### PR 흐름 (`pull-request`)
 
-1. Task마다 원격 기준 브랜치(`origin/<기준>`)에서 새 Worktree와 작업 브랜치를 만든다. 브랜치 이름은 프로젝트 규칙을 따르고, 없으면 `<projectTaskId 소문자>-<요약>`.
+1. Task마다 원격 기준 브랜치(`origin/<기준>`)에서 새 Worktree와 작업 브랜치를 만든다. 브랜치 이름은 프로젝트 규칙을 따르고, 없으면 `<projectTaskId 소문자>-<요약>`. 개인 모드는 Kit ID를 넣지 않고 저장소 관례만 따른다.
 2. Worker는 작업 브랜치에서 갈라진 Worktree에서 일한다. Coordinator가 Worker 결과를 작업 브랜치에 병합한다 (작업 트리가 깨끗할 때).
 3. 프로젝트의 커밋 전 검사가 있으면 커밋 전에 돌린다.
-4. 완료 보고서(`status: completed`)를 작업 브랜치에 넣는다. PR이 병합되면 기준 브랜치에 들어가 Portfolio가 읽는다.
-5. Push와 PR 생성은 매번 사용자 승인을 받는다 ([permissions.md](permissions.md#결정권)). PR 본문에 `projectTaskId`와 보고서 경로를 적는다.
+4. 완료 보고서(`status: completed`)를 작업 브랜치에 넣는다. PR이 병합되면 기준 브랜치에 들어가 Portfolio가 읽는다. 개인 모드는 보고서를 PR에 넣지 않는다. PR이 병합되면 hub에 보고서를 커밋한다.
+5. Push와 PR 생성은 매번 사용자 승인을 받는다 ([permissions.md](permissions.md#결정권)). 공유 모드는 PR 본문에 `projectTaskId`와 보고서 경로를 적는다. 개인 모드는 PR 제목·본문·커밋 메시지에 Kit ID와 Kit 언급을 넣지 않는다.
 6. CI가 있으면 결과를 확인한다. 실패하면 고친 커밋을 같은 PR에 더한다.
 7. Coordinator는 PR을 스스로 병합하지 않는다. 병합은 프로젝트 규칙을 따르고, 규칙이 없으면 사용자에게 묻는다.
-8. Task 상태: PR을 열면 `in-review`, 병합되면 `completed`. PR이 병합되지 않고 닫히면 다음 보고서(`-r02`)를 `cancelled`나 `blocked`로 써서 새 PR로 낸다.
-9. `reportsRef`는 원격 추적 브랜치(예: `origin/main`)로 둔다. Portfolio는 `pending` 전에 그 저장소를 `git fetch`한다.
+8. Task 상태: PR을 열면 `in-review`로 두고 PR 주소를 `TASKS.md`의 `Orca 참조` 열에 함께 적는다. 병합되면 `completed`. 병합은 Coordinator 세션이 끝난 뒤에 일어날 수 있으므로, 다음 세션 시작 때 `in-review` Task의 PR 상태를 확인한다 (예: `gh pr view <주소> --json state`). 병합됐으면 `completed`로 바꾸고 보고서를 반영한다 (개인 모드는 이때 hub에 발행). PR이 병합되지 않고 닫히면 다음 보고서(`-r02`)를 `cancelled`나 `blocked`로 써서 새 PR로 낸다.
+9. 공유 모드의 `reportsRef`는 원격 추적 브랜치(예: `origin/main`)로 둔다. Portfolio는 `pending` 전에 그 저장소를 `git fetch`한다. 개인 모드는 `reportsRef`를 쓰지 않는다.
 
 ## 완료의 세 단계
 

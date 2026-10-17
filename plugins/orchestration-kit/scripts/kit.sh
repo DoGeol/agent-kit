@@ -2,7 +2,9 @@
 # orchestration-kit helper. Creates missing files only; never overwrites or deletes.
 # Usage:
 #   kit.sh init project <dir> <projectId> [taskPrefix]
+#   kit.sh init project --personal <hubDir> <dir> <projectId> [taskPrefix]
 #   kit.sh init portfolio <dir>
+#   kit.sh where <projectDir>
 #   kit.sh register <hubDir> <projectDir>
 #   kit.sh pending <hubDir>
 #   kit.sh mark <hubDir> <projectId> <reportId> <applied|superseded|needs-review|invalid> [note]
@@ -39,27 +41,75 @@ require_role() { # dir role
   [ -f "$1/.ai/ORCHESTRATION.md" ] || die "$1: .ai/ORCHESTRATION.md 없음. 먼저 init 실행"
   [ "$(fm role < "$1/.ai/ORCHESTRATION.md")" = "$2" ] || die "$1: role이 $2가 아님"
 }
+# Shared mode keeps state in the repo's .ai/. Personal mode keeps it in <hub>/projects/<projectId>/.ai/ and leaves
+# only a pointer file in the git common dir (never committed, seen from every worktree) plus a local exclude line.
+pointer=orchestration-kit-state
+has_schema() { [ -f "$1/.ai/ORCHESTRATION.md" ] && [ "$(fm schema < "$1/.ai/ORCHESTRATION.md")" = orchestration-config/v1 ]; }
+common_dir() { git -C "$1" rev-parse --path-format=absolute --git-common-dir 2>/dev/null; }
+# Prints "shared|personal<TAB>state root" for a project checkout or any of its worktrees; fails when not initialized.
+locate() {
+  d=$(cd "$1" && pwd); ptr=
+  if is_git "$d"; then c=$(common_dir "$d") && [ -f "$c/$pointer" ] && ptr=$(cat "$c/$pointer"); fi
+  if has_schema "$d"; then
+    [ -z "$ptr" ] || die "$d: 공유 모드 .ai/와 개인 모드 상태 경로($ptr)가 함께 있음. 어느 쪽을 쓸지 사용자에게 묻는다"
+    printf 'shared\t%s\n' "$d"
+  elif [ -n "$ptr" ]; then
+    has_schema "$ptr" || die "$d: 개인 모드 상태 폴더가 없음: $ptr"
+    printf 'personal\t%s\n' "$ptr"
+  else return 1; fi
+}
+# State root of a registered project: personal when the hub holds projects/<id>/.ai/, otherwise the repo path.
+# Keeps Worker progress files out of git status in every worktree. Append only; the user's own entries stay.
+add_exclude() { # git common dir
+  mkdir -p "$1/info"; ex="$1/info/exclude"
+  grep -qxF '.orch-progress/' "$ex" 2>/dev/null && return 0
+  [ ! -s "$ex" ] || [ -z "$(tail -c 1 "$ex")" ] || echo >> "$ex"
+  echo '.orch-progress/' >> "$ex"
+}
+project_root() { # hub id path
+  if [ -f "$1/projects/$2/.ai/ORCHESTRATION.md" ]; then printf '%s\n' "$1/projects/$2"; else expand_path "$3"; fi
+}
 
 cmd_init() {
-  role=${1:-}; dir=${2:-}
+  role=${1:-}; personal=; hub=
+  if [ "${2:-}" = --personal ]; then personal=1; hub=${3:-}; shift 2; fi
+  dir=${2:-}
   case $role in project|portfolio) ;; *) die "usage: kit.sh init project|portfolio <dir> ..." ;; esac
   [ -d "$dir" ] || die "$dir: 폴더가 없음"
   dir=$(cd "$dir" && pwd)
+  out=$dir; mode=shared
+  if [ -n "$personal" ]; then
+    [ "$role" = project ] || die "--personal은 project에만 쓴다"
+    [ -d "$hub" ] || die "usage: kit.sh init project --personal <hubDir> <dir> <projectId> [taskPrefix]"
+    require_role "$hub" portfolio; hub=$(cd "$hub" && pwd -P)
+    is_git "$dir" || die "$dir: 개인 모드는 Git 저장소에서만 쓴다"
+    ! has_schema "$dir" || die "$dir: 이미 공유 모드(.ai/)로 초기화됨. 모드를 바꾸려면 사용자와 수동으로 옮긴다"
+    common=$(common_dir "$dir") || die "$dir: Git 공통 폴더를 찾지 못함"
+    mode=personal
+  elif [ "$role" = project ] && is_git "$dir" && c=$(common_dir "$dir") && [ -f "$c/$pointer" ]; then
+    die "$dir: 이미 개인 모드로 초기화됨 ($(cat "$c/$pointer")). 모드를 바꾸려면 사용자와 수동으로 옮긴다"
+  fi
   id=-; prefix=-; ref=-
   if [ "$role" = project ]; then
     id=${3:-}
     matches "$id" '^[a-z0-9][a-z0-9-]*$' || die "projectId는 소문자 kebab-case: '$id'"
     prefix=${4:-$(printf '%s' "$id" | cut -d- -f1 | tr '[:lower:]' '[:upper:]')}
     matches "$prefix" '^[A-Z][A-Z0-9]*$' || die "taskPrefix는 대문자로 시작하는 대문자·숫자: '$prefix'"
+    if [ -n "$personal" ]; then
+      out="$hub/projects/$id"
+      old=$(cat "$common/$pointer" 2>/dev/null || true)
+      [ -z "$old" ] || [ "$old" = "$out" ] || die "$dir: 이미 다른 상태 폴더를 가리킴: $old"
+    fi
     ref=
-    if is_git "$dir"; then
+    if [ -n "$personal" ]; then ref=-
+    elif is_git "$dir"; then
       ref=$(git -C "$dir" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true); ref=${ref#origin/}
       # No remote default: use the main worktree's branch, not a linked worktree's (a Worker branch).
       [ -n "$ref" ] || ref=$(git -C "$dir" worktree list --porcelain 2>/dev/null | awk '/^$/ { exit } /^branch / { sub("refs/heads/", "", $2); print $2 }')
     fi
     matches "$ref" '^[A-Za-z0-9._/-]+$' || { ref=main; echo "주의: 기준 브랜치를 찾지 못해 reportsRef를 main으로 둔다. .ai/ORCHESTRATION.md에서 확인한다." >&2; }
   fi
-  conf="$dir/.ai/ORCHESTRATION.md"
+  conf="$out/.ai/ORCHESTRATION.md"
   if [ -f "$conf" ]; then
     old_role=$(fm role < "$conf")
     [ "$old_role" = "$role" ] || die "$conf: 이미 role=$old_role. 다른 역할로 초기화하지 않음"
@@ -69,18 +119,28 @@ cmd_init() {
       prefix=$(fm taskPrefix < "$conf"); ref=$(fm reportsRef < "$conf")
     fi
   fi
-  if is_git "$dir" && [ -n "$(git -C "$dir" status --porcelain)" ]; then
+  if [ -z "$personal" ] && is_git "$dir" && [ -n "$(git -C "$dir" status --porcelain)" ]; then
     echo "주의: 커밋하지 않은 변경이 있음. 기존 파일은 건드리지 않고 없는 파일만 만든다."
   fi
   version=$(cat "$root/policies/VERSION"); at=$(now)
   (cd "$root/templates/$role" && find . -type f | sort) | while IFS= read -r rel; do
-    rel=${rel#./}; dest="$dir/$rel"
+    rel=${rel#./}; dest="$out/$rel"
     if [ -e "$dest" ] || [ -L "$dest" ]; then echo "skip    $rel (이미 있음)"; continue; fi
     mkdir -p "$(dirname "$dest")"
-    (set -C; sed -e "s|{{PROJECT_ID}}|$id|g" -e "s|{{TASK_PREFIX}}|$prefix|g" -e "s|{{REPORTS_REF}}|$ref|g" \
+    (set -C; sed -e "s|{{PROJECT_ID}}|$id|g" -e "s|{{TASK_PREFIX}}|$prefix|g" -e "s|{{REPORTS_REF}}|$ref|g" -e "s|{{MODE}}|$mode|g" \
       -e "s|{{POLICY_VERSION}}|$version|g" -e "s|{{NOW}}|$at|g" "$root/templates/$role/$rel" > "$dest")
     echo "create  $rel"
   done
+  if [ -n "$personal" ]; then
+    [ -f "$common/$pointer" ] || printf '%s\n' "$out" > "$common/$pointer"
+    add_exclude "$common"
+    echo "projectId=$id taskPrefix=$prefix mode=personal 상태 폴더=projects/$id/.ai/ (hub)"
+    echo "저장소의 추적 파일은 바꾸지 않았다. Git 공통 폴더에 상태 경로 파일, 로컬 무시 목록(info/exclude)에 .orch-progress/ 를 더했다."
+    echo "진입점 문구는 없다. Coordinator 세션은 project Skill로 시작한다. 상태 파일은 hub 저장소에 커밋한다."
+    echo "Coordinator·Worker는 실행하지 않았다."
+    return 0
+  fi
+  if [ "$role" = project ] && is_git "$dir"; then add_exclude "$(common_dir "$dir")"; fi
   [ "$role" = project ] && echo "projectId=$id taskPrefix=$prefix reportsRef=$ref (다르면 .ai/ORCHESTRATION.md 수정)"
   for f in CLAUDE.md AGENTS.md; do
     if [ -e "$dir/$f" ]; then echo "$f: 있음. 변경하지 않음"; else echo "$f: 없음. 만들지 않음"; fi
@@ -103,11 +163,19 @@ cmd_init() {
 cmd_register() {
   hub=${1:-}; proj=${2:-}
   [ -d "$hub" ] && [ -d "$proj" ] || die "usage: kit.sh register <hubDir> <projectDir>"
-  require_role "$hub" portfolio; require_role "$proj" project
+  require_role "$hub" portfolio; hub=$(cd "$hub" && pwd -P)
+  loc=$(locate "$proj") || die "$proj: 초기화되지 않음. 먼저 init 실행"
+  sroot=${loc#*"$tab"}
+  require_role "$sroot" project
   [ -f "$hub/portfolio/PROJECTS.md" ] || die "$hub/portfolio/PROJECTS.md 없음"
-  id=$(fm projectId < "$proj/.ai/ORCHESTRATION.md")
+  id=$(fm projectId < "$sroot/.ai/ORCHESTRATION.md")
   matches "$id" '^[a-z0-9][a-z0-9-]*$' || die "잘못된 projectId: '$id'"
   path=$(cd "$proj" && pwd)
+  if [ "${loc%%"$tab"*}" = personal ]; then
+    [ "$sroot" = "$hub/projects/$id" ] || die "$proj: 상태 폴더가 이 hub에 있지 않음: $sroot"
+    # Register the main checkout, not whichever worktree the command ran in.
+    path=$(dirname "$(common_dir "$proj")")
+  fi
   case $path in "$HOME"/*) path="~/${path#"$HOME"/}" ;; esac
   case $path in *"|"*) die "경로에 | 문자가 있어 등록할 수 없음" ;; esac
   rows=$(projects "$hub")
@@ -121,10 +189,10 @@ cmd_register() {
   [ -z "$(tail -c 1 "$hub/portfolio/PROJECTS.md")" ] || echo >> "$hub/portfolio/PROJECTS.md"
   printf '| %s | %s | active | - |\n' "$id" "$path" >> "$hub/portfolio/PROJECTS.md"
   echo "등록: $id -> $path"
-  prefix=$(fm taskPrefix < "$proj/.ai/ORCHESTRATION.md")
+  prefix=$(fm taskPrefix < "$sroot/.ai/ORCHESTRATION.md")
   printf '%s\n' "$rows" | while IFS="$tab" read -r rid rpath _; do
     [ -n "$rid" ] || continue
-    rconf="$(expand_path "$rpath")/.ai/ORCHESTRATION.md"
+    rconf="$(project_root "$hub" "$rid" "$rpath")/.ai/ORCHESTRATION.md"
     [ -f "$rconf" ] && [ "$(fm taskPrefix < "$rconf")" = "$prefix" ] &&
       echo "주의: taskPrefix ${prefix}를 ${rid}도 쓴다. 구분하려면 $proj/.ai/ORCHESTRATION.md의 taskPrefix를 바꾼다."
   done || true
@@ -156,11 +224,13 @@ cmd_pending() {
   hub=${1:-}
   [ -d "$hub" ] || die "usage: kit.sh pending <hubDir>"
   require_role "$hub" portfolio
+  hub=$(cd "$hub" && pwd)
   projects "$hub" | while IFS="$tab" read -r id path status; do
     [ "$status" = active ] || continue
-    p=$(expand_path "$path")
+    p=$(project_root "$hub" "$id" "$path")
     if [ ! -f "$p/.ai/ORCHESTRATION.md" ]; then printf 'error\t%s\t-\t%s\n' "$id" "$path/.ai/ORCHESTRATION.md 없음"; continue; fi
-    ref=$(fm reportsRef < "$p/.ai/ORCHESTRATION.md")
+    # Personal mode: a report is published once it is committed to the hub's current branch.
+    if [ "$p" = "$hub/projects/$id" ]; then ref=HEAD; label=hub; else ref=$(fm reportsRef < "$p/.ai/ORCHESTRATION.md"); label=$path; fi
     if is_git "$p"; then
       git -C "$p" rev-parse --verify --quiet "$ref^{commit}" >/dev/null ||
         { printf 'error\t%s\t-\t%s\n' "$id" "reportsRef '$ref' 커밋 없음"; continue; }
@@ -177,8 +247,8 @@ cmd_pending() {
       [ -e "$hub/handoffs/processed/$name.md" ] && continue
       if is_git "$p"; then
         content=$(git -C "$p" show "$ref:$f" 2>/dev/null) || { printf 'error\t%s\t%s\t%s\n' "$id" "$f" "보고서 읽기 실패"; continue; }
-        src="$path@$ref:$f"
-      else content=$(cat "$p/$f"); src="$path/$f"; fi
+        src="$label@$ref:$f"
+      else content=$(cat "$p/$f"); src="$label/$f"; fi
       why=$(printf '%s\n' "$content" | check_report "$id" "$name")
       if [ -n "$why" ]; then printf 'invalid\t%s\t%s\t%s\n' "$id" "$f" "$why"
       else printf 'pending\t%s\t%s\t%s\t%s\n' "$id" "$name" "$(printf '%s\n' "$content" | fm status)" "$src"; fi
@@ -323,10 +393,11 @@ cmd_usage_watch() {
 
 case ${1:-} in
   init) shift; cmd_init "$@" ;;
+  where) [ -d "${2:-}" ] || die "usage: kit.sh where <projectDir>"; locate "$2" || die "$2: 초기화되지 않음 (setup Skill로 초기화)" ;;
   register) shift; cmd_register "$@" ;;
   pending) shift; cmd_pending "$@" ;;
   mark) shift; cmd_mark "$@" ;;
   usage) shift; cmd_usage "$@" ;;
   usage-watch) shift; cmd_usage_watch "$@" ;;
-  *) sed -n '3,10p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
+  *) sed -n '3,12p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
 esac

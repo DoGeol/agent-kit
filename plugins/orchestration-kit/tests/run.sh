@@ -3,7 +3,7 @@
 set -eu
 root=$(cd "$(dirname "$0")/.." && pwd)
 kit="$root/scripts/kit.sh"
-tmp=$(mktemp -d "${TMPDIR:-/tmp}/orchkit.XXXXXX")
+tmp=$(cd "$(mktemp -d "${TMPDIR:-/tmp}/orchkit.XXXXXX")" && pwd -P)
 trap 'rm -rf "$tmp"' EXIT
 fail() { echo "FAIL: $*" >&2; exit 1; }
 ok() { echo "ok   $*"; }
@@ -86,6 +86,7 @@ grep -q '^projectId: sample-app$' "$app/.ai/ORCHESTRATION.md" && grep -q '^taskP
 if grep -rq '{{' "$app/.ai"; then fail "unreplaced placeholder"; fi
 once=$(snap "$app"); "$kit" init project "$app" sample-app > /dev/null
 [ "$once" = "$(snap "$app")" ] || fail "second init changed files"
+grep -qxF '.orch-progress/' "$app/.git/info/exclude" || fail "shared init did not hide progress files"
 ok "project init: existing CLAUDE.md, AGENTS.md, .ai/STATUS.md, uncommitted file preserved; rerun changes nothing"
 
 # 6. Init refuses bad input and role or ID changes
@@ -177,6 +178,37 @@ if "$kit" pending "$hub" | grep -q 'pr-app-PRA-0001-r01'; then fail "report on a
 git -C "$pr" update-ref refs/remotes/origin/main HEAD
 "$kit" pending "$hub" | grep -q '^pending	pr-app	pr-app-PRA-0001-r01	completed	' || fail "report not read from origin/main after merge"
 ok "pull-request project: report on the PR branch is invisible until origin/main has it"
+
+# 8e. Personal mode: state lives in the hub, the project repo stays byte-identical
+own="$tmp/own"; mkdir "$own"; git -C "$own" init -q -b main; printf 'code\n' > "$own/a.txt"; git_commit "$own" base
+printf 'my-local-rule\n' >> "$own/.git/info/exclude"
+before=$(snap "$own")
+"$kit" init project --personal "$hub" "$own" own-app OWN > "$tmp/own.out"
+[ "$before" = "$(snap "$own")" ] && [ -z "$(git -C "$own" status --porcelain)" ] || fail "personal init changed the project repo"
+[ "$(cat "$own/.git/orchestration-kit-state")" = "$hub/projects/own-app" ] || fail "pointer file"
+grep -qxF 'my-local-rule' "$own/.git/info/exclude" && [ "$(grep -cxF '.orch-progress/' "$own/.git/info/exclude")" = 1 ] || fail "exclude file"
+grep -q '^mode: personal$' "$hub/projects/own-app/.ai/ORCHESTRATION.md" && grep -q '^reportsRef: -$' "$hub/projects/own-app/.ai/ORCHESTRATION.md" || fail "personal config"
+hubsnap=$(snap "$hub"); "$kit" init project --personal "$hub" "$own" own-app OWN > /dev/null
+[ "$hubsnap" = "$(snap "$hub")" ] && [ "$(grep -cxF '.orch-progress/' "$own/.git/info/exclude")" = 1 ] || fail "personal init rerun changed files"
+git -C "$own" worktree add -q -b feat/x "$tmp/own-wt"; mkdir "$tmp/own-wt/.orch-progress"; echo p > "$tmp/own-wt/.orch-progress/a.md"
+[ "$("$kit" where "$tmp/own-wt")" = "personal	$hub/projects/own-app" ] || fail "where from a worktree: $("$kit" where "$tmp/own-wt")"
+[ -z "$(git -C "$tmp/own-wt" status --porcelain)" ] || fail "progress files visible in git status"
+[ "$("$kit" where "$own")" = "personal	$hub/projects/own-app" ] || fail "where from the main checkout: $("$kit" where "$own")"
+[ "$("$kit" where "$app")" = "shared	$app" ] || fail "where for a shared project"
+if "$kit" init project "$own" own-app OWN > /dev/null 2>&1; then fail "shared init over a personal project"; fi
+[ -z "$(git -C "$own" status --porcelain)" ] || fail "refused shared init wrote files"
+if "$kit" where "$tmp/bad" > /dev/null 2>&1; then fail "where accepted an uninitialized folder"; fi
+if "$kit" init project --personal "$hub" "$app" sample-app > /dev/null 2>&1; then fail "personal init over a shared project"; fi
+"$kit" register "$hub" "$tmp/own-wt" > /dev/null
+grep -q "^| own-app | .*/own | active |" "$hub/portfolio/PROJECTS.md" || fail "personal project not registered with the main checkout: $(grep own-app "$hub/portfolio/PROJECTS.md")"
+sed 's/sample-app/own-app/g; s/SAMPLE-/OWN-/g' "$root/tests/fixtures/sample-app-SAMPLE-0001-r01.md" > "$hub/projects/own-app/.ai/reports/own-app-OWN-0001-r01.md"
+git -C "$hub" init -q -b main 2>/dev/null || true
+if "$kit" pending "$hub" | grep -q 'own-app-OWN-0001-r01'; then fail "uncommitted hub report listed"; fi
+git_commit "$hub" hub
+out=$("$kit" pending "$hub")
+printf '%s\n' "$out" | grep -q '^pending	own-app	own-app-OWN-0001-r01	completed	hub@HEAD:projects/own-app/.ai/reports/' || fail "personal report not read from hub HEAD: $out"
+printf '%s\n' "$out" | grep -q '^pending	svc-app	' || fail "shared projects no longer listed next to a personal one: $out"
+ok "personal mode: repo untouched, pointer + exclude only, idempotent, found from worktrees, reports read from hub HEAD"
 
 # 8c. Usage readers against stub orca, claude, codex and agy (no real provider is called)
 if command -v jq > /dev/null; then

@@ -31,6 +31,7 @@ Portfolio 저장소에서 일한다. `.ai/ORCHESTRATION.md`가 없거나 `role: 
   ../../scripts/kit.sh register <hubDir> <projectDir>
   ```
 
+- 개인 모드 프로젝트는 상태 폴더가 이 hub의 `projects/<projectId>/`에 있다. 그 폴더는 그 Project Coordinator 소유다. Portfolio는 읽기만 하고 고치거나 커밋하지 않는다 ([permissions.md](../../policies/permissions.md#문서-수정-권한)). 보고서는 hub `HEAD`에서 읽힌다.
 - 상태 변경(`active` / `paused` / `archived`)은 `PROJECTS.md`의 `status` 열을 고친다. 행을 지우지 않는다.
 
 ## 3. 업무와 우선순위

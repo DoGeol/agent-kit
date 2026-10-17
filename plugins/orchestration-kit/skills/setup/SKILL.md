@@ -15,7 +15,7 @@ description: 저장소를 orchestration-kit의 Portfolio(workspace-hub) 또는 P
 2. 셸에서 확인한다:
    - `git -C <dir> status --short`, 현재 브랜치
    - `CLAUDE.md`, `AGENTS.md`, `.ai/` 존재 여부와 내용 요약
-   - `.ai/ORCHESTRATION.md`가 있으면 이미 초기화된 것이다. `role`과 `projectId`를 보여주고, 빠진 파일만 채울지 묻는다.
+   - `../../scripts/kit.sh where <dir>`로 이미 초기화됐는지와 모드를 확인한다 (Portfolio 저장소는 `.ai/ORCHESTRATION.md`의 `role`). 초기화돼 있으면 모드·`role`·`projectId`를 보여주고, 같은 모드로 빠진 파일만 채울지 묻는다. 다른 모드로 다시 초기화하지 않는다.
 3. 환경을 점검하고 결과를 그대로 적는다. 실패해도 초기화는 계속할 수 있다.
    - `claude --version`
    - `orca --version`, `orca status --json` (연결 거부·권한 오류는 "미검증"으로 기록. Orca를 재시작하지 않는다)
@@ -29,21 +29,26 @@ description: 저장소를 orchestration-kit의 Portfolio(workspace-hub) 또는 P
 - 역할: `portfolio`(여러 프로젝트의 업무·우선순위 관리 저장소) 또는 `project`(코드 저장소).
 - Project면 `projectId`를 사용자와 정한다. 소문자 kebab-case, 폴더명과 무관하게 바꾸지 않을 이름 ([../../policies/lifecycle.md](../../policies/lifecycle.md#업무-id)).
 - `taskPrefix`(기본: `projectId` 첫 단어의 대문자)를 확인한다.
+- Project면 모드를 정한다 ([../../policies/README.md](../../policies/README.md#공유-모드와-개인-모드)). 사용자가 말했으면 따른다. 아니면 원격 주소의 소유자와 저장소 규칙 문서를 보고 추천한 뒤 확인받는다: 다른 사람과 같이 쓰는 저장소(원격 소유자가 본인이 아님, 조직·팀 저장소)는 개인 모드, 개인 저장소나 팀 전체가 Kit을 쓰는 저장소는 공유 모드. 모르면 개인 모드를 추천한다 (흔적이 남지 않는다).
+- 개인 모드면 hub가 사용자 개인의 비공개 저장소인지 확인한다. 팀이 같이 쓰는 hub면 개인 모드를 쓰지 않는다.
 
 ## 3. 초기화
 
 셸에서 실행한다 (경로는 이 Skill 폴더 기준):
 
 ```sh
-../../scripts/kit.sh init project <dir> <projectId> [taskPrefix]
+../../scripts/kit.sh init project <dir> <projectId> [taskPrefix]                     # 공유 모드
+../../scripts/kit.sh init project --personal <hubDir> <dir> <projectId> [taskPrefix]  # 개인 모드
 ../../scripts/kit.sh init portfolio <dir>
 ```
 
+- 개인 모드는 상태 폴더를 hub의 `projects/<projectId>/`에 만든다. 프로젝트 저장소의 추적 파일은 바꾸지 않고, Git 공통 폴더에 상태 경로 파일과 로컬 무시 목록 한 줄만 더한다. 사용자 작업이 진행 중인 checkout에서 실행해도 된다. 4단계 진입점 문구와 아래 `reportsRef`·PR 반영은 건너뛴다. hub에 생긴 파일은 사용자 확인 뒤 hub에 커밋한다.
+
 - 없는 파일만 만든다. 있는 파일은 `skip`으로 표시하고 건드리지 않는다.
 - 이미 다른 `role`·`projectId`로 초기화된 저장소는 거부한다. 이때 바꾸지 말고 사용자에게 알린다.
-- 출력의 `reportsRef`(정식 보고서를 올릴 기준 브랜치)를 사용자에게 확인한다. 다르면 `.ai/ORCHESTRATION.md`만 고친다.
+- 공유 모드: 출력의 `reportsRef`(정식 보고서를 올릴 기준 브랜치)를 사용자에게 확인한다. 다르면 `.ai/ORCHESTRATION.md`만 고친다.
 - [반영 방식](../../policies/routing.md#반영-방식)(`integration`)을 정한다. 저장소 규칙과 병합 기록이 분명하면 값과 근거를 적고, 아니면 `unset`으로 두고 사용자에게 알린다. `pull-request`면 `reportsRef`를 원격 추적 브랜치(예: `origin/main`)로 바꾼다.
-- 저장소가 기준 브랜치 직접 커밋을 막으면(`pull-request`) 초기화 파일도 PR로 반영한다. 사용자 작업이 진행 중인 checkout이면 원격 기준 브랜치에서 새 Worktree를 만들어 거기서 초기화한다 ([permissions.md](../../policies/permissions.md#안전-규칙)).
+- 공유 모드에서 저장소가 기준 브랜치 직접 커밋을 막으면(`pull-request`) 초기화 파일도 PR로 반영한다. 사용자 작업이 진행 중인 checkout이면 원격 기준 브랜치에서 새 Worktree를 만들어 거기서 초기화한다 ([permissions.md](../../policies/permissions.md#안전-규칙)).
 
 ## 4. CLAUDE.md / AGENTS.md 진입점
 
