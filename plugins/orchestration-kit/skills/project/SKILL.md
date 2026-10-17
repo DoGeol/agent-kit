@@ -82,7 +82,7 @@ description: 프로젝트의 중앙 Coordinator로 일할 때 사용한다. 프�
 
 ## 7. 체크포인트
 
-Compact·Fresh 전, 큰 작업을 마친 뒤 `STATUS.md`의 `## 체크포인트` 절을 갱신한다.
+`TASKS.md`의 상태 값을 바꿀 때마다, 같은 커밋에서 `STATUS.md`의 `## 체크포인트` 절을 덮어쓴다. 직접 Compact·Fresh 하기 전과 세션을 끝낼 때도 쓴다. 자동 압축은 예고 없이 오므로 그 직전에 쓰는 것에 기대지 않는다 ([lifecycle.md](../../policies/lifecycle.md#체크포인트)).
 
 ## 하지 않는 것
 
