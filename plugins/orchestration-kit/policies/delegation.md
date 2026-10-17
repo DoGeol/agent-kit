@@ -8,7 +8,7 @@ ID와 상태 값은 [lifecycle.md](lifecycle.md#업무-id).
 
 1. Portfolio가 `portfolio/TASKS.md`에 `PORT-NNNN`을 등록한다 (`backlog`).
 2. 프로젝트마다 위임 명세를 만들고 `assigned`로 바꾼다: `handoffs/outbox/<projectId>/<portfolioTaskId>.md`. 템플릿 `templates/handoffs/portfolio-task.md`.
-3. 사용자 또는 Portfolio가 해당 Project Coordinator 세션을 명시적으로 시작하거나, 살아 있는 세션에 명세 경로를 전달한다. 파일 생성만으로는 실행되지 않는다.
+3. 사용자 또는 Portfolio가 해당 Project Coordinator 세션을 명시적으로 시작하거나, 살아 있는 세션에 명세 경로를 전달한다. Portfolio는 Project Coordinator 세션이 살아 있으면 세션 간 메시지로 경로를 보낼 수 있다 ([communication.md](communication.md#경로)). 파일 생성만으로는 실행되지 않는다.
 4. Project Coordinator가 명세의 `projectId`가 자기 저장소와 같은지 확인한다. 다르면 수락하지 않고 사용자에게 알린다 (명세가 잘못 전달된 것이다). 같으면 수락 여부와 상관없이 `.ai/TASKS.md`에 `projectTaskId`를 만들고 `portfolioTaskId` 열에 연결한다. 수락하면 `assigned`, 거절하거나 질문이 있으면 `blocked`로 두고 사용자에게 알린 뒤 `blocked` 보고를 낸다. 보고에 수락하지 않은 범위와 이유를 적는다.
 5. Portfolio는 다음 Pull에서 `.ai/TASKS.md`의 연결을 확인하고 `projectTaskId`를 적는다. Project 행이 `blocked`면 `blocked`로 두고 보고를 기다린다. 그 밖의 상태면 `accepted`로 바꾼다. Project는 Portfolio 파일을 직접 쓰지 않는다.
 

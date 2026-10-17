@@ -69,7 +69,7 @@ description: 프로젝트의 중앙 Coordinator로 일할 때 사용한다. 프�
    - 검증하지 않은 항목을 숨기지 않는다. 역할 체크리스트 결과를 `Acceptance evidence`에 적는다.
    - 임시 파일에 쓴 뒤 이름을 바꾼다. 발행한 보고서는 고치지 않는다.
 3. 보고서와 문서 변경을 `reportsRef` 브랜치에 커밋한다. Push·PR은 사용자 승인 뒤에 한다. Worker 브랜치에만 둔 보고서는 Portfolio가 읽지 않는다.
-4. Portfolio가 꺼져 있어도 된다. 다음 Pull에서 수집된다.
+4. Portfolio가 꺼져 있어도 된다. 다음 Pull에서 수집된다. 위임을 세션 간 메시지로 받았고 보낸 세션이 살아 있으면, 발행한 `reportId`를 답장으로 알린다.
 
 ## 7. 체크포인트
 
