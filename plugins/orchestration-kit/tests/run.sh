@@ -262,6 +262,9 @@ EOF
   printf '%s\n' "$out" | grep -q '^usage	codex	caution	70	' || fail "watch output lacks usage line: $out"
   printf '10\n20\n' > "$tmp/codex.pct"
   u usage-watch --interval 1 --until danger codex | head -1 | grep -q '^watch	codex:projected-' || fail "watch did not project the limit"
+  printf '0\n1\n70\n' > "$tmp/codex.pct"
+  out=$(u usage-watch --interval 1 codex)
+  printf '%s\n' "$out" | head -1 | grep -q '^watch	codex:caution$' || fail "watch projected from a 1-point rise: $out"
   printf '80\n10\n20\n' > "$tmp/codex.pct"
   out=$(u usage-watch --interval 1 --until danger codex)
   printf '%s\n' "$out" | head -1 | grep -q '^watch	codex:projected-' || fail "watch did not re-measure after a 5h reset: $out"

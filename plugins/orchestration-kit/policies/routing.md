@@ -155,7 +155,7 @@ scripts/kit.sh usage-watch [--interval 120] [--until caution] [--for 240] <provi
 - 기다리는 동안은 셸과 `sleep`만 남는다. 읽을 때만 위 표의 명령이 잠깐 돈다. AGY(7초)와 Claude 대체 경로(5초)는 상대적으로 무거우므로, 가볍게 하려면 그 Provider만 따로 띄우고 `--interval`을 늘린다. Claude Worker가 긴 도구 실행 하나에 오래 머물면 Orca 값이 15분을 넘겨 대체 경로로 읽힐 수 있다.
 - 백그라운드로 실행하고 끝나면 알림을 받는 기능이 있으면 감시를 그렇게 띄우고, Worker 완료 대기(`check --wait`)도 같은 방식으로 띄운다. 둘 중 먼저 끝나는 쪽에 반응하므로 대기 중에 Coordinator가 깨어날 필요가 없다. 이 기능이 없으면 완료 대기를 10~15분으로 나누고 깰 때마다 `kit.sh usage`로 읽는다.
   - [검증됨] 한 Run에 Worker가 여럿이면 `check --wait`가 다른 Worker의 `heartbeat` 메시지 때문에 곧바로 돌아온다. 이때는 `task-list --run <id>`에서 `dispatched`가 없어질 때까지 30초 간격으로 확인하는 반복을 백그라운드로 띄운다. 메시지는 `check` 응답의 `result.messages`에 있다.
-- `projected`는 `--until`과 상관없이 멈춘다. 처음 읽은 값부터의 속도로 계산하므로 `strong` Worker가 짧게 몰아 쓰면 쉽게 걸린다 ([검증됨] Codex `strong` 하나가 6분에 약 20%를 써서 `projected-796%`가 됐다). 멈추면 남은 일의 양을 본다. 곧 끝날 Worker면 계속 두고 감시를 다시 띄운다. 오래 걸릴 Worker면 위험과 같이 대응한다.
+- `projected`는 `--until`과 상관없이 멈춘다. 처음 읽은 값보다 3%p 이상 올랐을 때만 판정한다. 사용률이 1% 단위 정수라 시작 직후 1%p만 올라도 속도가 크게 부풀기 때문이다 (시작 2분 뒤 1%p 변화로 `projected-146%`가 난 적이 있다). 처음 읽은 값부터의 속도로 계산하므로 `strong` Worker가 짧게 몰아 쓰면 쉽게 걸린다 ([검증됨] Codex `strong` 하나가 6분에 약 20%를 써서 `projected-796%`가 됐다). 멈추면 남은 일의 양을 본다. 곧 끝날 Worker면 계속 두고 감시를 다시 띄운다. 오래 걸릴 Worker면 위험과 같이 대응한다.
 - 감시가 멈추면 아래 기준과 작업 중 한도 대응을 따른다. 실행 중인 Worker가 남아 있으면 감시를 다시 띄우고, Worker가 모두 끝나면 감시를 멈춘다.
 - [검증됨] `sample-api`의 Claude Worker로 두 갈래를 확인했다. 감시가 먼저 멈춘 경우: 깨어남 → 중단 요청 → Worker가 진행 파일을 쓰고 `failed`로 완료 → 같은 Worktree에서 `--retry-of`로 재시작 → 진행 파일을 보고 끝난 단계를 건너뜀. 완료 대기가 먼저 끝난 경우: 결과 처리 뒤 감시를 멈춤.
 

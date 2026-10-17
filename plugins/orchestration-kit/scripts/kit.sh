@@ -363,7 +363,8 @@ EOF
 }
 
 # Prints nothing until it stops. Stops on: state at or above --until, a projected 100% before the 5h reset
-# (rate measured from the first reading), two unreadable readings in a row, or --for minutes.
+# (rate measured from the first reading, only after a rise of 3 points: values are whole percents, so one
+# point right after start inflates the rate), two unreadable readings in a row, or --for minutes.
 # Output when it stops: watch<TAB>reason, then the usage lines.
 cmd_usage_watch() {
   interval=120; until=caution; minutes=240
@@ -383,7 +384,7 @@ cmd_usage_watch() {
       $4 != "-" && base[$2] != "-" && $4 + 0 < base[$2] + 0 { rebase = 1 }
       $3 == "danger" || ($3 == "caution" && until == "caution") { why = why " " $2 ":" $3; next }
       $3 == "unknown" { if (index(failed, " " $2 " ")) why = why " " $2 ":unknown-twice"; else now = now " " $2 " "; next }
-      el > 0 && $4 != "-" && base[$2] != "-" && $6 != "-" {
+      el > 0 && $4 != "-" && base[$2] != "-" && $6 != "-" && $4 - base[$2] >= 3 {
         p = $4 + ($4 - base[$2]) / el * $6 * 60; if (p >= 100) why = why " " $2 ":projected-" int(p) "%" }
       END { print (why == "" ? "-" : substr(why, 2)) "\t" rebase + 0 "\t" now }')
     why=${verdict%%"$tab"*}; rest=${verdict#*"$tab"}; failed=${rest#*"$tab"}
