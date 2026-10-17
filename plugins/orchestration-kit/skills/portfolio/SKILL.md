@@ -38,7 +38,7 @@ Portfolio 저장소에서 일한다. `.ai/ORCHESTRATION.md`가 없거나 `role: 
 - 새 요청은 `TASKS.md`에 `PORT-NNNN`으로 등록한다 (마지막 번호 + 1, 상태 `backlog`).
 - 프로젝트 내부 Subtask는 적지 않는다. 사용자 관점의 업무·마일스톤 단위로만 관리한다.
 - 우선순위·프로젝트 간 의존성·프로젝트 간 계약 문제는 `PRIORITIES.md`에 정리한다. 프로젝트 간 계약 결정은 관련 Project의 영향 분석을 받은 뒤 사용자와 확정한다.
-- 주간 사용량(`orca account list --json`의 `rateLimits`)을 보고 이번 주 Provider 비중을 `PRIORITIES.md`에 적을 수 있다 (예: Codex 주간 60% 이상이면 우선순위 high 업무에만). Project는 이것을 Provider 순서에 반영한다.
+- 주간 사용량(셸에서 `../../scripts/kit.sh usage`)을 보고 이번 주 Provider 비중을 `PRIORITIES.md`에 적을 수 있다 (예: Codex 주간 60% 이상이면 우선순위 high 업무에만). Project는 이것을 Provider 순서에 반영한다.
 
 ## 4. 위임
 

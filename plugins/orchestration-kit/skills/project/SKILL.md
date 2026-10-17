@@ -37,7 +37,7 @@ description: 프로젝트의 중앙 Coordinator로 일할 때 사용한다. 프�
 2. 하위 작업마다 [routing.md](../../policies/routing.md)로 실행 주체(Direct / Subagent / Independent Session)와 위치(현재 / 새 Worktree)를 따로 정한다.
 3. 하위 작업마다 [roles.md](../../policies/roles.md)로 역할과 조합 방식(Worker 1개에 주·보조 역할 / 설계 → 구현 여러 Worker)을 정한다. 역할 원본은 [../../roles/](../../roles/), 프로젝트 보강은 `.ai/roles/<id>.md`.
 4. 병렬 Worker는 파일 소유 범위를 정하고, 공유 파일 수정자를 한 명 지정한다. 기본 상한 3개.
-5. 사용량을 확인한다 ([routing.md](../../policies/routing.md#사용량)). Worker 계획(Worker 수, Provider, `strong` 등급)을 사용량과 함께 사용자에게 보여주고 승인받는다. 승인한 범위 안에서는 Worker를 시작·재시작할 때 다시 묻지 않는다 ([permissions.md](../../policies/permissions.md#결정권)).
+5. 셸에서 `../../scripts/kit.sh usage`로 사용량을 읽는다 ([routing.md](../../policies/routing.md#사용량)). Worker 계획(Worker 수, Provider, `strong` 등급)을 사용량과 함께 사용자에게 보여주고 승인받는다. 승인한 범위 안에서는 Worker를 시작·재시작할 때 다시 묻지 않는다 ([permissions.md](../../policies/permissions.md#결정권)).
 6. `TASKS.md`의 `실행 방식` 열에 선택을 적는다. 역할도 같이 적는다 (`role: frontend+designer`).
 
 ## 4. 실행 감독
@@ -56,7 +56,7 @@ description: 프로젝트의 중앙 Coordinator로 일할 때 사용한다. 프�
 - 수락하거나 실패를 확정하면 Worker마다 다음 소유자를 정한다: 같은 Worker에 후속 작업, 유지, 또는 release. release·Worktree 정리 전에 미커밋 변경과 미병합 커밋을 확인한다 ([permissions.md](../../policies/permissions.md#안전-규칙)). 그다음 메시지를 확인 처리한다. 정리되지 않은 Worker가 남아 있으면 세션을 끝내지 않는다.
 - Worker끼리 자유롭게 협의하게 둔다. [permissions.md](../../policies/permissions.md)의 승인 대상 변경 요청(`DECISION_REQUEST`)이 오면 결정하고 `decisions/ADR-NNNN-<제목>.md`에 남긴 뒤 영향받는 Worker 모두에 알린다. 프로젝트 간 영향이 있으면 Portfolio 결정 사항으로 사용자에게 올린다.
 - 응답 없는 Worker는 상태와 생존 증거를 먼저 확인한다. 한도 문구가 보이면 사용량 한도로 본다.
-- Worker를 시작하기 전, `worker_done`을 받을 때, 기다리는 동안 10~15분마다 사용량을 확인한다. 주의·위험이면 [routing.md](../../policies/routing.md#작업-중-한도-대응)의 작업 중 한도 대응을 따른다. Coordinator 자신의 Provider가 위험이면 인계를 남기고 멈춘다.
+- 사용량은 [확인 시점](../../policies/routing.md#확인-시점)마다 `../../scripts/kit.sh usage`로 읽는다: 세션 시작, Worker 시작 직전, `worker_done`, 체크포인트. Worker가 도는 동안은 `../../scripts/kit.sh usage-watch <provider>`를 백그라운드로 띄워 두고, Worker 완료 대기와 둘 중 먼저 끝나는 쪽에 반응한다 ([작업 중 감시](../../policies/routing.md#작업-중-감시)). 주의·위험이면 [routing.md](../../policies/routing.md#작업-중-한도-대응)의 작업 중 한도 대응을 따른다. Coordinator 자신의 Provider가 위험이면 인계를 남기고 멈춘다.
 
 ## 5. 검증과 수락
 

@@ -20,6 +20,7 @@ description: 저장소를 orchestration-kit의 Portfolio(workspace-hub) 또는 P
    - `claude --version`
    - `orca --version`, `orca status --json` (연결 거부·권한 오류는 "미검증"으로 기록. Orca를 재시작하지 않는다)
    - 선택: `codex --version`, `agy --version`
+   - 선택: `../../scripts/kit.sh usage` (Provider별로 사용량을 읽을 수 있는지. `unknown`이면 마지막 칸의 이유를 기록한다)
    - Codex Worker를 쓸 Project면 원본 저장소 경로를 Codex 신뢰 목록(`~/.codex/config.toml`의 `[projects."<원본 경로>"] trust_level = "trusted"`)에 등록할지 묻는다. Codex는 Worktree의 신뢰를 원본 저장소 경로로 판단하므로 한 번 등록하면 그 저장소의 새 Worktree 전체에 적용된다. 신뢰하면 그 저장소와 모든 Worktree에서 Codex가 저장소의 `.codex/` 설정·hooks·규칙을 불러온다. 이 점을 사용자에게 말한다. 이미 같은 경로 항목이 있으면 더하지 않는다. 사용자 승인 없이 고치지 않는다.
    - 저장소에 `.agents/skills/`나 `.claude/skills/`가 있으면 Provider별로 보이는 Skill을 알려 준다. 한쪽에만 있는 Skill을 세 Provider가 같이 쓰게 하려면 `.claude/skills/<이름>` → `../../.agents/skills/<이름>` symlink를 제안하고, 승인 뒤 만든다 ([../../policies/roles.md](../../policies/roles.md#직군-지식-skill)).
 

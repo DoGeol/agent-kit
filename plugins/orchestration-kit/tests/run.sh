@@ -164,6 +164,61 @@ git -C "$wtbase" worktree add -q -b feat/worker-x "$tmp/wt"
 grep -q '^reportsRef: main$' "$tmp/wt/.ai/ORCHESTRATION.md" || fail "worktree reportsRef: $(grep reportsRef "$tmp/wt/.ai/ORCHESTRATION.md")"
 ok "init in a linked worktree uses the main worktree branch as reportsRef"
 
+# 8c. Usage readers against stub orca, claude, codex and agy (no real provider is called)
+if command -v jq > /dev/null; then
+  bin="$tmp/bin"; mkdir "$bin"; nowms=$(( $(date +%s) * 1000 )); reset=$(( $(date +%s) + 3600 ))
+  cat > "$bin/orca" <<EOF
+#!/bin/sh
+printf '{"result":{"rateLimits":{"claude":{"status":"ok","updatedAt":%s,"session":{"usedPercent":12,"resetsAt":%s},"weekly":{"usedPercent":30}}}}}\n' "\$(cat "$tmp/orca.updated")" "${reset}000"
+EOF
+  cat > "$bin/claude" <<'EOF'
+#!/bin/sh
+echo '{"type":"system"}'
+echo '{"usage_report":{"rate_limits":{"limits":[{"kind":"session","percent":72,"resets_at":"2030-01-01T00:00:00.5+00:00"},{"kind":"weekly_all","percent":40,"resets_at":null}]}}}'
+EOF
+  # Fake app-server: answers after both requests, then waits for stdin EOF like the real one. Each call takes the next 5h % from codex.pct.
+  cat > "$bin/codex" <<EOF
+#!/bin/sh
+read -r a; read -r b
+p=\$(head -1 "$tmp/codex.pct"); tail -n +2 "$tmp/codex.pct" > "$tmp/codex.next"; mv "$tmp/codex.next" "$tmp/codex.pct"
+echo '{"method":"account/updated","params":{}}'
+printf '{"id":2,"result":{"ordinaryUsageAllowed":true,"rateLimits":{"primary":{"usedPercent":%s,"windowDurationMins":300,"resetsAt":%s},"secondary":{"usedPercent":5,"windowDurationMins":10080}}}}\n' "\$p" "$reset"
+cat > /dev/null
+EOF
+  cat > "$bin/agy" <<EOF
+#!/bin/sh
+[ "\$1" = --version ] && { cat "$tmp/agy.version"; exit 0; }
+touch "$tmp/agy.called"
+echo '{"num_turns":0,"command":{"name":"usage","data":{"groups":[{"buckets":[{"window":"5h","remaining_fraction":0.9,"reset_time":"2030-01-01T00:00:00Z"},{"window":"weekly","remaining_fraction":0.5}]},{"buckets":[{"window":"5h","remaining_fraction":0.2,"reset_time":"2030-01-01T00:00:00Z"}]}]}}}'
+EOF
+  chmod +x "$bin"/*
+  u() { PATH="$bin:$PATH" KIT_CODEX_HOME="$tmp" "$kit" "$@"; }
+  echo "$nowms" > "$tmp/orca.updated"; echo 75 > "$tmp/codex.pct"; echo 1.4.0 > "$tmp/agy.version"
+  out=$(u usage)
+  printf '%s\n' "$out" | grep -q '^usage	claude	ok	12	30	[0-9]*	orca$' || fail "claude from Orca: $out"
+  printf '%s\n' "$out" | grep -q '^usage	codex	caution	75	5	[0-9]*	codex-app-server$' || fail "codex: $out"
+  echo 1 > "$tmp/codex.pct"
+  (HOME="$tmp" PATH="$bin:$PATH" "$kit" usage codex) | grep -q '	codex-app-server:default-home$' || fail "codex without Orca account not labelled"
+  printf '%s\n' "$out" | grep -q '^usage	antigravity	caution	80	50	[0-9]*	agy$' || fail "agy worst bucket: $out"
+  echo $(( nowms - 3600000 )) > "$tmp/orca.updated"
+  u usage claude | grep -q '^usage	claude	caution	72	40	[0-9]*	claude-cli$' || fail "stale Orca value not replaced: $(u usage claude)"
+  rm -f "$tmp/agy.called"; echo 1.0.9 > "$tmp/agy.version"
+  u usage antigravity | grep -q '^usage	antigravity	unknown	-	-	-	agy 1.0.9' || fail "old agy not refused"
+  [ ! -e "$tmp/agy.called" ] || fail "old agy was asked /usage"
+  if u usage gemini > /dev/null 2>&1; then fail "unknown provider accepted"; fi
+  echo 70 > "$tmp/codex.pct"
+  out=$(u usage-watch --interval 0 codex)
+  printf '%s\n' "$out" | head -1 | grep -q '^watch	codex:caution$' || fail "watch did not stop at caution: $out"
+  printf '%s\n' "$out" | grep -q '^usage	codex	caution	70	' || fail "watch output lacks usage line: $out"
+  printf '10\n20\n' > "$tmp/codex.pct"
+  u usage-watch --interval 1 --until danger codex | head -1 | grep -q '^watch	codex:projected-' || fail "watch did not project the limit"
+  printf '80\n10\n20\n' > "$tmp/codex.pct"
+  out=$(u usage-watch --interval 1 --until danger codex)
+  printf '%s\n' "$out" | head -1 | grep -q '^watch	codex:projected-' || fail "watch did not re-measure after a 5h reset: $out"
+  u usage-watch --interval 0 antigravity | head -1 | grep -q '^watch	antigravity:unknown-twice$' || fail "watch did not stop on unknown"
+  ok "usage: Orca for fresh Claude, CLI fallback when stale, codex app-server, agy worst bucket and version floor; usage-watch stops on caution, projection, unknown"
+fi
+
 # 9. Marketplace keeps the existing plugin and registers this one
 mp="$root/../../.claude-plugin/marketplace.json"
 if [ -f "$mp" ] && command -v jq > /dev/null; then

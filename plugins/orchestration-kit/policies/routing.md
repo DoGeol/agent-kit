@@ -112,29 +112,58 @@ Worker 계획 승인([permissions.md](permissions.md#결정권))은 이 후보 �
 
 ### 읽는 방법
 
-- [검증됨] `orca account list --json`의 `result.rateLimits.<provider>` (`claude`, `codex`, `antigravity`): `session`(5시간)과 `weekly`의 `usedPercent`·`resetsAt`(밀리초), 모델별 주간(예: `fableWeekly`), `status`, `updatedAt`. Orca 앱이 몇 분마다 갱신하고 모델을 호출하지 않으므로 비용이 없다.
-- 값은 Provider별 활성 계정 기준이다. 다른 계정은 `inactiveClaudeAccounts`·`inactiveCodexAccounts`에 나온다 (계정이 하나뿐인 환경이라 검증 필요).
-- Orca에 연결할 수 없을 때: Claude는 `claude -p "/usage" --output-format stream-json --verbose`의 `usage_report.rate_limits` (비용 0), Codex는 세션 기록 `sessions/**/rollout-*.jsonl`의 `rate_limits` (마지막 Codex 실행 시점 값). AGY는 대체 방법이 없다.
-- Claude Coordinator와 Claude Worker는 같은 계정 한도를 나눠 쓴다.
+셸에서 `scripts/kit.sh usage [claude|codex|antigravity ...]`로 읽는다 (생략하면 셋 다). 줄마다 `usage`, Provider, 상태, 5시간 %, 주간 %, 5시간 초기화까지 남은 분, 출처가 탭으로 나뉜다. 상태는 `ok`(정상)·`caution`(주의)·`danger`(위험)·`unknown`(못 읽음, 마지막 칸이 이유)이다. 모델을 호출하지 않으므로 비용이 없다.
+
+[검증됨] Provider마다 출처가 다르다:
+
+| Provider | 출처 | 걸리는 시간 |
+|---|---|---|
+| Claude | Orca `account list --json`의 값. Claude Code가 응답마다 Orca에 보내므로 Claude 세션이 돌고 있으면 최신이다. `updatedAt`이 15분(`KIT_USAGE_STALE_MIN`)보다 오래됐으면 `claude -p /usage`로 읽는다 | 1초 안쪽, 대체 시 5초 안팎 |
+| Codex | `codex app-server`의 `account/rateLimits/read`. Orca가 Codex를 띄우는 활성 계정 홈을 쓴다 (`KIT_CODEX_HOME`으로 바꾼다) | 1초 안쪽 |
+| AGY | `agy -p /usage --output-format json`. 1.1.11 미만에서는 읽지 않는다. Orca가 같은 기준을 쓰고, 그 이전 버전은 `/usage`를 프롬프트로 처리해 한도를 쓴다고 Orca 코드에 적혀 있다 (AGY 문서로는 확인하지 않음) | 7초 안팎 |
+
+- Orca가 보여 주는 Codex·AGY 값은 쓰지 않는다. [검증됨] 몇 시간 동안 갱신되지 않은 채 `status: ok`로 남은 적이 있다.
+- 값은 Provider별 활성 계정 기준이다. Claude Coordinator와 Claude Worker는 같은 계정 한도를 나눠 쓴다.
 - 판단할 때마다 새로 읽는다. 전에 읽은 값이나 `TASKS.md`에 적은 값으로 판단하지 않는다.
-- [권장] `updatedAt`이 15분보다 오래됐으면 대체 방법으로 다시 읽는다. 다시 못 읽으면 한 단계 높은 상태로 본다.
+- `unknown`이면 그 Provider를 주의로 본다.
 
 ### 확인 시점
 
-- Worker 계획을 승인받기 전, Worker를 시작하기 전.
-- 작업 중: Worker 완료를 기다릴 때 대기 시간을 10~15분으로 나눠 깰 때마다 확인한다. `worker_done`을 받을 때마다 확인한다.
+읽는 데 비용이 없으므로 시작과 완료마다 읽는다.
+
+| 시점 | 읽는 Provider |
+|---|---|
+| Coordinator 세션 시작·재진입 | 전부 |
+| Worker 계획 승인 전 | 후보 순서의 Provider 전부 |
+| Worker 시작 직전 | 그 Worker의 Provider |
+| `worker_done`을 받을 때 | 그 Worker의 Provider, Coordinator의 Provider |
+| 체크포인트·인계를 쓸 때 | 전부 |
+| Worker 실행 중 | 아래 작업 중 감시 |
+
+### 작업 중 감시
+
+Worker를 시작하면 그 Worker의 Provider를 감시한다. Coordinator와 같은 Provider면 Coordinator 몫도 함께 지켜진다.
+
+```sh
+scripts/kit.sh usage-watch [--interval 120] [--until caution] [--for 240] <provider>...
+```
+
+- 멈출 때까지 아무것도 출력하지 않는다. 멈추는 경우: 상태가 `--until` 이상, 지금 소모 속도로 5시간 초기화 전에 100%에 닿을 것으로 보임(`projected`), 두 번 연속 `unknown`, `--for`분 경과(`timeout`). 멈추면 `watch`와 이유 한 줄, 그 뒤에 사용량 줄을 출력한다.
+- 기다리는 동안은 셸과 `sleep`만 남는다. 읽을 때만 위 표의 명령이 잠깐 돈다. AGY(7초)와 Claude 대체 경로(5초)는 상대적으로 무거우므로, 가볍게 하려면 그 Provider만 따로 띄우고 `--interval`을 늘린다. Claude Worker가 긴 도구 실행 하나에 오래 머물면 Orca 값이 15분을 넘겨 대체 경로로 읽힐 수 있다.
+- 백그라운드로 실행하고 끝나면 알림을 받는 기능이 있으면 감시를 그렇게 띄우고, Worker 완료 대기(`check --wait`)도 같은 방식으로 띄운다. 둘 중 먼저 끝나는 쪽에 반응하므로 대기 중에 Coordinator가 깨어날 필요가 없다. 이 기능이 없으면 완료 대기를 10~15분으로 나누고 깰 때마다 `kit.sh usage`로 읽는다.
+- 감시가 멈추면 아래 기준과 작업 중 한도 대응을 따른다. 실행 중인 Worker가 남아 있으면 감시를 다시 띄우고, Worker가 모두 끝나면 감시를 멈춘다.
 
 ### 기준
 
-[권장] 기본값. `.ai/ORCHESTRATION.md` Override로 바꾼다.
+[권장] 기본값. `.ai/ORCHESTRATION.md` Override로 바꾸고, `kit.sh`에는 환경 변수 `KIT_USAGE_CAUTION`(70)·`KIT_USAGE_DANGER`(85)·`KIT_USAGE_WEEKLY`(90)로 넘긴다.
 
 | 상태 | 기준 | 할 일 |
 |---|---|---|
 | 정상 | 5시간 70% 미만, 주간 90% 미만 | 계획대로 진행 |
 | 주의 | 5시간 70% 이상 85% 미만 | 그 Provider로 새 `strong` Worker를 시작하지 않는다. 남은 일이 초기화 전에 끝날지 보고 대안을 준비한다 |
-| 위험 | 5시간 85% 이상, 주간 90% 이상, 또는 `status`가 한도 상태 | 그 Provider로 새 Worker를 시작하지 않는다. 아래 작업 중 한도 대응을 따른다 |
+| 위험 | 5시간 85% 이상, 주간 90% 이상, 또는 Provider가 한도 도달로 알림 | 그 Provider로 새 Worker를 시작하지 않는다. 아래 작업 중 한도 대응을 따른다 |
 
-두 번 읽은 값의 차이로 소모 속도를 보고, 초기화 전에 100%에 닿을 것 같으면 한 단계 높은 상태로 본다.
+두 번 읽은 값의 차이로 소모 속도를 보고, 초기화 전에 100%에 닿을 것 같으면 한 단계 높은 상태로 본다 (`usage-watch`의 `projected`).
 
 ### 작업 중 한도 대응
 
@@ -156,7 +185,7 @@ Coordinator가 쓰는 Provider가 위험이면:
 3. Portfolio 세션이 살아 있으면 알리고, 사용자에게 재개 가능 시각을 알린다.
 4. 재개는 초기화 뒤 같은 Provider로, 또는 사용자가 계정을 바꾼 새 세션에서 한다.
 
-예고 없이 한도에 걸렸을 때: Worker가 진행 없이 멈추면 Orca `worker-read`로 출력을 보고 한도 문구(Claude: `You've hit your session limit`)나 `rateLimits.status`를 확인한다. 한도면 위 Worker 절차의 2번부터 따른다.
+예고 없이 한도에 걸렸을 때: Worker가 진행 없이 멈추면 Orca `worker-read`로 출력을 보고 한도 문구(Claude: `You've hit your session limit`)를 찾고 `kit.sh usage`로 읽는다. 한도면 위 Worker 절차의 2번부터 따른다.
 
 ### Portfolio 확인
 

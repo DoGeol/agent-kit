@@ -6,6 +6,8 @@
 #   kit.sh register <hubDir> <projectDir>
 #   kit.sh pending <hubDir>
 #   kit.sh mark <hubDir> <projectId> <reportId> <applied|superseded|needs-review|invalid> [note]
+#   kit.sh usage [claude|codex|antigravity ...]
+#   kit.sh usage-watch [--interval sec] [--until caution|danger] [--for min] <provider>...
 set -eu
 root=$(cd "$(dirname "$0")/.." && pwd)
 tab=$(printf '\t')
@@ -206,10 +208,125 @@ cmd_mark() {
   echo "처리 마커: handoffs/processed/$rid.md"
 }
 
+# Usage readers print "ok<TAB>session%<TAB>weekly%<TAB>5h reset epoch<TAB>limited 0|1<TAB>source" or "fail<TAB>reason".
+# None of them calls a model. Thresholds come from the environment so a project Override can change them.
+orca_home="$HOME/Library/Application Support/orca"
+read_claude() {
+  # Claude Code pushes rate_limits to Orca on every reply, so Orca's Claude value is live while a Claude session runs.
+  line=$(orca account list --json 2>/dev/null | jq -r --argjson now "$(date +%s)" --argjson st "${KIT_USAGE_STALE_MIN:-15}" '
+    .result.rateLimits.claude // empty | select(.status == "ok" and ($now - .updatedAt / 1000) <= $st * 60)
+    | ["ok", (.session.usedPercent // "-"), (.weekly.usedPercent // "-"), ((.session.resetsAt // 0) / 1000 | floor), 0, "orca"] | @tsv' 2>/dev/null) || true
+  [ -n "$line" ] || line=$(claude -p /usage --output-format stream-json --verbose 2>/dev/null | jq -r '
+    def ep: if . == null then 0 else sub("\\.[0-9]+"; "") | sub("\\+00:00$"; "Z") | fromdateiso8601 end;
+    select(.usage_report?) | .usage_report.rate_limits.limits as $l
+    | ($l | map(select(.kind == "session"))[0]) as $s | ($l | map(select(.kind == "weekly_all"))[0]) as $w
+    | ["ok", ($s.percent // "-"), ($w.percent // "-"), ($s.resets_at | ep), 0, "claude-cli"] | @tsv' 2>/dev/null) || true
+  [ -n "$line" ] && printf '%s\n' "$line" || printf 'fail\tOrca 값이 오래됐고 claude /usage도 실패\n'
+}
+codex_home() { # the account Orca launches Codex with; KIT_CODEX_HOME overrides
+  [ -z "${KIT_CODEX_HOME:-}" ] || { printf '%s\n' "$KIT_CODEX_HOME"; return; }
+  for f in "$orca_home"/profiles/*/orca-data.json; do
+    [ -f "$f" ] || continue
+    jq -r '.settings as $s | $s.codexManagedAccounts[]? | select(.id == $s.activeCodexManagedAccountId) | .managedHomePath // empty' "$f" 2>/dev/null && return
+  done
+}
+read_codex() {
+  command -v codex >/dev/null || { printf 'fail\tcodex 없음\n'; return; }
+  h=$(codex_home) || h=; out=$(mktemp "${TMPDIR:-/tmp}/kit-usage.XXXXXX")
+  # app-server quits at stdin EOF without answering, so stdin stays open until the answer lands (at most 10 s).
+  { printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"clientInfo":{"name":"orchestration-kit","title":"orchestration-kit","version":"1"}}}' \
+      '{"jsonrpc":"2.0","id":2,"method":"account/rateLimits/read","params":{}}'
+    i=0; while [ ! -s "$out" ] && [ $i -lt 40 ]; do sleep 0.25; i=$((i + 1)); done
+  } | { if [ -n "$h" ]; then CODEX_HOME=$h codex app-server; else codex app-server; fi; } 2>/dev/null |
+    awk -v f="$out" '/"id": *2[,}]/ { print > f; close(f); exit }' || true
+  # Without an Orca account the default ~/.codex account is read: say so in the source column.
+  src=codex-app-server; [ -n "$h" ] || src=codex-app-server:default-home
+  line=$(jq -r --arg src "$src" '.result // empty | (.rateLimitsByLimitId.codex // .rateLimits) as $r
+    | ([$r.primary, $r.secondary] | map(select(. != null))) as $w
+    | ($w | map(select(.windowDurationMins == 300))[0]) as $s | ($w | map(select(.windowDurationMins == 10080))[0]) as $k
+    | ["ok", ($s.usedPercent // "-"), ($k.usedPercent // "-"), ($s.resetsAt // 0),
+       (if .ordinaryUsageAllowed == false or $r.rateLimitReachedType != null then 1 else 0 end), $src] | @tsv' "$out" 2>/dev/null) || true
+  rm -f "$out"
+  [ -n "$line" ] && printf '%s\n' "$line" || printf 'fail\tcodex app-server 응답 없음\n'
+}
+read_agy() {
+  command -v agy >/dev/null || { printf 'fail\tagy 없음\n'; return; }
+  v=$(agy --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+  # Before 1.1.11, agy treats /usage as a prompt and spends quota (Orca stops at the same version).
+  printf '%s\n' "$v" | awk -F. '{ exit !($1 > 1 || ($1 == 1 && ($2 > 1 || ($2 == 1 && $3 >= 11)))) }' ||
+    { printf 'fail\tagy %s: /usage를 읽지 않음 (1.1.11 이상 필요)\n' "${v:-?}"; return; }
+  line=$(agy -p /usage --output-format json --print-timeout 20s 2>/dev/null | jq -r '
+    select(.num_turns == 0 and .command.name == "usage") | [.command.data.groups[].buckets[]] as $b
+    | def worst(w): $b | map(select(.window == w) | . + {used: ((1 - .remaining_fraction) * 100 | round)}) | max_by(.used);
+      worst("5h") as $s | worst("weekly") as $k
+    | ["ok", ($s.used // "-"), ($k.used // "-"), (if $s then $s.reset_time | sub("\\.[0-9]+"; "") | fromdateiso8601 else 0 end), 0, "agy"] | @tsv' 2>/dev/null) || true
+  [ -n "$line" ] && printf '%s\n' "$line" || printf 'fail\tagy /usage 실패\n'
+}
+state_of() { # session weekly limited
+  awk -v s="$1" -v w="$2" -v l="$3" -v c="${KIT_USAGE_CAUTION:-70}" -v d="${KIT_USAGE_DANGER:-85}" -v wm="${KIT_USAGE_WEEKLY:-90}" 'BEGIN {
+    if (l == 1 || (s != "-" && s + 0 >= d) || (w != "-" && w + 0 >= wm)) print "danger"
+    else if (s != "-" && s + 0 >= c) print "caution"; else print "ok" }'
+}
+check_providers() {
+  command -v jq >/dev/null || die "jq 필요"
+  for p in "$@"; do case $p in claude|codex|antigravity) ;; *) die "provider는 claude|codex|antigravity: $p" ;; esac; done
+}
+
+# Output lines: usage<TAB>provider<TAB>ok|caution|danger<TAB>session%<TAB>weekly%<TAB>min to 5h reset<TAB>source
+#             | usage<TAB>provider<TAB>unknown<TAB>-<TAB>-<TAB>-<TAB>reason
+cmd_usage() {
+  [ $# -gt 0 ] || set -- claude codex antigravity
+  check_providers "$@"
+  for p in "$@"; do
+    case $p in claude) r=$(read_claude) ;; codex) r=$(read_codex) ;; antigravity) r=$(read_agy) ;; esac || r="fail${tab}읽기 오류"
+    IFS="$tab" read -r kind s w reset limited src <<EOF
+$r
+EOF
+    if [ "$kind" = ok ]; then
+      m=-; [ "$reset" -gt 0 ] 2>/dev/null && m=$(( (reset - $(date +%s)) / 60 ))
+      printf 'usage\t%s\t%s\t%s\t%s\t%s\t%s\n' "$p" "$(state_of "$s" "$w" "$limited")" "$s" "$w" "$m" "$src"
+    else printf 'usage\t%s\tunknown\t-\t-\t-\t%s\n' "$p" "$s"; fi
+  done
+}
+
+# Prints nothing until it stops. Stops on: state at or above --until, a projected 100% before the 5h reset
+# (rate measured from the first reading), two unreadable readings in a row, or --for minutes.
+# Output when it stops: watch<TAB>reason, then the usage lines.
+cmd_usage_watch() {
+  interval=120; until=caution; minutes=240
+  while [ $# -gt 0 ]; do case $1 in
+    --interval) interval=$2; shift 2 ;; --until) until=$2; shift 2 ;; --for) minutes=$2; shift 2 ;; *) break ;;
+  esac; done
+  case $until in caution|danger) ;; *) die "--until은 caution|danger" ;; esac
+  [ $# -gt 0 ] || die "usage: kit.sh usage-watch [--interval sec] [--until caution|danger] [--for min] <provider>..."
+  check_providers "$@"
+  t0=$(date +%s); first=; failed=
+  while :; do
+    lines=$(cmd_usage "$@"); [ -n "$first" ] || first=$lines
+    el=$(( $(date +%s) - t0 ))
+    verdict=$(printf '%s\n--\n%s\n' "$first" "$lines" | awk -F'\t' -v until="$until" -v el="$el" -v failed="$failed" '
+      $0 == "--" { cur = 1; next }
+      !cur { base[$2] = $4; next }
+      $4 != "-" && base[$2] != "-" && $4 + 0 < base[$2] + 0 { rebase = 1 }
+      $3 == "danger" || ($3 == "caution" && until == "caution") { why = why " " $2 ":" $3; next }
+      $3 == "unknown" { if (index(failed, " " $2 " ")) why = why " " $2 ":unknown-twice"; else now = now " " $2 " "; next }
+      el > 0 && $4 != "-" && base[$2] != "-" && $6 != "-" {
+        p = $4 + ($4 - base[$2]) / el * $6 * 60; if (p >= 100) why = why " " $2 ":projected-" int(p) "%" }
+      END { print (why == "" ? "-" : substr(why, 2)) "\t" rebase + 0 "\t" now }')
+    why=${verdict%%"$tab"*}; rest=${verdict#*"$tab"}; failed=${rest#*"$tab"}
+    # A 5h window rolled over: measure the rate from this reading.
+    [ "${rest%%"$tab"*}" = 0 ] || { first=$lines; t0=$(date +%s); }
+    [ "$why" = - ] && [ "$el" -lt $((minutes * 60)) ] || { printf 'watch\t%s\n%s\n' "$( [ "$why" = - ] && echo timeout || echo "$why")" "$lines"; return 0; }
+    sleep "$interval"
+  done
+}
+
 case ${1:-} in
   init) shift; cmd_init "$@" ;;
   register) shift; cmd_register "$@" ;;
   pending) shift; cmd_pending "$@" ;;
   mark) shift; cmd_mark "$@" ;;
-  *) sed -n '3,8p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
+  usage) shift; cmd_usage "$@" ;;
+  usage-watch) shift; cmd_usage_watch "$@" ;;
+  *) sed -n '3,10p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
 esac

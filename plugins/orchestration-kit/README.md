@@ -26,7 +26,7 @@ orchestration-kit/
 │  ├─ handoffs/                 위임 명세
 │  └─ reports/                  완료 보고
 ├─ docs/                        사용 예시
-├─ scripts/kit.sh               초기화·등록·미처리 보고 목록·처리 마커 (POSIX sh, 덮어쓰기 없음)
+├─ scripts/kit.sh               초기화·등록·미처리 보고 목록·처리 마커·사용량 읽기와 감시 (POSIX sh, 덮어쓰기 없음)
 └─ tests/run.sh                 로컬 검사
 ```
 
