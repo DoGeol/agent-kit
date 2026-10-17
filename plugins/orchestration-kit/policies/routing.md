@@ -61,7 +61,8 @@ Provider별 모델 (별칭은 도구가 최신 버전으로 해석한다):
 - `default`는 모델·effort를 넘기지 않는다. Worker는 사용자의 에이전트 기본 설정을 따른다.
 - Codex 모델 ID는 별칭이 없어 세대마다 바뀐다. 쓸 수 있는 ID와 설명은 Codex 모델 목록에서 확인한다 ("Fast and affordable" 계열을 `fast`로). Orca Codex Worker에서 `gpt-6-luna` + `low`가 실제 적용되고 완료까지 동작했다. `strong`은 "Frontier intelligence" 계열(`gpt-6-astra`)이다.
 - AGY 모델 ID는 effort를 이름에 담는다 (`-low`·`-medium`·`-high`). effort를 따로 넘기지 않는다. 목록은 `agy models`로 확인한다. Gemini 계열과 Claude·GPT 계열은 AGY 안에서 한도를 따로 쓰므로, AGY에서는 Gemini 계열을 기본으로 한다.
-- [검증됨] Codex `strong`, AGY `fast`·`strong`은 Orca Worker에서 실제 적용값(`launch.effective`)과 읽기 전용 작업 완료까지 확인했다. 등급에 맞는 품질은 아직 비교하지 않았다.
+- [검증됨] Codex `strong`, AGY `fast`·`strong`은 Orca Worker에서 실제 적용값(`launch.effective`)과 읽기 전용 작업 완료까지 확인했다.
+- 등급별 품질 비교 (1회, 실제 프로젝트의 CLI 업데이트 영향 분류, 같은 명세, 미리 정한 10점 채점표): Codex `fast` 9.5점·2분, Codex `strong` 10점·6분, AGY `fast` 8.5점·4분, AGY `strong` 9.5점·9분. 네 Worker 모두 핵심 위험을 찾았다. `strong` 두 Worker만 후속 위험(평가 스크립트가 중단되는 경로, 공통 계약 문서의 후속 검토)까지 찾았다. Codex `strong`은 이 작업 하나에 5시간 사용량을 약 20% 썼다. AGY 두 Worker는 합쳐서 5시간 1%, 주간 4%를 썼다. 시험이 1회뿐이므로 일반 규칙으로 삼지 않는다. 다만 표의 `fast` 범위(탐색·분류)가 맞고, 깊이가 필요한 분석은 사용량 여유를 보고 `strong`을 고르는 근거로 쓴다.
 - effort는 그 모델이 지원할 때만 넘긴다. 지원 여부를 모르면 생략하고 실제 적용값을 확인한다.
 - Orca는 `--effort`만 넘길 수 없다. `--model`이 같이 있어야 한다. effort만 바꾸려면 사용자 기본 모델 이름을 명시한다.
 - `TASKS.md`의 `실행 방식` 열에 역할([roles.md](roles.md))과 등급을 같이 적는다. 예: `Independent Session (Orca claude worker, role: frontend, fast: haiku, 새 Worktree)`.
@@ -153,6 +154,8 @@ scripts/kit.sh usage-watch [--interval 120] [--until caution] [--for 240] <provi
 - 멈출 때까지 아무것도 출력하지 않는다. 멈추는 경우: 상태가 `--until` 이상, 지금 소모 속도로 5시간 초기화 전에 100%에 닿을 것으로 보임(`projected`), 두 번 연속 `unknown`, `--for`분 경과(`timeout`). 멈추면 `watch`와 이유 한 줄, 그 뒤에 사용량 줄을 출력한다.
 - 기다리는 동안은 셸과 `sleep`만 남는다. 읽을 때만 위 표의 명령이 잠깐 돈다. AGY(7초)와 Claude 대체 경로(5초)는 상대적으로 무거우므로, 가볍게 하려면 그 Provider만 따로 띄우고 `--interval`을 늘린다. Claude Worker가 긴 도구 실행 하나에 오래 머물면 Orca 값이 15분을 넘겨 대체 경로로 읽힐 수 있다.
 - 백그라운드로 실행하고 끝나면 알림을 받는 기능이 있으면 감시를 그렇게 띄우고, Worker 완료 대기(`check --wait`)도 같은 방식으로 띄운다. 둘 중 먼저 끝나는 쪽에 반응하므로 대기 중에 Coordinator가 깨어날 필요가 없다. 이 기능이 없으면 완료 대기를 10~15분으로 나누고 깰 때마다 `kit.sh usage`로 읽는다.
+  - [검증됨] 한 Run에 Worker가 여럿이면 `check --wait`가 다른 Worker의 `heartbeat` 메시지 때문에 곧바로 돌아온다. 이때는 `task-list --run <id>`에서 `dispatched`가 없어질 때까지 30초 간격으로 확인하는 반복을 백그라운드로 띄운다. 메시지는 `check` 응답의 `result.messages`에 있다.
+- `projected`는 `--until`과 상관없이 멈춘다. 처음 읽은 값부터의 속도로 계산하므로 `strong` Worker가 짧게 몰아 쓰면 쉽게 걸린다 ([검증됨] Codex `strong` 하나가 6분에 약 20%를 써서 `projected-796%`가 됐다). 멈추면 남은 일의 양을 본다. 곧 끝날 Worker면 계속 두고 감시를 다시 띄운다. 오래 걸릴 Worker면 위험과 같이 대응한다.
 - 감시가 멈추면 아래 기준과 작업 중 한도 대응을 따른다. 실행 중인 Worker가 남아 있으면 감시를 다시 띄우고, Worker가 모두 끝나면 감시를 멈춘다.
 - [검증됨] `sample-api`의 Claude Worker로 두 갈래를 확인했다. 감시가 먼저 멈춘 경우: 깨어남 → 중단 요청 → Worker가 진행 파일을 쓰고 `failed`로 완료 → 같은 Worktree에서 `--retry-of`로 재시작 → 진행 파일을 보고 끝난 단계를 건너뜀. 완료 대기가 먼저 끝난 경우: 결과 처리 뒤 감시를 멈춤.
 
