@@ -113,10 +113,7 @@ Coordinator가 Direct, Subagent, Worker 중 하나를 고르고 보고서까지 
 
 Coordinator가 하위 작업마다 아래 순서로 정한다. 표와 값의 원본은 [routing.md](../policies/routing.md#모델과-effort)다.
 
-1. **등급을 고른다.** 일의 성격으로 `fast` / `default` / `strong` 중 하나를 고른다. 역할 파일의 `기본 등급`은 힌트일 뿐이다.
-   - `fast`: 테스트·PoC, 기계적 수정, 단순 문서, 탐색·짧은 리뷰
-   - `default`: 일반 구현 Worker, Coordinator
-   - `strong`: 아키텍처 결정, 계약(프로젝트 내부·프로젝트 간) 리뷰, 교차 검증, 원인 불명 장애 분석
+1. **등급을 고른다.** 일의 성격으로 `fast` / `default` / `strong` 중 하나를 routing.md의 등급 표에서 고른다. 예: 기계적 수정은 `fast`, 계약 리뷰는 `strong`. 역할 파일의 `기본 등급`은 힌트일 뿐이다.
 2. **Provider를 고른다.** 요청에 지정이 있으면 따르고, 없으면 Provider 순서에서 사용량 여유가 있는 첫 후보를 고른다. 리뷰는 구현한 Provider가 아닌 쪽을 먼저 고른다 ([routing.md](../policies/routing.md#provider-선택)).
 3. **등급을 모델로 바꾼다.** routing.md의 Provider별 표를 따른다. 예: Claude `fast`는 `haiku`, Codex `fast`는 `gpt-6-luna` + effort `low`. `default`는 모델과 effort를 넘기지 않고 사용자 기본 설정을 쓴다. AGY는 effort가 모델 ID에 들어 있다 (예: `gemini-3.8-flash-low`).
 4. **프로젝트 Override를 확인한다.** `.ai/ORCHESTRATION.md`의 `프로젝트별 Override`에 값이 있으면 그것을 따른다. 예: `default 등급: claude sonnet, effort high`.

@@ -20,6 +20,10 @@ done
 [ "$(ls -d "$root"/skills/*/ | wc -l | tr -d ' ')" = 4 ] || fail "expected 4 skills"
 ok "skill frontmatter (portfolio, project, setup, issue-review)"
 
+# Policy version follows the plugin version, so a policy change always reaches users with a bump
+grep -q "\"version\": \"$(cat "$root/policies/VERSION")\"" "$root/.claude-plugin/plugin.json" || fail "policies/VERSION != plugin.json version"
+ok "policies/VERSION matches plugin.json"
+
 # 2. Relative Markdown links resolve inside the plugin
 find "$root" -name '*.md' -not -path '*/tests/*' | while IFS= read -r f; do
   grep -o '\](\([^)]*\))' "$f" | sed 's/^](//; s/)$//; s/#.*//' | while IFS= read -r link; do
