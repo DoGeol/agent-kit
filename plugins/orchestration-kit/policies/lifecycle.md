@@ -20,7 +20,7 @@
 
 1. `.ai/ORCHESTRATION.md`, `PROJECT.md`, `ARCHITECTURE.md`, `STATUS.md`, `TASKS.md`를 읽는다.
 2. `STATUS.md`의 `## 체크포인트`를 읽는다.
-3. Orca를 쓰는 경우 Orca 상태를 조회해 진행 중 Task·Worker와 맞춘다. 다르면 Orca를 따른다. Orca에 연결할 수 없으면 그 사실을 기록하고, 실행 상태를 확정하지 않는다.
+3. Orca를 쓰는 경우 체크포인트의 Run에 다시 바인딩하고(`run-use`) 쌓인 메시지를 받은 뒤, Orca 상태를 조회해 진행 중 Task·Worker와 맞춘다. 다르면 Orca를 따른다. Orca에 연결할 수 없으면 그 사실을 기록하고, 실행 상태를 확정하지 않는다.
 4. 종료 증거가 없는 Worker를 다시 실행하지 않는다.
 5. 미해결 결정과 사용자 승인 대기 항목을 먼저 보여준다.
 
@@ -33,6 +33,7 @@ Compact·Fresh 전, 큰 작업을 마친 뒤 `STATUS.md`의 `## 체크포인트`
 - 미해결 결정
 - 블로커
 - 다음 안전한 행동
+- 인계 (사용량 한도나 세션 종료로 작업 중에 멈출 때): Worker별 Dispatch ID와 상태, Worktree 경로·브랜치·미커밋 변경 여부, 병합한 하위 작업과 남은 하위 작업, Worker 결과·진행 파일 경로, Provider별 사용량과 재개 가능 시각. 없으면 `없음`
 
 오래된 체크포인트는 사실이 아니라 단서다.
 

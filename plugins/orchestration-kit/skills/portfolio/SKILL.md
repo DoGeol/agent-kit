@@ -48,6 +48,10 @@ Portfolio 저장소에서 일한다. `.ai/ORCHESTRATION.md`가 없거나 `role: 
 3. 전달한다: 대상 프로젝트의 Coordinator 세션이 살아 있으면 세션 간 메시지로 명세 경로를 보낸다 (사용자가 원할 때. 받는 세션이 분명하지 않으면 묻는다). 없으면 사용자에게 Coordinator 세션을 시작하거나 명세 경로를 전달하도록 안내한다. 파일만 만들고 전달된 것으로 기록하지 않는다. 전달하면 명세의 `전달 기록`을 채운다.
 4. 수락(`accepted`)은 다음 Pull에서 프로젝트 `.ai/TASKS.md`의 연결을 보고 기록한다. Project 행이 `blocked`면 수락이 아니다 ([delegation.md](../../policies/delegation.md#절차)).
 
+### 사용량 확인 요청
+
+Project Coordinator가 사용량 때문에 등급·Provider·일정을 바꿔도 되는지 물으면 ([routing.md](../../policies/routing.md#portfolio-확인)): 업무 우선순위와 다른 프로젝트의 진행을 보고 선택지 하나를 고른다. 기다림, 다른 Provider, 계정 전환(사용자가 Orca 화면에서), 등급 낮추기, 우선순위 조정 중 하나다. 품질이 떨어지는 선택은 사용자에게 확인한다. 결정을 `PRIORITIES.md`에 적고 요청한 세션에 답한다.
+
 ## 5. 완료 보고 수집 (Pull)
 
 [reporting.md](../../policies/reporting.md#portfolio-pull) 절차를 따른다.
