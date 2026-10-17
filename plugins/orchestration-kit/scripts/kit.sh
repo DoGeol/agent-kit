@@ -286,7 +286,10 @@ read_claude() {
   line=$(orca account list --json 2>/dev/null | jq -r --argjson now "$(date +%s)" --argjson st "${KIT_USAGE_STALE_MIN:-15}" '
     .result.rateLimits.claude // empty | select(.status == "ok" and ($now - .updatedAt / 1000) <= $st * 60)
     | ["ok", (.session.usedPercent // "-"), (.weekly.usedPercent // "-"), ((.session.resetsAt // 0) / 1000 | floor), 0, "orca"] | @tsv' 2>/dev/null) || true
-  [ -n "$line" ] || line=$(claude -p /usage --output-format stream-json --verbose 2>/dev/null | jq -r '
+  # Without the Orca pane variables the child session cannot report into (and spoil) the calling pane's status.
+  [ -n "$line" ] || line=$(env -u ORCA_PANE_KEY -u ORCA_AGENT_HOOK_PORT -u ORCA_AGENT_HOOK_TOKEN -u ORCA_AGENT_HOOK_ENDPOINT \
+    -u ORCA_AGENT_HOOK_ROOT -u ORCA_AGENT_HOOK_ENV -u ORCA_AGENT_HOOK_VERSION -u ORCA_AGENT_HOOK_TRANSPORT \
+    claude -p /usage --output-format stream-json --verbose 2>/dev/null | jq -r '
     def ep: if . == null then 0 else sub("\\.[0-9]+"; "") | sub("\\+00:00$"; "Z") | fromdateiso8601 end;
     select(.usage_report?) | .usage_report.rate_limits.limits as $l
     | ($l | map(select(.kind == "session"))[0]) as $s | ($l | map(select(.kind == "weekly_all"))[0]) as $w
