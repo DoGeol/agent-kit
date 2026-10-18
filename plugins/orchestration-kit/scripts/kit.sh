@@ -6,6 +6,7 @@
 #   kit.sh init portfolio <dir>
 #   kit.sh where <projectDir>
 #   kit.sh register <hubDir> <projectDir>
+#   kit.sh hub <dir>
 #   kit.sh pending <hubDir>
 #   kit.sh board <hubDir>
 #   kit.sh mark <hubDir> <projectId> <reportId> <applied|superseded|needs-review|invalid> [note]
@@ -68,6 +69,9 @@ add_exclude() { # git common dir
   [ ! -s "$ex" ] || [ -z "$(tail -c 1 "$ex")" ] || echo >> "$ex"
   echo '.orch-progress/' >> "$ex"
 }
+# A shared-mode project has no state path to follow back to its hub, so register leaves one: the hub's path
+# in the git common dir (never committed, seen from every worktree), read by `hub`.
+hub_pointer=orchestration-kit-hub
 project_root() { # hub id path
   if [ -f "$1/projects/$2/.ai/ORCHESTRATION.md" ]; then printf '%s\n' "$1/projects/$2"; else expand_path "$3"; fi
 }
@@ -162,6 +166,18 @@ cmd_init() {
   echo "Coordinator·Worker는 실행하지 않았다."
 }
 
+# Shared mode in a git repo only; writes when missing, and warns instead of overwriting a pointer to another hub.
+write_hub_pointer() { # mode projectDir hub
+  [ "$1" = shared ] && is_git "$2" || return 0
+  f="$(common_dir "$2")/$hub_pointer"
+  if [ -f "$f" ]; then
+    [ "$(cat "$f")" = "$3" ] || echo "주의: $f 가 다른 hub($(cat "$f"))를 가리킴. 덮어쓰지 않음"
+    return 0
+  fi
+  printf '%s\n' "$3" > "$f"
+  echo "hub 포인터: $f"
+}
+
 cmd_register() {
   hub=${1:-}; proj=${2:-}
   [ -d "$hub" ] && [ -d "$proj" ] || die "usage: kit.sh register <hubDir> <projectDir>"
@@ -183,11 +199,13 @@ cmd_register() {
   rows=$(projects "$hub")
   old=$(printf '%s\n' "$rows" | awk -F'\t' -v id="$id" '$1 == id { print $2; exit }')
   if [ -n "$old" ]; then
-    [ "$old" = "$path" ] && { echo "이미 등록됨: $id"; return 0; }
-    die "projectId 충돌: ${id}는 이미 ${old}로 등록됨"
+    [ "$old" = "$path" ] || die "projectId 충돌: ${id}는 이미 ${old}로 등록됨"
+    write_hub_pointer "${loc%%"$tab"*}" "$proj" "$hub"
+    echo "이미 등록됨: $id"; return 0
   fi
   other=$(printf '%s\n' "$rows" | awk -F'\t' -v p="$path" '$2 == p { print $1; exit }')
   [ -z "$other" ] || die "같은 경로가 이미 ${other}로 등록됨"
+  write_hub_pointer "${loc%%"$tab"*}" "$proj" "$hub"
   [ -z "$(tail -c 1 "$hub/portfolio/PROJECTS.md")" ] || echo >> "$hub/portfolio/PROJECTS.md"
   printf '| %s | %s | active | - |\n' "$id" "$path" >> "$hub/portfolio/PROJECTS.md"
   echo "등록: $id -> $path"
@@ -198,6 +216,22 @@ cmd_register() {
     [ -f "$rconf" ] && [ "$(fm taskPrefix < "$rconf")" = "$prefix" ] &&
       echo "주의: taskPrefix ${prefix}를 ${rid}도 쓴다. 구분하려면 $proj/.ai/ORCHESTRATION.md의 taskPrefix를 바꾼다."
   done || true
+}
+
+# Prints the hub of any folder of a Portfolio or project (stdout one line); read-only.
+cmd_hub() {
+  [ -d "${1:-}" ] || die "usage: kit.sh hub <dir>"
+  d=$(cd "$1" && pwd -P)
+  if has_schema "$d" && [ "$(fm role < "$d/.ai/ORCHESTRATION.md")" = portfolio ]; then printf '%s\n' "$d"; return 0; fi
+  loc=$(locate "$d") || die "$1: 초기화되지 않음 (setup Skill로 초기화)"
+  if [ "${loc%%"$tab"*}" = personal ]; then
+    h=$(printf '%s\n' "${loc#*"$tab"}" | sed 's|/projects/[^/]*/*$||')
+  else
+    is_git "$d" && [ -f "$(common_dir "$d")/$hub_pointer" ] || die "$1: hub 포인터 없음 (hub에서 kit.sh register를 다시 실행)"
+    h=$(cat "$(common_dir "$d")/$hub_pointer")
+  fi
+  has_schema "$h" && [ "$(fm role < "$h/.ai/ORCHESTRATION.md")" = portfolio ] || die "$1: hub 포인터가 가리키는 곳이 hub가 아님: $h"
+  printf '%s\n' "$h"
 }
 
 # Prints why a report is invalid, or nothing when it is valid. Args: projectId name; content on stdin.
@@ -552,6 +586,7 @@ case ${1:-} in
   init) shift; cmd_init "$@" ;;
   where) [ -d "${2:-}" ] || die "usage: kit.sh where <projectDir>"; locate "$2" || die "$2: 초기화되지 않음 (setup Skill로 초기화)" ;;
   register) shift; cmd_register "$@" ;;
+  hub) shift; cmd_hub "$@" ;;
   pending) shift; cmd_pending "$@" ;;
   board) shift; cmd_board "$@" ;;
   mark) shift; cmd_mark "$@" ;;

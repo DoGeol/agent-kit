@@ -78,7 +78,7 @@ Orca: Run / Task / Dispatch / Worker / Worktree 실행 상태
 | | 공유 모드 (`mode: shared`) | 개인 모드 (`mode: personal`) |
 |---|---|---|
 | 상태 폴더(`.ai/`) | 프로젝트 저장소 안 | Portfolio hub의 `projects/<projectId>/.ai/` |
-| 프로젝트 저장소에 남는 것 | `.ai/`, 진입점 문구 | 없음. Git 공통 폴더의 상태 경로 파일(`orchestration-kit-state`)과 로컬 무시 목록(`info/exclude`)의 `.orch-progress/` 한 줄뿐이며 둘 다 커밋되지 않는다 |
+| 프로젝트 저장소에 남는 것 | `.ai/`, 진입점 문구. Git 공통 폴더에 hub 포인터 파일(`orchestration-kit-hub`, 커밋되지 않음) | 없음. Git 공통 폴더의 상태 경로 파일(`orchestration-kit-state`)과 로컬 무시 목록(`info/exclude`)의 `.orch-progress/` 한 줄뿐이며 둘 다 커밋되지 않는다 |
 | 보고서 발행 | `reportsRef` 브랜치에 커밋 | hub의 현재 브랜치에 커밋 |
 | 맞는 저장소 | 개인 저장소, 팀 전체가 Kit을 쓰는 저장소 | 다른 사람과 같이 쓰는 저장소 (조직·팀 저장소, 원격 소유자가 본인이 아님) |
 

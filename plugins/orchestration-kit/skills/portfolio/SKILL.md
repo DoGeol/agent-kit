@@ -32,6 +32,7 @@ Portfolio 저장소에서 일한다. `.ai/ORCHESTRATION.md`가 없거나 `role: 
   ../../scripts/kit.sh register <hubDir> <projectDir>
   ```
 
+- 공유 모드 Git 저장소는 등록할 때 Git 공통 폴더에 hub 포인터(`orchestration-kit-hub`)도 남긴다. 이미 등록된 프로젝트도 다시 실행하면 남는다.
 - 개인 모드 프로젝트는 상태 폴더가 이 hub의 `projects/<projectId>/`에 있다. 그 폴더는 그 Project Coordinator 소유다. Portfolio는 읽기만 하고 고치거나 커밋하지 않는다 ([permissions.md](../../policies/permissions.md#문서-수정-권한)). 보고서는 hub `HEAD`에서 읽힌다.
 - 상태 변경(`active` / `paused` / `archived`)은 `PROJECTS.md`의 `status` 열을 고친다. 행을 지우지 않는다.
 

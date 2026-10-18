@@ -58,29 +58,43 @@ test('mineFirst and ago', () => {
 
 const BAND = { hasSurvey: false, isWorking: false, maxRows: 16, bodyColumns: 120, scroll: { offset: 0, bodyRows: 12 }, view: {} } as const
 
-type World = { terminal?: string; where?: string; config?: string; opened?: string[]; exit?: number; stderr?: string; boards?: string[] }
+type World = {
+  terminal?: string; where?: string; config?: string; opened?: string[]; exit?: number; stderr?: string; boards?: string[]
+  /** every kit.sh and git call, by kind */
+  calls?: string[]
+  /** while true, `kit.sh where` and git fail: a folder that is no project yet */
+  whereFails?: () => boolean
+  /** what `kit.sh hub` prints; it fails when absent */
+  hub?: string
+  /** the board answer waits for this */
+  gate?: Promise<void>
+}
 
 const world = (on: On, board: string, w: World = {}) => {
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('env.get', (_, e) => ({ value: e.name === 'HOME' ? '/h' : e.name === 'ORCA_TERMINAL_HANDLE' ? w.terminal : undefined }))
-  on('process.run', (_, e) => {
-    const isWhere = e.argv.includes('where')
-    if (!isWhere) w.boards?.push(e.argv.join(' '))
-    return {
-      value: {
-        exitCode: isWhere ? 0 : (w.exit ?? 0), stdout: isWhere ? (w.where ?? 'shared\t/h/hub\n') : board, stderr: isWhere ? '' : (w.stderr ?? ''),
-        isStdoutTruncated: false, isStderrTruncated: false,
-      },
+  on('turn.complete', (_, e) => ({ text: e.answer }))
+  on('process.run', async (_, e) => {
+    const kind = e.argv.includes('where') ? 'where' : e.argv.includes('hub') ? 'hub' : e.argv[0] === 'git' ? 'git' : 'board'
+    w.calls?.push(kind)
+    const out = (exitCode: number, stdout = '', stderr = '') => ({ value: { exitCode, stdout, stderr, isStdoutTruncated: false, isStderrTruncated: false } })
+    if (kind === 'board') {
+      w.boards?.push(e.argv.join(' '))
+      await w.gate
+      return out(w.exit ?? 0, board, w.stderr ?? '')
     }
+    if (kind === 'git' || (kind === 'where' && w.whereFails?.())) return out(1, '', 'kit.sh: 초기화되지 않음')
+    if (kind === 'hub') return w.hub === undefined ? out(1, '', 'kit.sh: hub 포인터 없음') : out(0, w.hub)
+    return out(0, w.where ?? 'shared\t/h/hub\n')
   })
   on('fs.read', () => ({ value: w.config ?? 'role: portfolio\n' }))
   on('ui.open', (_, e) => {
     w.opened?.push(e.id)
     return { value: { isPlaced: true } }
   })
-  // stands for mods-hud's card or the engine's own band beneath this plugin
-  on('ui.render', () => ({ type: 'Text', children: ['HUD card'] }))
+  // stands for the engine's own band beneath every plugin
+  on('ui.render', () => ({ type: 'Text', children: ['core band'] }))
 }
 
 // Starts the session and lets the first read land.
@@ -111,10 +125,10 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await pane.unmount()
   })
 
-  test(`band line on ${surface}: counts shown under the card beneath`, async ($, on) => {
+  test(`band line on ${surface}: counts shown under what is beneath`, async ($, on) => {
     await boot($, on, surface, BOARD)
     const band = await $.ui.mount({ plugin: 'orchestration-kit', surface, component: 'AbovePrompt', props: BAND })
-    expect(await band.find({ type: 'Text', text: 'HUD card' })).toBeDefined()
+    expect(await band.find({ type: 'Text', text: 'core band' })).toBeDefined()
     expect(await band.find({ type: 'Text', text: '보고 대기 2' })).toBeDefined()
     expect(await band.find({ type: 'Text', text: '블로커 1' })).toBeDefined()
     await band.unmount()
@@ -130,11 +144,28 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(boards).toHaveLength(1)
   })
 
-  test(`band line on ${surface}: nothing when all clear`, async ($, on) => {
-    await boot($, on, surface, ['project', 'app', 'shared', '0', '-', '-', '-'].join(T))
+  test(`T6 band line on ${surface}: a quiet board still shows the line, with the session's own project`, async ($, on) => {
+    const CLEAR = ['project', 'api', 'personal', '3', '-', '-', '-'].join(T)
+    await boot($, on, surface, CLEAR)
+    const hubBand = await $.ui.mount({ plugin: 'orchestration-kit', surface, component: 'AbovePrompt', props: BAND })
+    expect(await hubBand.find({ type: 'Text', text: '◆' })).toBeDefined()
+    expect(await hubBand.find({ key: 'portfolio-open' })).toBeDefined()
+    expect(await hubBand.find({ key: 'portfolio-clear' })).toBeDefined()
+    expect(await hubBand.find({ key: 'portfolio-projects' })).toBeDefined()
+    expect(await hubBand.find({ key: 'portfolio-mine' })).toBeUndefined()
+    expect(await hubBand.find({ type: 'Text', text: 'core band' })).toBeDefined()
+    await hubBand.unmount()
+  })
+
+  test(`T6 band line on ${surface}: a project session names its own project first`, async ($, on) => {
+    const clock = mock.clock(on, { now: Date.parse('2026-10-18T12:00:00+09:00') })
+    world(on, ['project', 'api', 'personal', '3', '-', '-', '-'].join(T), { where: 'personal\t/h/hub/projects/api\n', config: 'role: project\nprojectId: api\n' })
+    await $.session.start({ cwd: '/h/api', surface, isInteractive: true })
+    await clock.advance(10)
     const band = await $.ui.mount({ plugin: 'orchestration-kit', surface, component: 'AbovePrompt', props: BAND })
-    expect(await band.find({ type: 'Text', text: '◆' })).toBeUndefined()
-    expect(await band.find({ type: 'Text', text: 'HUD card' })).toBeDefined()
+    expect((await band.find({ key: 'portfolio-mine' }))?.text).toMatch(/api Task 3/)
+    expect(await band.find({ key: 'portfolio-clear' })).toBeDefined()
+    expect(await band.find({ key: 'portfolio-projects' })).toBeUndefined()
     await band.unmount()
   })
 
@@ -154,6 +185,132 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await boot($, on, surface, '', { exit: 1, stderr: 'kit.sh: /h/hub: role이 portfolio가 아님\n' })
     const pane = await $.ui.mount({ plugin: 'orchestration-kit', surface, component: 'Pane', requestId: 'portfolio-board', props: PANE } as never)
     expect(await pane.find({ type: 'Text', text: /role이 portfolio가 아님/ })).toBeDefined()
+    await pane.unmount()
+  })
+}
+
+// Inline plugins run beside the one under test: `prepend` sits outside it, `append` inside. Neither may close over this file.
+const outerCard = {
+  name: 'outer-card',
+  tier: 'prepend',
+  register: (on: On) => {
+    on('ui.render', { component: 'AbovePrompt' }, async (_$, e, next) => {
+      const below = await next(e)
+      return { type: 'Box', children: [{ type: 'Text', children: ['CARD'] }, below] }
+    })
+  },
+} as const
+const innerCard = {
+  name: 'inner-card',
+  tier: 'append',
+  register: (on: On) => {
+    on('ui.render', { component: 'AbovePrompt' }, () => ({ type: 'Text', children: ['CARD'] }))
+  },
+} as const
+
+for (const surface of ['terminal', 'desktop'] as const) {
+  for (const [name, card] of [['outside', outerCard], ['inside', innerCard]] as const) {
+    test(`T3 band line on ${surface}: shown whether the card is ${name} this plugin`, { plugins: [card] }, async ($, on) => {
+      await boot($, on, surface, BOARD)
+      const band = await $.ui.mount({ plugin: 'orchestration-kit', surface, component: 'AbovePrompt', props: BAND })
+      expect(await band.find({ type: 'Text', text: 'CARD' })).toBeDefined()
+      expect(await band.find({ key: 'portfolio-open' })).toBeDefined()
+      await band.unmount()
+    })
+  }
+
+  test(`T4 ${surface}: a hub that appears mid-session is found at turn end, and never looked for again`, async ($, on) => {
+    const flag = { ready: false }
+    const calls: string[] = []
+    const clock = mock.clock(on, { now: Date.parse('2026-10-18T12:00:00+09:00') })
+    world(on, BOARD, { calls, whereFails: () => !flag.ready })
+    await $.session.start({ cwd: '/h/hub', surface, isInteractive: true })
+    await clock.advance(120_000)
+    const pane = await $.ui.mount({ plugin: 'orchestration-kit', surface, component: 'Pane', requestId: 'portfolio-board', props: PANE } as never)
+    expect(await pane.find({ key: 'pane-empty-not-kit' })).toBeDefined()
+    await pane.unmount()
+    flag.ready = true
+    await $.turn.complete({ answer: 'x', durationMs: 5, isAborted: false, turnId: 'm1', reason: 'answer' })
+    await clock.advance(10)
+    const band = await $.ui.mount({ plugin: 'orchestration-kit', surface, component: 'AbovePrompt', props: BAND })
+    expect(await band.find({ key: 'portfolio-open' })).toBeDefined()
+    await band.unmount()
+    const looks = calls.filter(c => c === 'where').length
+    await clock.advance(120_000)
+    await $.turn.complete({ answer: 'x', durationMs: 5, isAborted: false, turnId: 'm2', reason: 'answer' })
+    await clock.advance(10)
+    expect(calls.filter(c => c === 'where')).toHaveLength(looks)
+  })
+
+  test(`T4 ${surface}: opening the pane looks for a hub that appeared mid-session`, async ($, on) => {
+    const flag = { ready: false }
+    const clock = mock.clock(on, { now: Date.parse('2026-10-18T12:00:00+09:00') })
+    world(on, BOARD, { whereFails: () => !flag.ready })
+    await $.session.start({ cwd: '/h/hub', surface, isInteractive: true })
+    await clock.advance(10)
+    flag.ready = true
+    await $.command.run({ command: 'portfolio-board', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 90 } } as never)
+    await clock.advance(10)
+    const pane = await $.ui.mount({ plugin: 'orchestration-kit', surface, component: 'Pane', requestId: 'portfolio-board', props: PANE } as never)
+    expect(await pane.find({ type: 'Text', text: '처리할 것 5' })).toBeDefined()
+    await pane.unmount()
+  })
+
+  test(`T5 ${surface}: a shared-mode project finds its hub through kit.sh hub`, async ($, on) => {
+    const boards: string[] = []
+    const clock = mock.clock(on, { now: Date.parse('2026-10-18T12:00:00+09:00') })
+    world(on, BOARD, { boards, where: 'shared\t/r/api\n', config: 'role: project\nprojectId: api\n', hub: '/h/hub\n' })
+    await $.session.start({ cwd: '/r/api', surface, isInteractive: true })
+    await clock.advance(10)
+    expect(boards.some(b => b.endsWith('board /h/hub'))).toBe(true)
+    const band = await $.ui.mount({ plugin: 'orchestration-kit', surface, component: 'AbovePrompt', props: BAND })
+    expect(await band.find({ key: 'portfolio-mine' })).toBeDefined()
+    await band.unmount()
+    const pane = await $.ui.mount({ plugin: 'orchestration-kit', surface, component: 'Pane', requestId: 'portfolio-board', props: PANE } as never)
+    expect(await pane.find({ type: 'Text', text: '  api (내 프로젝트)  ' })).toBeDefined()
+    await pane.unmount()
+  })
+
+  test(`T5 ${surface}: with no hub pointer a shared-mode project shows no line, and the pane says what to do`, async ($, on) => {
+    const boards: string[] = []
+    const clock = mock.clock(on, { now: Date.parse('2026-10-18T12:00:00+09:00') })
+    world(on, BOARD, { boards, where: 'shared\t/r/api\n', config: 'role: project\nprojectId: api\n' })
+    await $.session.start({ cwd: '/r/api', surface, isInteractive: true })
+    await clock.advance(10)
+    expect(boards).toHaveLength(0)
+    const band = await $.ui.mount({ plugin: 'orchestration-kit', surface, component: 'AbovePrompt', props: BAND })
+    expect(await band.find({ type: 'Text', text: '◆' })).toBeUndefined()
+    await band.unmount()
+    const pane = await $.ui.mount({ plugin: 'orchestration-kit', surface, component: 'Pane', requestId: 'portfolio-board', props: PANE } as never)
+    expect(await pane.find({ key: 'pane-empty-no-hub' })).toBeDefined()
+    expect((await pane.find({ key: 'pane-empty-no-hub' }))?.text).toMatch(/^api: hub를 찾지 못함/)
+    await pane.unmount()
+  })
+
+  test(`T7 pane on ${surface}: reading, not a Kit repository`, async ($, on) => {
+    let release = () => {}
+    const gate = new Promise<void>(r => (release = r))
+    const clock = mock.clock(on, { now: Date.parse('2026-10-18T12:00:00+09:00') })
+    world(on, BOARD, { gate })
+    await $.session.start({ cwd: '/h/hub', surface, isInteractive: true })
+    await clock.advance(10)
+    const waiting = await $.ui.mount({ plugin: 'orchestration-kit', surface, component: 'Pane', requestId: 'portfolio-board', props: PANE } as never)
+    expect(await waiting.find({ key: 'pane-empty-reading' })).toBeDefined()
+    await waiting.unmount()
+    release()
+    await clock.advance(10)
+    const done = await $.ui.mount({ plugin: 'orchestration-kit', surface, component: 'Pane', requestId: 'portfolio-board', props: PANE } as never)
+    expect(await done.find({ key: 'pane-empty-reading' })).toBeUndefined()
+    await done.unmount()
+  })
+
+  test(`T7 pane on ${surface}: a folder that is no Kit project`, async ($, on) => {
+    const clock = mock.clock(on, { now: Date.parse('2026-10-18T12:00:00+09:00') })
+    world(on, BOARD, { whereFails: () => true })
+    await $.session.start({ cwd: '/tmp/x', surface, isInteractive: true })
+    await clock.advance(10)
+    const pane = await $.ui.mount({ plugin: 'orchestration-kit', surface, component: 'Pane', requestId: 'portfolio-board', props: PANE } as never)
+    expect(await pane.find({ key: 'pane-empty-not-kit' })).toBeDefined()
     await pane.unmount()
   })
 }

@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { Register } from 'claude-code'
 
-import type { Board, Item } from '../types'
+import type { Board, Discovery, Item } from '../types'
 
 // One line above the prompt with what needs someone across the Portfolio, and a pane with the details.
 // Read-only: every value comes from `kit.sh board`; nothing is written and no model is called.
@@ -9,6 +9,7 @@ import type { Board, Item } from '../types'
 const PANE = 'portfolio-board'
 const POLL_MS = 30_000
 const boardAtom = atom({ plugin: 'orchestration-kit', key: 'board' } as const, null as Board | null)
+const discoveryAtom = atom({ plugin: 'orchestration-kit', key: 'discovery' } as const, { state: 'searching' } as Discovery)
 
 type Raw = Pick<Board, 'projects' | 'items' | 'workers' | 'workersUnknown' | 'errors'>
 type Tone = 'error' | 'warning' | 'suggestion'
@@ -91,6 +92,9 @@ const groupBy = <T,>(rows: readonly T[], key: (r: T) => string): [string, T[]][]
 }
 
 export const register: Register = (on, options) => {
+  // Looks for the hub again (turn end, pane open) until it is found; null before the session starts and once found.
+  let rediscover: (() => Promise<void>) | null = null
+
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'portfolio-board', description: '포트폴리오 현황 pane 열기: 처리할 것, 진행 중 Worker, 전체 프로젝트' })
     const start = async () => {
@@ -101,74 +105,108 @@ export const register: Register = (on, options) => {
         const w = await $.process.run(['sh', kit, 'where', dir]).catch(() => null)
         return w && w.exitCode === 0 ? w.stdout : null
       }
-      // A session started in a subfolder finds its project through the repository root.
-      let where = await whereOf('.')
-      if (!where) {
-        const g = await $.process.run(['git', 'rev-parse', '--show-toplevel']).catch(() => null)
-        const top = g && g.exitCode === 0 ? g.stdout.trim() : ''
-        if (top) where = await whereOf(top)
+      const poll = (hub: string, mine: string | undefined) => {
+        const shown = home && hub.startsWith(`${home}/`) ? `~${hub.slice(home.length)}` : hub
+        let isBusy = false
+        let last = ''
+        // Written only when something but the time changed, so an unchanged poll does not redraw (and drop a click).
+        const write = async (raw: Raw, isWorker: boolean) => {
+          const key = JSON.stringify([raw, isWorker])
+          if (key === last) return
+          last = key
+          const at = await $.clock.now()
+          await update($, boardAtom, () => ({ ...raw, at, mine, hub: shown, isWorker }))
+        }
+        const refresh = async () => {
+          if (isBusy) return
+          isBusy = true
+          try {
+            const r = await $.process.run(['sh', kit, 'board', hub], { timeoutMs: 60_000 })
+            const raw = parseBoard(r.stdout)
+            if (r.exitCode !== 0) raw.errors.push(`kit.sh board 실패 (exit ${r.exitCode}): ${r.stderr.trim().split('\n')[0] || '이유 없음'}`)
+            const isWorker = !!me && raw.workers.some(x => x.terminal === me)
+            await write(raw, isWorker)
+            // A worker session never shows the line, so it stops reading.
+            if (isWorker) tick.cancel()
+          } catch (err) {
+            await write({ projects: [], items: [], workers: [], errors: [`kit.sh board 실행 실패: ${String(err)}`] }, false)
+          } finally {
+            isBusy = false
+          }
+        }
+        const tick = $.clock.every(POLL_MS, () => void refresh())
+        void refresh()
       }
-      const root = where?.trim().split('\t')[1]
-      const config = root ? await $.fs.read(`${root}/.ai/ORCHESTRATION.md`).catch(() => null) : null
-      const { hub, mine } = hubFrom(String((options as { hubPath?: unknown } | undefined)?.hubPath ?? ''), home, where, config)
-      if (!hub) return
-      const shown = home && hub.startsWith(`${home}/`) ? `~${hub.slice(home.length)}` : hub
-      let isBusy = false
-      let last = ''
-      // Written only when something but the time changed, so an unchanged poll does not redraw (and drop a click).
-      const write = async (raw: Raw, isWorker: boolean) => {
-        const key = JSON.stringify([raw, isWorker])
-        if (key === last) return
-        last = key
-        const at = await $.clock.now()
-        await update($, boardAtom, () => ({ ...raw, at, mine, hub: shown, isWorker }))
-      }
-      const refresh = async () => {
-        if (isBusy) return
-        isBusy = true
+      let isFinding = false
+      const find = async () => {
+        if (isFinding) return
+        isFinding = true
         try {
-          const r = await $.process.run(['sh', kit, 'board', hub], { timeoutMs: 60_000 })
-          const raw = parseBoard(r.stdout)
-          if (r.exitCode !== 0) raw.errors.push(`kit.sh board 실패 (exit ${r.exitCode}): ${r.stderr.trim().split('\n')[0] || '이유 없음'}`)
-          const isWorker = !!me && raw.workers.some(x => x.terminal === me)
-          await write(raw, isWorker)
-          // A worker session never shows the line, so it stops reading.
-          if (isWorker) tick.cancel()
-        } catch (err) {
-          await write({ projects: [], items: [], workers: [], errors: [`kit.sh board 실행 실패: ${String(err)}`] }, false)
+          // A session started in a subfolder finds its project through the repository root.
+          let where = await whereOf('.')
+          if (!where) {
+            const g = await $.process.run(['git', 'rev-parse', '--show-toplevel']).catch(() => null)
+            const top = g && g.exitCode === 0 ? g.stdout.trim() : ''
+            if (top) where = await whereOf(top)
+          }
+          const root = where?.trim().split('\t')[1]
+          const config = root ? await $.fs.read(`${root}/.ai/ORCHESTRATION.md`).catch(() => null) : null
+          let { hub, mine } = hubFrom(String((options as { hubPath?: unknown } | undefined)?.hubPath ?? ''), home, where, config)
+          // A shared-mode project has no state path to follow; `register` left a pointer that `kit.sh hub` reads.
+          if (!hub && root && mine) {
+            const h = await $.process.run(['sh', kit, 'hub', root]).catch(() => null)
+            if (h && h.exitCode === 0) hub = h.stdout.trim()
+          }
+          const found: Discovery = { state: hub ? 'found' : mine ? 'no-hub' : 'not-kit', mine }
+          // Written only when it changed: an idle session writes no state.
+          if (JSON.stringify(found) !== JSON.stringify(await read($, discoveryAtom))) await update($, discoveryAtom, () => found)
+          if (!hub) return
+          rediscover = null
+          poll(hub, mine)
         } finally {
-          isBusy = false
+          isFinding = false
         }
       }
-      const tick = $.clock.every(POLL_MS, () => void refresh())
-      void refresh()
+      rediscover = find
+      await find()
     }
     void start()
     return next(e)
   })
 
+  on('turn.complete', async ($, e, next) => {
+    void rediscover?.().catch(() => undefined)
+    return next(e)
+  })
+
   on('command.run', { command: 'portfolio-board' }, async $ => {
+    await rediscover?.().catch(() => undefined)
     const { isPlaced } = await $.ui.open({ id: PANE, title: '포트폴리오' })
     return { text: isPlaced ? '포트폴리오 pane 열림' : '포트폴리오 pane은 화면이 넓어지면 열린다' }
   })
 
-  // Wraps whatever the plugins beneath drew (mods-hud's card) and adds one line under it.
+  // The band slot is shared: draw one line under whatever the plugins beneath drew, whether or not another band is outside.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const below = await next(e)
     if (e.props.hasSurvey) return below
     const b = await read($, boardAtom)
-    const parts = b && !b.isWorker ? bandParts(b) : []
-    if (parts.length === 0) return below
+    if (!b || b.isWorker) return below
+    const parts = bandParts(b)
+    const mine = b.mine ? b.projects.find(p => p.id === b.mine) : undefined
     const { Box, Button, Text } = $.ui.resolve(e)
     return (
       <Box flexDirection="column">
         {below}
         <Box flexDirection="row" columnGap={1}>
-          <Text color={parts[0]!.tone}>◆</Text>
+          <Text color={parts[0]?.tone} dimColor={parts.length === 0}>◆</Text>
           <Button key="portfolio-open" plain label="포트폴리오" onPress={() => void $.ui.open({ id: PANE, title: '포트폴리오' })} />
+          {b.mine && <Box key="portfolio-mine"><Text color="suggestion">{b.mine}{mine ? ` Task ${mine.open}` : ''}</Text></Box>}
+          {b.mine && <Text dimColor>·</Text>}
+          {parts.length === 0 && <Box key="portfolio-clear"><Text dimColor>처리할 것 없음</Text></Box>}
           {parts.map(p => (
             <Text key={p.label} color={p.tone}>{p.label}</Text>
           ))}
+          {!b.mine && <Box key="portfolio-projects"><Text dimColor>· 프로젝트 {b.projects.length}</Text></Box>}
         </Box>
       </Box>
     )
@@ -177,7 +215,13 @@ export const register: Register = (on, options) => {
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const { Box, Text } = $.ui.resolve(e)
     const b = await read($, boardAtom)
-    if (!b) return <Text dimColor>포트폴리오: hub를 찾지 못했거나 읽는 중 (설정 hubPath)</Text>
+    if (!b) {
+      const d = await read($, discoveryAtom)
+      // keyed on a Box: a key on the root element is not kept
+      if (d.state === 'not-kit') return <Box key="pane-empty-not-kit"><Text dimColor>이 저장소는 orchestration-kit 프로젝트가 아님 (hub를 보려면 hubPath 설정)</Text></Box>
+      if (d.state === 'no-hub') return <Box key="pane-empty-no-hub"><Text dimColor>{d.mine}: hub를 찾지 못함. hub에서 kit.sh register를 다시 실행하거나 hubPath 설정</Text></Box>
+      return <Box key="pane-empty-reading"><Text dimColor>포트폴리오: 읽는 중</Text></Box>
+    }
     const now = await $.clock.now()
     const label = (p: string) => (p === b.mine ? `${p} (내 프로젝트)` : p)
     const groups = groupBy(mineFirst(b.items, i => i.project, b.mine), i => i.project)
