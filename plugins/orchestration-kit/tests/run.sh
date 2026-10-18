@@ -263,9 +263,11 @@ printf 'rules\n' > "$ad/DESIGN.md"; printf 'x\n' > "$ad/.agents/skills/ui-build/
 git_commit "$ad" base
 "$kit" init project "$ad" adopt-app > /dev/null
 [ "$("$kit" adopt-check "$ad")" = none ] || fail "adopt-check without overlays"
+ng="$tmp/adopt-nogit"; mkdir -p "$ng"; "$kit" init project "$ng" nogit-app > /dev/null
+[ "$("$kit" adopt-check "$ng")" = none ] || fail "adopt-check on non-git project without overlays"
 c=$(git -C "$ad" log -1 --format=%h -- DESIGN.md)
 mkdir -p "$ad/.ai/roles"
-printf '# frontend 보강\n\n## 출처\n- DESIGN.md @ %s\n- skill ui-build @ .agents/skills\n- skill design-review @ plugin\n\n## 관점\n- 토큰만 쓴다\n' "$c" > "$ad/.ai/roles/frontend.md"
+printf '# frontend 보강\n\n## 출처\n- DESIGN.md @ %s\n- skill ui-build @ .agents/skills\n- skill design-review @ plugin\n\n## 관점\n- 날짜는 formatDate @ src/lib/date.ts\n' "$c" > "$ad/.ai/roles/frontend.md"
 printf '# 대응표\n\n## 출처\n- docs/a.md @ %s\n' "$(git -C "$ad" log -1 --format=%h -- docs/a.md)" > "$ad/.ai/ADOPT.md"
 [ "$("$kit" adopt-check "$ad")" = ok ] || fail "adopt-check fresh: $("$kit" adopt-check "$ad")"
 printf 'rules 2\n' > "$ad/DESIGN.md"; mkdir -p "$ad/.claude/skills/qa-sheet"; printf 'y\n' > "$ad/.claude/skills/qa-sheet/SKILL.md"
@@ -275,7 +277,7 @@ printf '%s\n' "$out" | grep -q "^stale	frontend.md	DESIGN.md	$c -> " || fail "ch
 printf '%s\n' "$out" | grep -q '^stale	frontend.md	skill ui-build	없어짐' || fail "removed skill not stale: $out"
 printf '%s\n' "$out" | grep -q '^new	skill	qa-sheet	.claude/skills' || fail "new skill not listed: $out"
 if printf '%s\n' "$out" | grep -q 'design-review\|ADOPT.md'; then fail "plugin skill or unchanged source flagged: $out"; fi
-ok "adopt-check: none, ok, stale on changed file and removed skill, new skill; plugin skills not checked"
+ok "adopt-check: none (also non-git), ok (non-source @ lines ignored), stale on changed file and removed skill, new skill; plugin skills not checked"
 
 # 8c. Usage readers against stub orca, claude, codex and agy (no real provider is called)
 if command -v jq > /dev/null; then
