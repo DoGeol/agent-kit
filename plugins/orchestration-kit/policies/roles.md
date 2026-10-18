@@ -60,6 +60,7 @@ Worker·Subagent에 맡길 일마다 **역할**을 정한다. 역할은 관점, 
 | frontend | [anthropics/skills](https://github.com/anthropics/skills) `webapp-testing` | Apache-2.0 | 코드만 읽지 않고 브라우저에 띄워 상태별로 확인 |
 | frontend, designer | [vercel-labs/web-interface-guidelines](https://github.com/vercel-labs/web-interface-guidelines) | MIT | 색에만 의존하지 않는 표시, 알림 영역에 둘 내용, 표시 형식 |
 | designer | [anthropics/skills](https://github.com/anthropics/skills) `frontend-design` | Apache-2.0 | 흔한 장식을 넣기 전에 필요한지 묻기, 강조할 곳 하나 |
+| docs | [anthropics/skills](https://github.com/anthropics/skills) `doc-coauthoring` | 표기 없음 (생각만 가져오고 문구는 쓰지 않음) | 다 쓴 뒤 처음 독자처럼 따라 해 보는 독자 시험 |
 
 - [확정] qa: 새 시험은 변경 범위(diff)와 그 호출자에만 쓰고 기존 시험은 전부 실행한다. QA를 통과시키려는 변경(제품 코드, 시험 삭제·skip, assertion 약화, 기준 이미지 갱신, 허용치 완화, 동작 우회 mock)을 하지 않는다. 시험 파일 검수는 별도 Task로만 한다.
 - [검증됨] qa 보강 비교 (sample-app, 심은 결함 3개, 팀마다 시트 `sonnet` 1 + 실행 `haiku` 1): 채점 8점은 두 팀 모두 8점이었다. 기준 이미지 갱신과 범위 함정은 두 팀의 시트 단계에서 이미 걸러져 차이가 나지 않았다. 보강한 팀에서만 나온 것: 결함을 고친 사본에서 새 시험이 통과함을 확인(red-green), 확인했고 없었던 결함 유형 목록, 차이 이미지 경로를 붙인 결정 요청.
@@ -72,6 +73,8 @@ Worker·Subagent에 맡길 일마다 **역할**을 정한다. 역할은 관점, 
 
 - [검증됨] frontend 비교 (sample-app 최근 확인 기록 구현, 팀마다 `sonnet` 1, 10점 채점표, 숨은 e2e 4개로 기계 판정): 두 팀 모두 9점. 숨은 e2e·토큰 사용·새 e2e는 같았다. 보강 역할 팀만 요소 대응표를 썼다. 대신 기준 이미지 갱신을 피하려고 기록 영역을 흐름 밖(`position:absolute`)으로 뺐다. 그래서 금지 문장을 "시험·기준 이미지를 맞추려고 화면 배치를 바꾸지 않는다, 의도된 변경이면 이유와 함께 갱신"으로 고쳤다 (고친 문장의 효과는 아직 재지 않았다).
 - [검증됨] designer 비교 (같은 기능의 설계 문서, 개수·보존·형식이 빠진 요청, 팀마다 `sonnet` 1, 10점 채점표): 기존 역할 9점, 보강 역할 10점. 차이는 사용자만 정할 값을 추천·가정·질문 표로 남겼는지 하나다. 두 팀 모두 실행하지 않은 코드 예시(`toLocaleTimeString('ko-KR', {hour12:false})`, 실제 출력 `14시 3분 1초`)와 틀린 기준 이미지 영향 짐작을 적었다. 그래서 "코드 예시와 시험 영향은 실행해 확인" 줄을 더했다 (이 줄의 효과는 아직 재지 않았다).
+
+- [검증됨] docs 비교 (sample-api README 실행 절, 틀린 기존 줄 `npm start`·포트 8080을 심음, 팀마다 `haiku` 1, 10점 채점표, README 명령을 그대로 실행해 판정): 기존 역할 7점, 보강 역할 8점. 두 팀 모두 틀린 줄을 실행으로 확인해 고쳤다. 차이는 독자 시험 하나다. 보강 역할 팀은 범위 밖 문서의 남은 항목도 보고했지만 기존 줄의 글자를 하나 지웠다. 그래서 "커밋 전에 diff를 다시 읽는다" 수용 기준을 더했다 (이 기준의 효과는 아직 재지 않았다).
 
 ## 프로젝트 보강
 
