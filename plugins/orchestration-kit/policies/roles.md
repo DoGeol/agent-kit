@@ -18,7 +18,7 @@ Worker·Subagent에 맡길 일마다 **역할**을 정한다. 역할은 관점, 
 | [qa](../roles/qa.md) ([참고](../roles/qa/reference.md)) | QA 시트, 테스트 작성·실행, 재현, 회귀 확인 | 테스트만 |
 | [planner](../roles/planner.md) ([참고](../roles/planner/reference.md)) | 구현 계획, PR 직전 최종 측정 시트 | 문서·시트만 |
 | [architect](../roles/architect.md) | 시스템 설계: 경계, 계약, 대안과 트레이드오프, 이전·되돌리기, 결정 기록 초안 | 설계 문서만 |
-| [reviewer](../roles/reviewer.md) | 코드·설계 리뷰 | 안 함 |
+| [reviewer](../roles/reviewer.md) ([참고](../roles/reviewer/reference.md)) | 코드·설계 리뷰, 명세·계획 검토 | 안 함 |
 | [docs](../roles/docs.md) | README, 가이드, 운영 문서 | 문서만 |
 
 [권장] 목록은 필요할 때 늘린다. 새 역할은 `roles/<id>.md`로 더하고 이 표에 적는다.
@@ -165,9 +165,26 @@ Worker·Subagent에 맡길 일마다 **역할**을 정한다. 역할은 관점, 
 |---|---|
 | 작은·중간 작업, 한 사람이 같은 파일을 고치면 되는 일 | Worker 1개. 주 역할 + 보조 역할 (예: `frontend` + `designer`) |
 | 큰 작업, 설계를 먼저 합의해야 하는 일 | ① 설계 역할 Worker가 설계 문서만 작성 ② Coordinator가 설계 수락 ③ 구현 역할 Worker가 구현 ④ 필요하면 설계 역할이 읽기 전용 리뷰 |
+| 서로 다른 역할 2~3개가 동시에 쓰고 그 사이에 공유 계약·파일이 있는 일 | 동시 협업: 계약 소유 Worker 1 + 작성 Worker 1~2 (+ 읽기 전용 검토 Worker). 같은 Run에서 주소록으로 서로 부른다 |
 
 - 두 역할이 같은 파일을 고쳐야 하면 여러 Worker 방식만 쓴다. 파일마다 작성자는 한 명이다 ([routing.md](routing.md#병렬-실행-규칙)).
 - 여러 Worker 방식에서 설계 문서는 다음 Worker 명세에 경로로 넘긴다. Worktree가 다르면 Coordinator가 먼저 병합한다.
+- 동시 협업은 네 조건이 모두 맞을 때만 고른다: ① 주 역할이 다른 하위 작업 2개 이상, 쓰는 파일이 겹치지 않음 ② 그 사이에 공유 인터페이스(계약, 공유 파일, 화면·API 경계) ③ 계약 초안을 Worker 하나가 소유하고, 사용자 승인이 먼저 필요한 구조 변경이 아님 ④ 검토 Worker 포함 3개 이내, 쓰는 Provider 사용량 모두 정상. 아니면 위 두 방식 중 하나.
+- 동시 협업이면 Coordinator는 협업 Worker를 모두 시작한 직후 같은 턴에 각 Worker의 메일함에 주소록 메시지(제목 `PEERS`, 줄마다 역할·Provider·Dispatch 주소·소유 파일)를 보낸다. 주소는 `worker-start` 응답에서 얻고, 명세에는 넣을 수 없다. 사용자 승인 대상(아키텍처, 프로젝트 간 계약)은 미리 승인할 수 없으므로 그 결정은 협업 중에도 Coordinator를 거쳐 사용자에게 간다.
+
+## 명세·계획 검토
+
+Coordinator가 쓴 명세·계획과 planner·architect가 낸 문서는 사용자에게 보이기 전에 다른 역할이 한 번 본다. 검토자는 [reviewer](../roles/reviewer.md)이고, 절차와 출력 형식은 [참고](../roles/reviewer/reference.md#명세계획-검토)를 명세에 붙인다.
+
+- 검토 지점: G1은 Coordinator가 쓴 Worker 명세와 계획이며 사용자에게 Worker 계획 승인을 받기 전이다. G2는 planner·architect Worker가 낸 계획·설계 문서이며 Coordinator가 사용자에게 질문·승인을 구하기 전이다.
+- 보는 것: 범위(완료 조건 빠짐·요청 밖 일), 계약(소유자·입력·출력·오류, 승인 대상 표시), 위험(되돌리기 어려움, 동시 실행·공유 파일, 권한, 사용량), 검증 방법(관찰 가능한 기준, 확인 명령, 결함 주입).
+- 검토자: G1은 Subagent만 쓴다. 검토 Worker도 Worker 계획 승인 대상이라 승인 전에 시작하지 않는다. G2와 구현 뒤 검토는 승인받은 Worker 계획에 검토 Worker가 있으면 작성한 Provider가 아닌 Provider의 읽기 전용 Worker로, 없으면 Subagent로 한다.
+- 등급: 범위·형식·검증 방법 검토는 `fast`, 계약·아키텍처가 걸린 검토는 `strong`이다 ([routing.md](routing.md#모델과-effort)). `strong`은 Worker 계획에 들어 있어야 한다.
+- 다른 Provider로 검토할 수 없으면(사용량을 못 읽음, 설치 안 됨, 시작 실패) 또는 검토에 쓸 Provider의 5시간 사용량이 70% 이상이면 Subagent로 검토를 계속하고 `실행 방식`에 `검토 Provider 없음: <이유>`를 적는다.
+- 생략: Direct 처리 / Worker 1개·`fast`·바꿀 파일 3개 이하·계약·저장 데이터·승인 대상 변경 없음 / 상향 사다리 재시도 / 사용자가 이 Task에서 생략하라고 함. 생략하면 `실행 방식`에 `검토 생략: <기준>`을 적는다.
+- 상한: 프로젝트 Task × 검토 지점(G1, G2 문서마다)마다 첫 검토 1회와 재검토 1회, 모두 2회다. 넘으면 다음 검토를 보류하고 사용자에게 추가 검토나 생략을 묻는다.
+- 기록: 지적마다 작성자(Coordinator 또는 작성 Worker)가 `반영` 또는 `기각: <이유>`를 적는다. 명세 끝 `## 검토`에 3줄(검토자의 역할·Provider·등급, 지적 수, 반영·기각 수와 기각 이유 요약)을 쓴다. `실행 방식` 열에는 `검토: reviewer@codex fast, 지적 3 → 반영 2·기각 1` 한 줄을 쓰고 새 열을 만들지 않는다. 사용자에게 Worker 계획 승인을 구할 때 이 줄을 같이 보인다.
+- 동시 협업 Run 안의 검토 Worker는 지적을 작성 Worker에게 직접 보낸다.
 
 ## 명세에 넣기
 
@@ -181,6 +198,13 @@ Worker·Subagent에 맡길 일마다 **역할**을 정한다. 역할은 관점, 
 <보조 역할의 관점과 수용 기준, 있으면>
 쓸 Skill: <이름> (작업 전에 실행한다), 있으면
 버전 확인: 버전에 따라 다른 API는 짐작하지 않는다. lock 파일의 설치 버전을 보고 패키지 안 문서·타입 → (도구에 있으면) context7 → 공식 문서 순으로 확인하고, 확인한 출처를 결과에 적는다.   ← 코드를 쓰는 역할(frontend, backend, qa)일 때
+
+## 협업   ← 동시 협업일 때
+- 동료: 주소록 메시지(PEERS)로 받는다. 시작하면 먼저 확인한다. 5분 안에 안 오면 Worker 조회 명령으로 같은 Run의 동료를 찾는다
+- 상의할 때: <계약 항목, 공유 파일, 설계 충돌>
+- 미리 승인한 범위: <Worker끼리 정해도 되는 결정>
+- 합의 기록: 상대에게 AGREED 메시지 + 진행 파일 ## 합의
+- 보내기·받기: 설치된 Orca 가이드의 주소 절 (명령은 Coordinator가 가이드에서 옮겨 적는다)
 
 ## 작업
 <대상, 변경, 제약, 소유 범위, 수용 기준. project Skill의 명세 규칙>

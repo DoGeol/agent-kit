@@ -74,6 +74,19 @@ for r in "$root"/roles/*.md; do
 done
 ok "role profiles ($(ls "$root"/roles/*.md | wc -l | tr -d ' ')) have required sections and are listed"
 
+# 4b. Worker collaboration and spec/plan review are written in the policies (docs only)
+grep -q '^| 같은 Run의 Worker ↔ Worker |' "$root/policies/communication.md" || fail "4b T1 communication.md: Worker ↔ Worker route row"
+for k in '동료:' '상의할 때:' '미리 승인한 범위:' '합의 기록:'; do
+  grep -q -- "^- $k" "$root/policies/roles.md" || fail "4b T2 roles.md spec 협업 field $k"
+done
+grep -q '^## 명세·계획 검토$' "$root/policies/roles.md" || fail "4b T3 roles.md lacks the spec/plan review section"
+for k in 생략 상한; do
+  awk '/^## 명세·계획 검토$/{f=1;next} /^## /{f=0} f' "$root/policies/roles.md" | grep -q "$k" || fail "4b T3 roles.md review section lacks $k"
+done
+grep -q '^## 명세·계획 검토$' "$root/roles/reviewer/reference.md" || fail "4b T4 reviewer/reference.md lacks the spec/plan review section"
+grep -q '^- 확인·감사만 담은 답장(새 질문·지적·제안이 없음)에는 답하지 않는다.$' "$root/policies/communication.md" || fail "4b T5 communication.md lacks the rule not to answer acknowledgement-only replies"
+ok "4b T1-T5 docs: Worker ↔ Worker route, spec 협업 fields, review section with 생략·상한, reviewer reference, acknowledgement-reply rule"
+
 # 5. Project init keeps existing files and is idempotent
 app="$tmp/app"; mkdir -p "$app/.ai"
 git -C "$app" init -q -b main

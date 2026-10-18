@@ -48,7 +48,7 @@ Portfolio 저장소에서 일한다. `.ai/ORCHESTRATION.md`가 없거나 `role: 
 
 [delegation.md](../../policies/delegation.md) 절차를 따른다.
 
-1. 템플릿 [../../templates/handoffs/portfolio-task.md](../../templates/handoffs/portfolio-task.md)로 `handoffs/outbox/<projectId>/<portfolioTaskId>.md`를 만든다. 결과와 완료 조건만 적고 구현 방식은 적지 않는다. 주된 산출물로 역할을 알 수 있으면(서버 구현 → `backend`, 화면 → `frontend` + `designer`) `제안 역할`에 [역할 목록](../../policies/roles.md#역할-목록)의 이름을 적는다. 모르면 비운다. 최종 선택은 Project Coordinator가 한다. 사용자가 Provider·모델을 지정했으면 `제안 Provider`에 적는다. Project는 이것을 따른다.
+1. 템플릿 [../../templates/handoffs/portfolio-task.md](../../templates/handoffs/portfolio-task.md)로 `handoffs/outbox/<projectId>/<portfolioTaskId>.md`를 만든다. 결과와 완료 조건만 적고 구현 방식은 적지 않는다. 여러 프로젝트에 위임하거나 프로젝트 간 계약·[확정] 정책에 닿으면 Subagent(reviewer 역할)로 명세를 검토하고 명세에 `## 검토`를 둔다. 주된 산출물로 역할을 알 수 있으면(서버 구현 → `backend`, 화면 → `frontend` + `designer`) `제안 역할`에 [역할 목록](../../policies/roles.md#역할-목록)의 이름을 적는다. 모르면 비운다. 최종 선택은 Project Coordinator가 한다. 사용자가 Provider·모델을 지정했으면 `제안 Provider`에 적는다. Project는 이것을 따른다.
 2. `TASKS.md` 상태를 `assigned`로 바꾼다.
 3. 전달한다: 아래 "세션 시작·전달" 절차를 따른다. 파일만 만들고 전달된 것으로 기록하지 않는다. 전달하면 명세의 `전달 기록`을 채운다.
 4. 수락(`accepted`)은 다음 Pull에서 프로젝트 `.ai/TASKS.md`의 연결을 보고 기록한다. Project 행이 `blocked`면 수락이 아니다 ([delegation.md](../../policies/delegation.md#절차)).

@@ -48,18 +48,19 @@ description: 프로젝트의 중앙 Coordinator로 일할 때 사용한다. 프�
 
 1. 업무를 수용 기준이 있는 하위 작업으로 나눈다.
 2. 하위 작업마다 [routing.md](../../policies/routing.md)로 실행 주체(Direct / Subagent / Independent Session)와 위치(현재 / 새 Worktree)를 따로 정한다.
-3. 하위 작업마다 [roles.md](../../policies/roles.md)로 역할과 조합 방식(Worker 1개에 주·보조 역할 / 설계 → 구현 여러 Worker)을 정한다. 역할 원본은 [../../roles/](../../roles/), 프로젝트 보강은 `.ai/roles/<id>.md`.
-4. 병렬 Worker는 파일 소유 범위를 정하고, 공유 파일 수정자를 한 명 지정한다. 기본 상한 3개.
-5. 셸에서 `../../scripts/kit.sh usage`로 사용량을 읽는다 (sandbox 밖에서 실행해도 되는 읽기 명령. 이유가 `sandbox:`로 시작하면 밖에서 다시 읽는다) ([routing.md](../../policies/routing.md#사용량)). Worker 계획(Worker 수, Provider, `strong` 등급, 실패 때 상향 상한)을 사용량과 함께 사용자에게 보여주고 승인받는다. 이 세션에서 묻거나 사용자 결정 요청 파일([양식](../../templates/decisions/user-decision.md))로 쓴다. 답을 기다리는 동안 다른 Task를 진행한다. 승인을 받으면(이 세션의 답, 또는 `decision-take`가 받아들인 답) 같은 턴에서 첫 Worker를 시작한다. 다른 확인을 기다리지 않는다. 승인한 범위 안에서는 Worker를 시작·재시작할 때 다시 묻지 않는다 ([permissions.md](../../policies/permissions.md#결정권)).
-6. `TASKS.md`의 `실행 방식` 열에 선택을 적는다. 역할도 같이 적는다 (`role: frontend+designer`).
-7. [권장] 새 구성 요소·계약·저장 데이터가 생기는 등 구조를 정해야 하면 먼저 `architect` Worker(`strong`)로 설계 문서를 받는다. 사용자가 설계를 승인한 뒤 그 문서를 planner에 넘긴다. 요구가 모호하거나 하위 작업이 여럿이면 구현 전에 `planner` Worker(`strong`)로 계획을 받는다. 계획의 "사용자만 답할 수 있음" 질문은 [사용자에게 결정 묻기](../../policies/communication.md#사용자에게-결정-묻기) 형식으로 이 세션에서 묻거나 사용자 결정 요청 파일로 쓰고, 답을 받은 뒤 구현을 배정한다.
+3. 하위 작업마다 [roles.md](../../policies/roles.md)로 역할과 조합 방식(Worker 1개에 주·보조 역할 / 설계 → 구현 여러 Worker / 동시 협업. [고르는 조건 네 개](../../policies/roles.md#조합-한-worker와-여러-worker))을 정한다. 역할 원본은 [../../roles/](../../roles/), 프로젝트 보강은 `.ai/roles/<id>.md`.
+4. 병렬 Worker는 파일 소유 범위를 정하고, 공유 파일 수정자를 한 명 지정한다. 기본 상한 3개. 읽기 전용 검토 Worker도 센다.
+5. 명세·계획 검토: [생략 기준](../../policies/roles.md#명세계획-검토)에 걸리지 않으면 Worker 계획 승인 전에 Subagent(reviewer 역할)로 명세와 계획을 검토받는다. 지적마다 반영·기각을 적고 결과 한 줄을 승인 요청에 같이 보인다. 다른 Provider의 검토 Worker는 승인받은 계획 안에서 쓴다.
+6. 셸에서 `../../scripts/kit.sh usage`로 사용량을 읽는다 (sandbox 밖에서 실행해도 되는 읽기 명령. 이유가 `sandbox:`로 시작하면 밖에서 다시 읽는다) ([routing.md](../../policies/routing.md#사용량)). Worker 계획(Worker 수(검토 Worker 포함), 협업 방식, Provider, `strong` 등급, 실패 때 상향 상한)을 사용량과 검토 결과 한 줄과 함께 사용자에게 보여주고 승인받는다. 이 세션에서 묻거나 사용자 결정 요청 파일([양식](../../templates/decisions/user-decision.md))로 쓴다. 답을 기다리는 동안 다른 Task를 진행한다. 승인을 받으면(이 세션의 답, 또는 `decision-take`가 받아들인 답) 같은 턴에서 첫 Worker를 시작한다. 다른 확인을 기다리지 않는다. 승인한 범위 안에서는 Worker를 시작·재시작할 때 다시 묻지 않는다 ([permissions.md](../../policies/permissions.md#결정권)).
+7. `TASKS.md`의 `실행 방식` 열에 선택을 적는다. 역할도 같이 적는다 (`role: frontend+designer`). 동시 협업이면 `협업: 동시(계약 <역할>, 작성 <역할>, 검토 <역할>)`와 [네 조건](../../policies/roles.md#조합-한-worker와-여러-worker) 판정을, 검토는 `검토: …` 또는 `검토 생략: <기준>` 한 줄을 같은 칸에 적는다.
+8. [권장] 새 구성 요소·계약·저장 데이터가 생기는 등 구조를 정해야 하면 먼저 `architect` Worker(`strong`)로 설계 문서를 받는다. 설계·계획 문서는 사용자에게 보이기 전에 같은 검토를 거친다. 사용자가 설계를 승인한 뒤 그 문서를 planner에 넘긴다. 요구가 모호하거나 하위 작업이 여럿이면 구현 전에 `planner` Worker(`strong`)로 계획을 받는다. 계획의 "사용자만 답할 수 있음" 질문은 [사용자에게 결정 묻기](../../policies/communication.md#사용자에게-결정-묻기) 형식으로 이 세션에서 묻거나 사용자 결정 요청 파일로 쓰고, 답을 받은 뒤 구현을 배정한다.
 
 ## 4. 실행 감독
 
 - Orca를 쓰기 전에 설치된 버전의 가이드를 읽는다: `orca skills get orchestration --full`. 명령 문법은 그 가이드를 따른다.
 - 저장소가 Orca에 등록돼 있지 않으면 Worker를 놓을 수 없다. 등록은 사용자에게 확인한 뒤 한다.
 - Worker를 시작하기 전에 같은 Task의 기존 Worker가 있는지 확인한다. 중복 실행하지 않는다.
-- Worker에게 주는 Task 명세는 그 자체로 완결돼야 한다: 대상, 변경, 제약(건드리지 말 것), 소유 범위, 관찰 가능한 수용 기준. [permissions.md](../../policies/permissions.md#worker-권한)의 Worker 제한(쓰기 범위, 프로세스 종료, 커밋·Push 금지, 샌드박스 밖에서 실행해도 되는 명령. 보고 명령 포함)을 항상 적는다. 보고·동료 메시지 본문은 작은따옴표로 감싸고 백틱·`$`를 쓰지 않는다. 여러 단계인 작업은 "단계마다 진행 상황을 `.orch-progress/<Task>.md`에 적고, 확인 지점마다 후속 메시지(중단 요청)를 본다"를 적는다. 진행 파일은 커밋하지 않는다.
+- Worker에게 주는 Task 명세는 그 자체로 완결돼야 한다: 대상, 변경, 제약(건드리지 말 것), 소유 범위, 관찰 가능한 수용 기준. [permissions.md](../../policies/permissions.md#worker-권한)의 Worker 제한(쓰기 범위, 프로세스 종료, 커밋·Push 금지, 샌드박스 밖에서 실행해도 되는 명령. 보고 명령 포함. 동시 협업이면 동료에게 보내기·받기와 Worker 조회 명령도 포함)을 항상 적는다. 보고·동료 메시지 본문은 작은따옴표로 감싸고 백틱·`$`를 쓰지 않는다. 여러 단계인 작업은 "단계마다 진행 상황을 `.orch-progress/<Task>.md`에 적고, 확인 지점마다 후속 메시지(중단 요청)를 본다"를 적는다. 진행 파일은 커밋하지 않는다.
 - 명세 맨 앞에 역할 절을 넣는다. 역할 파일 본문을 읽어 그대로 붙인다 (경로만 주지 않는다). 순서와 형식은 [roles.md](../../policies/roles.md#명세에-넣기). Worker 시작 뒤 명세가 잘리지 않았는지 확인한다.
 - 하위 작업마다 등급(`fast` / `default` / `strong`)을 정하고, [Provider 선택](../../policies/routing.md#provider-선택) 순서로 Provider를 고른 뒤 [routing.md](../../policies/routing.md#모델과-effort)의 Provider별 모델로 바꾼다. 고른 이유를 `실행 방식` 열에 적는다. 사용량은 판단할 때마다 새로 읽는다. `.ai/ORCHESTRATION.md` Override가 있으면 그것을 따른다. 실제 적용값을 `실행 방식` 열에 적는다.
 - Orca `--worktree current`는 Coordinator 세션의 Worktree다. 셸의 현재 폴더가 아니다. 다른 저장소에서 일을 시키려면 그 저장소의 Worktree를 고르거나, 명세에 절대 경로를 적는다.
@@ -68,13 +69,13 @@ description: 프로젝트의 중앙 Coordinator로 일할 때 사용한다. 프�
 - Coordinator 하나는 한 번에 Run 하나에 바인딩된다. 새 Run을 만들면 바인딩이 옮겨 가서 앞 Run의 `worker-start`와 `check`가 거부된다 (`consumer_fenced`). 앞 Run의 Worker를 모두 정리한 뒤 `run-use`로 바꾼다. 여러 프로젝트를 동시에 감독하려면 프로젝트마다 Coordinator 세션을 따로 둔다.
 - `worker_done`이 오면 Task·Dispatch ID가 기대한 것과 같은지 확인한다. 이것은 Worker 완료일 뿐이다 (`in-review`). 처리한 메시지 묶음은 다음 `check`에 `--ack <deliveryId>`로 확인 처리한다. 하지 않으면 뒤 메시지가 가려진다 ([routing.md](../../policies/routing.md#작업-중-감시)).
 - 수락하거나 실패를 확정하면 Worker마다 다음 소유자를 정한다: 같은 Worker에 후속 작업, 유지, 또는 release. release·Worktree 정리 전에 미커밋 변경과 미병합 커밋을 확인한다 ([permissions.md](../../policies/permissions.md#안전-규칙)). 그다음 메시지를 확인 처리한다. 정리되지 않은 Worker가 남아 있으면 세션을 끝내지 않는다.
-- Worker끼리 자유롭게 협의하게 둔다. [permissions.md](../../policies/permissions.md)의 승인 대상 변경 요청(`DECISION_REQUEST`)이 오면 결정하고 `decisions/ADR-NNNN-<제목>.md`에 남긴 뒤 영향받는 Worker 모두에 알린다. 프로젝트 간 영향이 있으면 Portfolio 결정 사항으로 사용자에게 올린다.
+- 동시 협업이면 협업 Worker를 모두 시작한 뒤 같은 턴에 각 Worker에 주소록 메시지(제목 `PEERS`, 역할, Provider, Dispatch 주소, 소유 파일)를 보낸다. 명세에는 [`## 협업` 절](../../policies/roles.md#명세에-넣기)을 넣는다. Worker끼리 자유롭게 협의하게 둔다. [permissions.md](../../policies/permissions.md)의 승인 대상 변경 요청(`DECISION_REQUEST`)이 오면 결정하고 `decisions/ADR-NNNN-<제목>.md`에 남긴 뒤 영향받는 Worker 모두에 알린다. 프로젝트 간 영향이 있으면 Portfolio 결정 사항으로 사용자에게 올린다.
 - 응답 없는 Worker는 상태와 생존 증거를 먼저 확인한다. 한도 문구가 보이면 사용량 한도로 본다.
 - 사용량은 [확인 시점](../../policies/routing.md#확인-시점)마다 `../../scripts/kit.sh usage`(sandbox 밖에서 실행해도 되는 읽기 명령)로 읽는다: 세션 시작, Worker 시작 직전, `worker_done`, 체크포인트. Worker가 도는 동안은 `../../scripts/kit.sh usage-watch <provider>`를 백그라운드로 띄워 두고, Worker 완료 대기와 둘 중 먼저 끝나는 쪽에 반응한다 ([작업 중 감시](../../policies/routing.md#작업-중-감시)). 주의·위험이면 [routing.md](../../policies/routing.md#작업-중-한도-대응)의 작업 중 한도 대응을 따른다. Coordinator 자신의 Provider가 위험이면 인계를 남기고 멈춘다.
 
 ## 5. 검증과 수락
 
-`worker_done`이 오면 Task를 `in-review`로 바꾸고 [routing.md](../../policies/routing.md#완료의-세-단계)의 수락 절차를 따른다. 테스트·Diff를 직접 확인하고, 명세에 넣은 역할의 수용 기준을 항목마다 확인한다. Worker가 통과라고 적은 항목도 직접 본다. 소유 범위 밖 변경이 없는지도 본다. 통과하면 Coordinator가 커밋하고 [반영 방식](../../policies/routing.md#반영-방식)대로 반영한다: `direct-merge`는 병합한 뒤 `completed`, `pull-request`는 PR을 연 뒤 `in-review`, 병합되면 `completed`. 실패하면 [상향 사다리](../../policies/routing.md#실패했을-때-상향-사다리)를 따른다: 실패 증거를 붙여 같은 등급 1번, effort, 등급, Provider 순으로 한 칸씩 올리고, 끝까지 안 되면 `blocked`로 두고 사용자에게 묻는다. 권한·한도·사람만 답할 질문은 올리지 않는다. 버전 차이로 실패했다가 고친 경우에는 그 함정을 보강에 한 줄로 남기자고 제안한다 ([roles.md](../../policies/roles.md#프로젝트-보강)). 결과가 형식은 맞아도 정책·계약과 어긋나면 수락하지 않는다.
+`worker_done`이 오면 Task를 `in-review`로 바꾸고 [routing.md](../../policies/routing.md#완료의-세-단계)의 수락 절차를 따른다. 테스트·Diff를 직접 확인하고, 명세에 넣은 역할의 수용 기준을 항목마다 확인한다. Worker가 통과라고 적은 항목도 직접 본다. 소유 범위 밖 변경이 없는지도 본다. 동시 협업이면 Worker의 `## 합의` 줄마다 명세의 `미리 승인한 범위` 안인지 대조한다. 통과하면 Coordinator가 커밋하고 [반영 방식](../../policies/routing.md#반영-방식)대로 반영한다: `direct-merge`는 병합한 뒤 `completed`, `pull-request`는 PR을 연 뒤 `in-review`, 병합되면 `completed`. 실패하면 [상향 사다리](../../policies/routing.md#실패했을-때-상향-사다리)를 따른다: 실패 증거를 붙여 같은 등급 1번, effort, 등급, Provider 순으로 한 칸씩 올리고, 끝까지 안 되면 `blocked`로 두고 사용자에게 묻는다. 권한·한도·사람만 답할 질문은 올리지 않는다. 버전 차이로 실패했다가 고친 경우에는 그 함정을 보강에 한 줄로 남기자고 제안한다 ([roles.md](../../policies/roles.md#프로젝트-보강)). 결과가 형식은 맞아도 정책·계약과 어긋나면 수락하지 않는다.
 
 [권장] 반영(병합·PR) 직전, 한 번에 반영할 Task가 여럿이면 전체 측정을 한다: `planner`가 Task별 QA 시트를 모아 최종 시트를 만들고, `qa`(`fast`·`default`)가 시트대로 전부 실행하고, Coordinator가 결과를 보고 수락한다.
 

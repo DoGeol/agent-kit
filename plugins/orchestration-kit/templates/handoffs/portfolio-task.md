@@ -22,6 +22,9 @@ createdAt: YYYY-MM-DDTHH:MM:SS+09:00
 - 프로젝트 간 계약(다른 프로젝트가 의존하는 API·스키마) 변경은 Portfolio 승인 뒤에 한다.
 - 운영 배포·데이터 삭제는 사용자 승인 뒤에 한다.
 
+## 검토
+<!-- 선택. 여러 프로젝트에 위임하거나 프로젝트 간 계약·[확정] 정책에 닿을 때만. Subagent(reviewer 역할)가 범위·계약·위험·검증 방법을 본 결과: 지적 수, 반영·기각 수 -->
+
 ## 제안 역할
 <!-- 선택. 예: frontend + designer. 최종 선택은 Project Coordinator -->
 
