@@ -214,6 +214,38 @@ printf '%s\n' "$out" | grep -q '^pending	own-app	own-app-OWN-0001-r01	completed	
 printf '%s\n' "$out" | grep -q '^pending	svc-app	' || fail "shared projects no longer listed next to a personal one: $out"
 ok "personal mode: repo untouched, pointer + exclude only, idempotent, found from worktrees, reports read from hub HEAD"
 
+# 8e2. Shared mode: register leaves a hub pointer in the git common dir, and `hub` reads it back
+shp="$tmp/shp"; mkdir "$shp"; git -C "$shp" init -q -b main; "$kit" init project "$shp" shp-app SHP > /dev/null
+git_commit "$shp" base
+hubreal=$(cd "$hub" && pwd -P); shbefore=$(git -C "$shp" status --porcelain)
+"$kit" register "$hub" "$shp" | grep -q '^hub 포인터: ' || fail "R1 register printed no pointer line"
+[ "$(cat "$shp/.git/orchestration-kit-hub" 2>/dev/null)" = "$hubreal" ] || fail "R1 pointer content: $(cat "$shp/.git/orchestration-kit-hub" 2>&1)"
+[ "$shbefore" = "$(git -C "$shp" status --porcelain)" ] || fail "R1 register changed git status"
+ok "R1 shared register writes the hub pointer in the git common dir; git status unchanged"
+rm "$shp/.git/orchestration-kit-hub"
+"$kit" register "$hub" "$shp" | grep -q '이미 등록됨' || fail "R2 re-register not idempotent"
+[ "$(cat "$shp/.git/orchestration-kit-hub" 2>/dev/null)" = "$hubreal" ] || fail "R2 pointer not rewritten on re-register"
+"$kit" register "$hub" "$shp" | grep -q '^hub 포인터: ' && fail "R2 second register rewrote a good pointer"
+ok "R2 re-registering an already registered project restores a missing pointer"
+printf '%s\n' "$tmp/elsewhere" > "$shp/.git/orchestration-kit-hub"
+"$kit" register "$hub" "$shp" | grep -q '^주의: .*다른 hub' || fail "R3 no warning for a pointer to another hub"
+[ "$(cat "$shp/.git/orchestration-kit-hub")" = "$tmp/elsewhere" ] || fail "R3 pointer overwritten"
+ok "R3 a pointer to another hub is kept and warned about"
+printf '%s\n' "$hubreal" > "$shp/.git/orchestration-kit-hub"
+git -C "$shp" worktree add -q -b feat/hub-ptr "$tmp/shp-wt"
+[ "$("$kit" hub "$hub")" = "$hubreal" ] || fail "R4 hub from the hub folder"
+[ "$("$kit" hub "$tmp/own-wt")" = "$hubreal" ] || fail "R4 hub from a personal worktree"
+[ "$("$kit" hub "$shp")" = "$hubreal" ] || fail "R4 hub from a shared project"
+[ "$("$kit" hub "$tmp/shp-wt")" = "$hubreal" ] || fail "R4 hub from a shared worktree"
+if "$kit" hub "$tmp/bad" > /dev/null 2>&1; then fail "R4 hub for an uninitialized folder"; fi
+shn="$tmp/shn"; mkdir "$shn"; git -C "$shn" init -q -b main; "$kit" init project "$shn" shn-app SHN > /dev/null
+if "$kit" hub "$shn" > /dev/null 2>&1; then fail "R4 hub for a shared project without a pointer"; fi
+printf '%s\n' "$tmp/bad" > "$shp/.git/orchestration-kit-hub"
+if "$kit" hub "$shp" > /dev/null 2>&1; then fail "R4 pointer to a folder that is not a hub"; fi
+ok "R4 hub: hub folder, personal worktree, shared pointer, shared worktree; fails for uninitialized, no pointer, bad pointer"
+[ ! -e "$own/.git/orchestration-kit-hub" ] || fail "R5 personal registration left a hub pointer"
+ok "R5 personal registration leaves no hub pointer"
+
 # 8f. board: blocked and in-review tasks, a delegation until a task names it, working-tree STATUS, workers via a stub orca
 if command -v jq > /dev/null; then
   printf '| SAMPLE-0007 | 상태 화면 | in-review | - | Direct | PR #4 | - |\n| SAMPLE-0008 | 계약 결정 | blocked | - | Session | run_t / task_t1 / ctx_t | - |\n' >> "$app/.ai/TASKS.md"

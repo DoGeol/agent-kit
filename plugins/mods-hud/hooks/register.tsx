@@ -1052,6 +1052,9 @@ export const register: Register = on => {
     const showSessions = showSessionsRaw || isPane
     if (!m && !sum && !typed) return next(e)
 
+    // The band slot is shared: whatever the plugins beneath drew stays, under the card. No hook beneath rejects in a test.
+    const below = e.component === 'AbovePrompt' ? await next(e).catch(() => undefined) : undefined
+
     const els = $.ui.resolve(e)
     const { Box, Text, Button } = els
     // a surface module's region, where the surface has one (terminal, desktop)
@@ -1087,7 +1090,8 @@ export const register: Register = on => {
     // (Halving the budget per agent made a lone agent blink whenever the surface gave a row more or less.)
     // Sessions are always one group: its fold line costs a row; unfolded, its rows take what the agents leave.
     const peers = sess.filter(s => !hiddenSess.includes(s.name))
-    const budget = Math.max(0, room.rows - 1 - (m && e.surface !== 'desktop' && !isTight ? 4 : 0) - (isGrouped ? 1 : 0) - (peers.length > 0 ? 1 : 0))
+    // shortcut: a result beneath is counted as one row, a taller one scrolls the band; count its rows when a plugin draws more.
+    const budget = Math.max(0, room.rows - 1 - (below ? 1 : 0) - (m && e.surface !== 'desktop' && !isTight ? 4 : 0) - (isGrouped ? 1 : 0) - (peers.length > 0 ? 1 : 0))
     const rows = isFolded ? [] : [...live, ...ended].slice(0, Math.max(1, Math.min(MAX_AGENTS * 2, budget)))
     const liveShown = rows.filter(a => !isEnded(a))
     const withSteps = budget >= rows.length + liveShown.length
@@ -1319,7 +1323,7 @@ export const register: Register = on => {
       )
     })()
 
-    return (
+    const card = (
       <Box
         key="band"
         flexDirection="column"
@@ -1331,5 +1335,6 @@ export const register: Register = on => {
         {status}
       </Box>
     )
+    return below ? <Box flexDirection="column">{card}{below}</Box> : card
   })
 }

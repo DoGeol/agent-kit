@@ -45,11 +45,21 @@ export type Board = {
   hub: string
 }
 
+/** Where the hub search stands. */
+export type Discovery = {
+  /** searching until the first look ends; not-kit: no project here and no hubPath; no-hub: a project whose hub is unknown; found */
+  state: 'searching' | 'not-kit' | 'no-hub' | 'found'
+  /** This session's own projectId, when it is a project. */
+  mine?: string
+}
+
 declare module 'claude-code' {
   interface PluginState {
     'orchestration-kit': {
       /** The latest board, or null before the first read or after a failed one. */
       board: Board | null
+      /** Where the hub search stands; looked again at turn end and pane open until found. */
+      discovery: Discovery
     }
   }
 }
