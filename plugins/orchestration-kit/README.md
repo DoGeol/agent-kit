@@ -4,10 +4,26 @@ Orca + Claude Code 기반 멀티 AI 오케스트레이션 키트. 여러 프로�
 
 ```text
 USER
- └─ Portfolio Coordinator (workspace-hub)
-     ├─ Project A Coordinator ── Orca ── Claude / Codex / AGY
-     └─ Project B Coordinator ── Orca ── Claude / Codex / AGY
+ └─ Portfolio Coordinator (hub 저장소)
+     ├─ Project A Coordinator ── Orca ── Worker (Claude / Codex / AGY, 역할: frontend·qa…)
+     └─ Project B Coordinator ── Orca ── Worker
 ```
+
+## 개념
+
+| 용어 | 뜻 |
+|---|---|
+| Agent Skill | `SKILL.md` 한 파일(frontmatter `name`·`description` + 절차)이 든 폴더. 에이전트는 평소 description만 보고 있다가 요청이 맞으면 본문을 읽고 따른다. [Agent Skills](https://agentskills.io) 규격이라 Claude Code·Codex·AGY가 같은 파일을 읽는다. 이 Kit의 Skill은 `policies/`를 읽고 실행하는 절차서이고, 정책 본문은 Skill에 복제하지 않는다 |
+| Portfolio | 여러 프로젝트를 위에서 보는 층. 프로젝트 등록, 프로젝트 간 업무(`PORT-0001`)·우선순위, 위임, 완료 보고 수집을 한다. 코드는 고치지 않는다 |
+| hub | Portfolio로 초기화한 저장소 (예: `~/workspace/workspace-hub`). `portfolio/` 문서와 위임 명세(`handoffs/`)가 있고, 개인 모드 프로젝트의 상태 폴더(`projects/<projectId>/.ai/`)도 여기에 둔다. 현황판은 hub를 읽는다 |
+| Project | Kit으로 초기화한 작업 저장소 하나. 상태 폴더 `.ai/`에 프로젝트 설명, Task(`SAMPLE-0001`), 결정, 완료 보고가 있다 |
+| Coordinator | 그 층을 맡은 에이전트 세션. Portfolio Coordinator는 hub에서, Project Coordinator는 프로젝트 저장소에서 연다. Project Coordinator가 계획·분해·검증·보고를 하고 구현은 Worker에 맡긴다 |
+| Worker | Coordinator가 Orca로 띄우는 실행 세션(Claude·Codex·AGY). 명세 맨 앞에 역할 파일(`roles/<id>.md`)이 들어가 그 관점과 수용 기준으로 일한다 |
+| 보강 | 프로젝트만의 역할 규칙 `.ai/roles/<id>.md`. adopt Skill이 프로젝트의 규칙 문서·검사 명령·Skill에서 만든다 |
+| 공유·개인 모드 | 상태 폴더 위치. 공유는 프로젝트 저장소 안 `.ai/`(커밋됨), 개인은 hub 안(프로젝트 저장소에 커밋되는 것 없음). 남과 같이 쓰는 저장소는 개인 모드 |
+| Orca | Worker·Task·Worktree 실행 상태를 관리하는 도구. 업무 지식은 Markdown에, 실행 상태는 Orca에 둔다 |
+
+자세한 계층 규칙과 데이터 원본은 [policies/README.md](policies/README.md).
 
 ## 구성
 
@@ -30,7 +46,7 @@ orchestration-kit/
 │  ├─ handoffs/                 위임 명세
 │  └─ reports/                  완료 보고
 ├─ docs/                        사용 예시
-├─ scripts/kit.sh               초기화(공유·개인 모드)·상태 위치·등록·미처리 보고 목록·현황판 데이터·처리 마커·사용량 읽기와 감시 (POSIX sh, 덮어쓰기 없음)
+├─ scripts/kit.sh               초기화(공유·개인 모드)·상태 위치·등록·미처리 보고 목록·현황판 데이터·처리 마커·사용량 읽기와 감시·보강 출처 확인 (POSIX sh, 덮어쓰기 없음)
 └─ tests/                       로컬 검사 (run.sh), 현황판 mod 테스트 (board.test.ts)
 ```
 
@@ -70,7 +86,8 @@ Project Coordinator는 하위 작업마다 Worker 역할을 고른다: `frontend
 - 역할은 명세 본문으로 전달하므로 Claude·Codex·AGY Worker가 같은 방식으로 받는다. Orca `--agent`는 Provider 선택이다.
 - 역할, 모델 등급, Provider는 따로 정한다.
 - 작은 UI 수정은 Worker 1개에 `frontend` + 보조 `designer`, 큰 개편은 `designer`가 설계 문서를 쓰고 `frontend`가 구현한다.
-- 프로젝트별 보강(스택, 디자인 시스템)은 프로젝트의 `.ai/roles/<id>.md`에 쓴다.
+- 프로젝트별 보강(스택, 디자인 시스템)은 프로젝트의 `.ai/roles/<id>.md`에 쓴다. adopt Skill이 프로젝트에 이미 있는 규칙 문서·검사 명령·Skill을 찾아 보강(역할마다 핵심 15줄 이하, 출처 커밋 포함)과 대응표(`.ai/ADOPT.md`)로 만든다. Coordinator는 세션을 시작할 때 `kit.sh adopt-check <저장소>`로 출처가 바뀌었는지 보고, 바뀌면 adopt를 다시 실행하자고 제안한다.
+- 계획과 QA 시트는 `strong` 등급으로, 그대로 시험을 쓰고 돌리는 일은 `fast`·`default` 등급으로 Worker를 나눠 띄운다 ([routing.md](policies/routing.md)).
 - 긴 직군 지식은 저장소의 Agent Skill(`.agents/skills/`, Claude용 `.claude/skills/` symlink)로 두고 명세에는 이름만 적는다. Provider별로 읽는 위치가 다르다 ([roles.md](policies/roles.md#직군-지식-skill)).
 
 규칙은 [policies/roles.md](policies/roles.md). Claude Worker(Haiku), Codex Worker, AGY Worker(읽기 전용 리뷰, 새 Worktree 구현)에서 역할 명세 주입, 체크리스트 결과 보고, 체크리스트 기반 수락까지 확인했다.
@@ -93,6 +110,7 @@ Project Coordinator는 하위 작업마다 Worker 역할을 고른다: `frontend
 kit=~/.claude/plugins/cache/dg-agent-kit/orchestration-kit/<version>/scripts/kit.sh   # 설치 위치
 $kit init portfolio ~/workspace/workspace-hub
 $kit init project ~/workspace/sample-app sample-app        # taskPrefix 기본값: SAMPLE
+$kit init project --personal ~/workspace/workspace-hub ~/work/team-app team-app   # 개인 모드
 $kit register ~/workspace/workspace-hub ~/workspace/sample-app
 ```
 
@@ -106,6 +124,8 @@ $kit register ~/workspace/workspace-hub ~/workspace/sample-app
 |---|---|
 | Project | `.ai/ORCHESTRATION.md`, `PROJECT.md`, `ARCHITECTURE.md`, `STATUS.md`, `TASKS.md`, `decisions/`, `reports/` |
 | Portfolio | `.ai/ORCHESTRATION.md`, `portfolio/PROJECTS.md`, `TASKS.md`, `DASHBOARD.md`, `PRIORITIES.md`, `handoffs/outbox/`, `handoffs/processed/` |
+
+개인 모드 Project는 이 파일을 hub의 `projects/<projectId>/.ai/`에 만들고, 프로젝트 저장소에는 커밋되지 않는 상태 경로 파일과 로컬 무시 목록 한 줄만 남긴다. 저장소에 규칙 문서나 Skill이 있으면 setup이 끝날 때 adopt를 이어서 실행할지 묻는다.
 
 ## 흐름
 

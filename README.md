@@ -2,8 +2,10 @@
 
 코딩 에이전트용 개인 키트. 특정 도구에 묶이지 않는다.
 
-- `skills/`: [Agent Skills](https://agentskills.io) 형식(`SKILL.md`) 스킬. Claude Code, Codex, Antigravity에서 쓴다.
-- `plugins/`: Claude Code 전용 플러그인과 mod.
+- `skills/`: [Agent Skills](https://agentskills.io) 형식(`SKILL.md`) 스킬. Claude Code, Codex, Antigravity에서 쓴다. 아직 등록된 스킬은 없다.
+- `plugins/`: Claude Code 플러그인과 mod.
+
+Agent Skill은 `SKILL.md`(frontmatter `name`·`description` + 절차)가 든 폴더다. 에이전트는 평소 description만 보고 있다가 요청이 맞으면 본문을 읽고 따른다. 같은 파일을 여러 도구가 읽는다.
 
 ## 설치
 
@@ -11,6 +13,7 @@
 
 ```
 /plugin install mods-hud --marketplace DoGeol/agent-kit
+/plugin install orchestration-kit --marketplace DoGeol/agent-kit
 ```
 
 마켓플레이스 추가를 물으면 `y`, 범위는 user를 고른다. 터미널과 데스크탑 앱의 모든 세션에 적용된다.
@@ -29,7 +32,7 @@ git clone https://github.com/DoGeol/agent-kit.git ~/agent-kit
 | 플러그인 | 설명 |
 |---|---|
 | [mods-hud](plugins/mods-hud) | 입력창 위 현황판: 세션 요약, 서브에이전트, 오케스트레이션, 브랜치, 사용량 |
-| [orchestration-kit](plugins/orchestration-kit) | Orca + Claude Code 멀티 AI 오케스트레이션: Portfolio / Project / Setup Skill, 공통 정책, 초기화 템플릿 |
+| [orchestration-kit](plugins/orchestration-kit) | Orca + Claude Code 멀티 AI 오케스트레이션. Portfolio(hub 저장소)가 여러 프로젝트의 업무·위임·보고를 모으고, 프로젝트마다 Coordinator가 역할(frontend·qa·planner 등 7개)을 붙인 Worker(Claude·Codex·AGY)를 감독한다. Skill 5개(setup, project, portfolio, issue-review, adopt), 공통 정책, 입력창 위 Portfolio 현황판. 개념은 [README의 개념 절](plugins/orchestration-kit/README.md#개념) |
 
 설치: `/plugin install <플러그인> --marketplace DoGeol/agent-kit`. 업데이트: `claude plugin update <플러그인>`
 
@@ -50,7 +53,10 @@ claude plugin validate plugins/mods-hud
 claude plugin test plugins/mods-hud
 
 claude plugin validate plugins/orchestration-kit
-plugins/orchestration-kit/tests/run.sh   # Skill 전용 Plugin이라 claude plugin test 대상(hooks)이 없다
+claude plugin test plugins/orchestration-kit
+plugins/orchestration-kit/tests/run.sh
+
+claude plugin validate .   # 마켓플레이스
 ```
 
 </details>
