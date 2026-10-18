@@ -376,6 +376,181 @@ EOF
   ok "usage: Orca for fresh Claude, CLI fallback when stale, codex app-server, agy worst bucket and version floor; usage-watch stops on caution, projection, unknown"
 fi
 
+# 8c2. A usage read the sandbox refused says so in the reason column
+if command -v jq > /dev/null; then
+  sb="$tmp/sandbox-bin"; mkdir "$sb"
+  cat > "$sb/orca" <<'EOF'
+#!/bin/sh
+echo '{"ok":false,"error":{"code":"runtime_access_denied","message":"Permission denied connecting to Orca (EPERM)"}}'
+exit 1
+EOF
+  printf '#!/bin/sh\nexit 1\n' > "$sb/claude"
+  cat > "$sb/codex" <<'EOF'
+#!/bin/sh
+read -r a; read -r b
+echo 'failed to initialize sqlite state runtime: Operation not permitted' >&2
+exit 1
+EOF
+  cat > "$sb/agy" <<'EOF'
+#!/bin/sh
+[ "$1" = --version ] && { echo 1.4.2; exit 0; }
+echo 'listen tcp 127.0.0.1:0: bind: operation not permitted' >&2
+exit 1
+EOF
+  chmod +x "$sb"/*
+  out=$(PATH="$sb:$PATH" KIT_CODEX_HOME="$tmp" "$kit" usage)
+  for p in claude codex antigravity; do
+    line=$(printf '%s\n' "$out" | grep "^usage	$p	") || fail "Q5 no $p line: $out"
+    printf '%s\n' "$line" | grep -q "^usage	$p	unknown	-	-	-	sandbox: " || fail "Q5 $p sandbox failure not named: $line"
+    [ "$(printf '%s\n' "$line" | awk -F'\t' '{ print NF }')" = 7 ] || fail "Q5 $p line is not 7 columns: $line"
+  done
+  u2() { PATH="$sb:$PATH" "$kit" "$@"; }
+  u2 usage antigravity | grep -q '	sandbox: agy /usage 실패$' || fail "Q5 original reason lost: $(u2 usage antigravity)"
+  u2 usage-watch --interval 0 antigravity | head -1 | grep -q '^watch	antigravity:unknown-twice$' || fail "Q5b usage-watch changed with a sandbox reason"
+  printf '#!/bin/sh\n[ "$1" = --version ] && { echo 1.4.2; exit 0; }\nexit 1\n' > "$sb/agy"
+  [ "$(u2 usage antigravity)" = "usage	antigravity	unknown	-	-	-	agy /usage 실패" ] || fail "Q5 failure without a sandbox trace got a prefix: $(u2 usage antigravity)"
+  ok "usage: a read the sandbox refused (Orca, codex, agy) says sandbox: in the reason column, 7 columns; a plain failure has no prefix; usage-watch unchanged"
+fi
+
+# 8h. coordinator: terminals of one repository (and its worktrees), the ones a Run binds are marked bound
+if command -v jq > /dev/null; then
+  cr="$tmp/coord-repo"; mkdir "$cr"; git -C "$cr" init -q -b main; printf x > "$cr/x"; git_commit "$cr" base
+  git -C "$cr" worktree add -q -b feat/coord "$tmp/coord-wt"
+  co="$tmp/coord-other"; mkdir "$co"; git -C "$co" init -q -b main
+  cb="$tmp/coord-bin"; mkdir "$cb"
+  cat > "$cb/orca" <<EOF
+#!/bin/sh
+echo "\$*" >> "$tmp/coord.calls"
+case "\$1 \$2" in
+  "repo list") echo '{"ok":true,"result":{"repos":[{"id":"r1","path":"$cr"},{"id":"r2","path":"$co"}]}}' ;;
+  "orchestration run-list") echo '{"ok":true,"result":{"runs":[{"id":"run_c","coordinator_handle":"term_c"},{"id":"run_o","coordinator_handle":"term_o"},{"id":"run_n","coordinator_handle":null}]}}' ;;
+  "terminal list") echo '{"ok":true,"result":{"terminals":[
+    {"handle":"term_x","worktreeId":"r1::$cr","worktreePath":"$cr","title":"일반 세션","agentIdentity":"claude"},
+    {"handle":"term_c","worktreeId":"r1::$cr","worktreePath":"$cr","title":"코디네이터","agentIdentity":"claude"},
+    {"handle":"term_w","worktreeId":"r1::$tmp/coord-wt","worktreePath":"$tmp/coord-wt","title":"Worktree 세션","agentIdentity":"codex"},
+    {"handle":"term_o","worktreeId":"r2::$co","worktreePath":"$co","title":"다른 저장소","agentIdentity":"claude"},
+    {"handle":"term_z","worktreeId":"r1::$cr","worktreePath":"$cr","title":"zsh","agentIdentity":null}]}}' ;;
+esac
+EOF
+  chmod +x "$cb/orca"
+  : > "$tmp/coord.calls"
+  out=$(PATH="$cb:$PATH" "$kit" coordinator "$cr") || fail "Q9 coordinator failed: $out"
+  [ "$(printf '%s\n' "$out" | head -1)" = "coordinator	term_c	run_c	bound	코디네이터" ] || fail "Q9 bound line first: $out"
+  printf '%s\n' "$out" | grep -qx 'coordinator	term_x	-	agent	일반 세션' || fail "Q9 agent line: $out"
+  printf '%s\n' "$out" | grep -qx 'coordinator	term_w	-	agent	Worktree 세션' || fail "Q9 worktree terminal: $out"
+  [ "$(printf '%s\n' "$out" | wc -l | tr -d ' ')" = 3 ] || fail "Q9 other repository or plain shell listed: $out"
+  [ "$(wc -l < "$tmp/coord.calls" | tr -d ' ')" -le 3 ] || fail "Q9 more than 3 Orca calls: $(cat "$tmp/coord.calls")"
+  [ "$out" = "$(PATH="$cb:$PATH" "$kit" coordinator "$tmp/coord-wt")" ] || fail "Q9 answer differs when asked from a worktree"
+  printf '#!/bin/sh\nexit 1\n' > "$cb/orca"
+  out=$(PATH="$cb:$PATH" "$kit" coordinator "$cr") || fail "Q9 coordinator exited non-zero when Orca did not answer"
+  printf '%s\n' "$out" | grep -q '^coordinator	unknown	' || fail "Q9 Orca failure not reported: $out"
+  [ "$(printf '%s\n' "$out" | wc -l | tr -d ' ')" = 1 ] || fail "Q9 unknown should be one line: $out"
+  if "$kit" coordinator "$tmp/no-such-dir" > /dev/null 2>&1; then fail "Q9 coordinator accepted a missing folder"; fi
+  ok "coordinator: bound terminal first, other agent terminals of the repo and its worktrees, other repos and shells left out, 3 Orca calls, unknown on Orca failure"
+fi
+
+# 8i. audit: Runs with unfinished Tasks (Q6) and state drift (Q8); a stub orca answers, nothing in Orca is changed
+if command -v jq > /dev/null; then
+  hub2="$tmp/hub2"; mkdir "$hub2"; "$kit" init portfolio "$hub2" > /dev/null
+  dr="$tmp/drift"; mkdir "$dr"; git -C "$dr" init -q -b main; "$kit" init project "$dr" drift-app DRF > /dev/null
+  git_commit "$dr" init; "$kit" register "$hub2" "$dr" > /dev/null
+  ab="$tmp/audit-bin"; mkdir "$ab"
+  cat > "$ab/orca" <<EOF
+#!/bin/sh
+echo "\$*" >> "$tmp/audit.calls"
+case "\$1 \$2" in
+  "orchestration run-list") cat "$tmp/audit.runs" ;;
+  "orchestration task-list") cat "$tmp/audit.tasks.\$4" ;;
+  "terminal list") cat "$tmp/audit.terms" ;;
+esac
+EOF
+  chmod +x "$ab/orca"
+  au() { PATH="$ab:$PATH" "$kit" audit "$hub2"; }
+  tl() { printf '{"ok":true,"result":{"tasks":[%s]}}\n' "$2" > "$tmp/audit.tasks.$1"; }
+  printf '%s\n' '{"ok":true,"result":{"runs":[
+    {"id":"run_live","coordinator_handle":"term_live","created_at":"2026-10-18T13:20:22Z"},
+    {"id":"run_done","coordinator_handle":null,"created_at":"2026-10-17T01:00:00Z"},
+    {"id":"run_gone","coordinator_handle":"term_dead","created_at":"2026-10-02T01:00:00Z"},
+    {"id":"run_idle","coordinator_handle":null,"created_at":"2026-09-11T01:00:00Z"},
+    {"id":"run_failed","coordinator_handle":null,"created_at":"2026-09-10T01:00:00Z"}]}}' > "$tmp/audit.runs"
+  tl run_live '{"status":"dispatched"},{"status":"completed"}'
+  tl run_done '{"status":"completed"},{"status":"completed"}'
+  tl run_gone '{"status":"blocked"},{"status":"completed"}'
+  tl run_idle '{"status":"failed"},{"status":"blocked"},{"status":"failed"},{"status":"completed"}'
+  tl run_failed '{"status":"failed"},{"status":"completed"},{"status":"completed"}'
+  echo '{"ok":true,"result":{"terminals":[{"handle":"term_live"}]}}' > "$tmp/audit.terms"
+
+  out=$(au) || fail "Q8 audit failed on a fresh project: $out"
+  if printf '%s\n' "$out" | grep -q '^drift	'; then fail "Q8e fresh init reported drift: $out"; fi
+  printf '| DRF-0001 | 업로드 | completed | - | Direct | - | - |\n| DRF-0002 | 목록 | in-progress | - | Direct | run_gone / task_a / ctx_b | - |\n| DRF-0003 | 삭제 | completed | - | Direct | - | drift-app-DRF-0003-r01 |\n' >> "$dr/.ai/TASKS.md"
+  git -C "$dr" add .ai/TASKS.md && git -C "$dr" -c user.name=test -c user.email=test@example.com commit -qm tasks-only
+  out=$(au)
+  printf '%s\n' "$out" | grep -q '^drift	drift-app	checkpoint	[^	][^	]*	[^	][^	]*$' || fail "Q8a TASKS-only commit not reported: $out"
+  printf '%s\n' "$out" | grep -qx 'drift	drift-app	unreported	DRF-0001' || fail "Q8c completed task without a report not reported: $out"
+  if printf '%s\n' "$out" | grep -q 'unreported	DRF-0003'; then fail "Q8c report cell filled but reported as missing: $out"; fi
+  sed -i.bak 's/| in-progress |/| in-review |/; s/^- observedAt: .*/- observedAt: 2030-01-01T00:00:00+09:00/' "$dr/.ai/TASKS.md" "$dr/.ai/STATUS.md"; rm -f "$dr"/.ai/*.bak
+  git_commit "$dr" tasks-and-checkpoint
+  out=$(au)
+  if printf '%s\n' "$out" | grep -q '	checkpoint	'; then fail "Q8b both files in one commit reported: $out"; fi
+  printf '%s\n' "$out" | grep -qx 'drift	drift-app	unreported	DRF-0001' || fail "Q8 unreported lost after the checkpoint commit: $out"
+  printf -- '---\nreportId: drift-app-DRF-0001-r01\n---\n' > "$dr/.ai/reports/drift-app-DRF-0001-r01.md"; git_commit "$dr" report
+  if au | grep -q 'unreported'; then fail "Q8d report file present but reported as missing: $(au)"; fi
+  sed -i.bak '/^- observedAt:/d' "$dr/.ai/STATUS.md"; rm -f "$dr"/.ai/STATUS.md.bak; git_commit "$dr" no-observed-at
+  sed -i.bak 's/| in-review |/| blocked |/' "$dr/.ai/TASKS.md"; rm -f "$dr"/.ai/TASKS.md.bak; git_commit "$dr" status-change
+  if au | grep -q '	checkpoint	'; then fail "Q8e checkpoint without observedAt reported: $(au)"; fi
+
+  out=$(au)
+  [ "$(printf '%s\n' "$out" | grep -c '^run	')" = 3 ] || fail "Q6 expected 3 run lines: $out"
+  printf '%s\n' "$out" | grep -qx 'run	drift-app	run_gone	2026-10-02T01:00:00Z	gone	blocked=1' || fail "Q6 gone Run (project from TASKS.md Orca ref): $out"
+  printf '%s\n' "$out" | grep -qx 'run	-	run_live	2026-10-18T13:20:22Z	live	dispatched=1' || fail "Q6 live Run: $out"
+  printf '%s\n' "$out" | grep -qx 'run	-	run_idle	2026-09-11T01:00:00Z	-	blocked=1,failed=2' || fail "Q6 Run without a coordinator: $out"
+  if printf '%s\n' "$out" | grep -q 'run_done'; then fail "Q6 completed Run listed: $out"; fi
+  if printf '%s\n' "$out" | grep -q 'run_failed'; then fail "Q6 Run with only failed and completed Tasks listed: $out"; fi
+  mv "$tmp/audit.terms" "$tmp/audit.terms.off"
+  au | grep -qx 'run	-	run_live	2026-10-18T13:20:22Z	-	dispatched=1' || fail "Q6 unreadable terminal list should leave live/gone at -: $(au)"
+  mv "$tmp/audit.terms.off" "$tmp/audit.terms"
+  printf '| DRF-0004 | 검색 | completed | - | Direct | - | - |\n' >> "$dr/.ai/TASKS.md"; git_commit "$dr" unreported-row
+  printf '#!/bin/sh\nexit 1\n' > "$ab/orca"
+  out=$(au) || fail "Q6 audit exited non-zero when Orca did not answer"
+  printf '%s\n' "$out" | grep -q '^runs	unknown	' || fail "Q6 Orca failure not reported: $out"
+  printf '%s\n' "$out" | grep -qx 'drift	drift-app	unreported	DRF-0004' || fail "Q6 drift lines must still follow runs unknown: $out"
+  printf '%s\n' "$out" | grep -qx 'drift	drift-app	unreported	DRF-0002' && fail "Q6 DRF-0002 is not completed: $out"
+  if "$kit" audit "$dr" > /dev/null 2>&1; then fail "Q8 audit accepted a folder that is not a hub"; fi
+  ok "audit: unfinished-Task Runs (live/gone/-, project from TASKS.md), unknown on Orca failure, drift: checkpoint older than TASKS.md, completed without a report"
+
+  # Q10: pending and board stay as they were: no audit lines, no task-list call
+  cat > "$ab/orca" <<EOF
+#!/bin/sh
+echo "\$*" >> "$tmp/audit.calls"
+case "\$1 \$2" in
+  "orchestration run-list") cat "$tmp/audit.runs" ;;
+esac
+EOF
+  : > "$tmp/audit.calls"
+  out=$(PATH="$ab:$PATH" "$kit" pending "$hub2"; PATH="$ab:$PATH" "$kit" board "$hub2")
+  if printf '%s\n' "$out" | grep -Eq '^(run|runs|drift)	'; then fail "Q10 pending or board printed an audit line: $out"; fi
+  if grep -q 'task-list' "$tmp/audit.calls"; then fail "Q10 pending or board called task-list: $(cat "$tmp/audit.calls")"; fi
+  ok "pending and board print no audit lines and never call task-list"
+fi
+
+# 8j. Skill and policy text the checks above depend on
+sk="$root/skills"; po="$root/policies"
+grep -q '같은 턴' "$sk/project/SKILL.md" || fail "Q1 project Skill lost the same-turn start after approval"
+for k in 'result.outcome' 'result.prompt.outcome' 'terminal send' '새로 실행하지 않는다' 'kit.sh coordinator'; do
+  grep -qF -- "$k" "$sk/portfolio/SKILL.md" || fail "Q2 portfolio Skill lacks: $k"
+done
+prompt=$(awk '/시작 프롬프트 예시/ { f = 1; next } f && /^```/ { if (n++) exit; next } f && n { print }' "$sk/portfolio/SKILL.md")
+[ -n "$prompt" ] || fail "Q3 no start prompt example in the portfolio Skill"
+[ "$(printf '%s' "$prompt" | wc -c | tr -d ' ')" -le 300 ] || fail "Q3 start prompt example is $(printf '%s' "$prompt" | wc -c | tr -d ' ') bytes (limit 300)"
+grep -q 'allowWrite' "$sk/setup/SKILL.md" || fail "Q4 setup Skill lacks the allowWrite question"
+grep -qF -- '--body' "$po/permissions.md" && grep -q '작은따옴표' "$po/permissions.md" || fail "Q7 permissions lacks the report quoting rule"
+grep -q 'sandbox:' "$po/routing.md" || fail "routing lacks the sandbox: re-read rule"
+grep -q 'kit.sh coordinator' "$po/lifecycle.md" && grep -q 'kit.sh audit' "$po/lifecycle.md" || fail "lifecycle lacks coordinator or audit"
+grep -q 'kit.sh audit' "$po/reporting.md" && grep -q 'kit.sh audit' "$sk/portfolio/SKILL.md" || fail "Pull lacks the audit step"
+grep -q 'kit.sh coordinator' "$po/communication.md" || fail "communication lacks kit.sh coordinator"
+grep -q 'portfolio/SKILL.md' "$po/delegation.md" || fail "delegation does not point to the session start procedure"
+ok "docs: same-turn start, session start and delivery procedure (start prompt example <= 300 bytes), allowWrite question, report quoting, sandbox: re-read, coordinator and audit steps"
+
 # 9. Marketplace keeps the existing plugin and registers this one
 mp="$root/../../.claude-plugin/marketplace.json"
 if [ -f "$mp" ] && command -v jq > /dev/null; then

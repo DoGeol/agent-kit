@@ -21,6 +21,7 @@ description: 저장소를 orchestration-kit의 Portfolio(workspace-hub) 또는 P
    - `orca --version`, `orca status --json` (연결 거부·권한 오류는 "미검증"으로 기록. Orca를 재시작하지 않는다)
    - 선택: `codex --version`, `agy --version`
    - 선택: `../../scripts/kit.sh usage` (Provider별로 사용량을 읽을 수 있는지. `unknown`이면 마지막 칸의 이유를 기록한다)
+   - sandbox가 켜져 있으면 `../../scripts/kit.sh usage`를 sandbox 안·밖에서 각각 실행해 다른지 기록한다. 이유가 `sandbox:`로 시작하면 sandbox가 막은 것이다. 개인 모드면 hub 경로를 `sandbox.filesystem.allowWrite`에 더할지 사용자에게 묻고 문구만 보여 준다. 더하면 그 세션의 모든 sandbox 명령이 hub에 쓸 수 있다는 점도 말한다. 설정 파일은 고치지 않는다.
    - Codex Worker를 쓸 Project면 원본 저장소 경로를 Codex 신뢰 목록(`~/.codex/config.toml`의 `[projects."<원본 경로>"] trust_level = "trusted"`)에 등록할지 묻는다. Codex는 Worktree의 신뢰를 원본 저장소 경로로 판단하므로 한 번 등록하면 그 저장소의 새 Worktree 전체에 적용된다. 신뢰하면 그 저장소와 모든 Worktree에서 Codex가 저장소의 `.codex/` 설정·hooks·규칙을 불러온다. 이 점을 사용자에게 말한다. 이미 같은 경로 항목이 있으면 더하지 않는다. 사용자 승인 없이 고치지 않는다.
 
 ## 2. 역할과 ID 확정

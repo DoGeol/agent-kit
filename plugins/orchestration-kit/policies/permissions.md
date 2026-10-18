@@ -39,6 +39,7 @@ Worker끼리 합의했어도 위 변경은 승인 전에 적용하지 않는다.
 - Worker의 실제 샌드박스는 사용자의 에이전트 설정과 실행 도구 기본값을 따르며 전체 권한일 수 있다. 명세 제한은 지시일 뿐이므로, Coordinator는 결과를 확인할 때 소유 범위 밖 변경도 본다 (`git status`, 기준 저장소 상태).
 - 샌드박스 밖 실행도 명세에 적는다. 허용할 명령을 이름으로 적고(예: 임시 폴더만 쓰는 저장소 검사 스크립트), 그 밖의 명령은 샌드박스에 막히면 멈추고 결정 요청을 보내라고 적는다. 적지 않으면 Worker가 스스로 판단한다. [검증됨] 명세에 이 줄이 없던 Claude `haiku` Worker 4개가 모두 샌드박스에 막힌 저장소 검사를 묻지 않고 각자 우회했다. 3개는 샌드박스 밖에서 다시 돌렸다. 1개는 검사 스크립트 복사본의 임시 경로를 바꿔 샌드박스 안에서 돌렸다.
 - 허용 목록에는 Worker가 보고에 쓰는 명령(Orca면 `orca orchestration`)을 항상 넣는다. [검증됨] 샌드박스 안에서는 Orca 연결이 EPERM으로 막힌다. 목록에 없던 Claude `haiku` Worker는 규칙대로 우회하지 않았고, 그래서 `worker_done`을 보내지 못해 Task가 `dispatched`로 남았다. 같은 실행에서 시험용 서버의 포트 열기(listen)와, Worktree 밖을 가리키는 심볼릭 링크 `node_modules` 아래 Vitest 임시 파일 쓰기도 샌드박스에 막혔다. 시험 명령을 목록에 넣으면 Worker가 그 명령만 샌드박스 밖에서 실행했다.
+- 보고·동료 메시지 명령의 본문과 제목(`--body`, `--subject`)은 작은따옴표로 감싸고 백틱·`$`를 쓰지 않는다.
 - 이보다 넓은 권한(다른 저장소 쓰기, 외부 서비스 호출 등)이 필요한 Task는 사용자 승인을 받고 `TASKS.md`의 `실행 방식` 열에 적는다.
 
 ## 문서 수정 권한
@@ -58,6 +59,7 @@ Project는 Portfolio 파일을 쓰지 않는다. Portfolio는 Project 파일을 
 - Project는 hub에 자기 경로만 커밋한다: `git add -- projects/<projectId>` 뒤 `git commit -m "<메시지>" -- projects/<projectId>`. `git add -A`나 다른 경로를 쓰지 않는다. 깨끗한 작업 트리 조건도 자기 경로만 본다.
 - `index.lock` 때문에 커밋이 실패하면 잠시 뒤 한 번 다시 한다. lock 파일을 지우지 않는다. 다시 실패하면 사용자에게 알린다.
 - Project는 hub를 Push하지 않는다.
+- sandbox 쓰기 허용(`sandbox.filesystem.allowWrite`)에 hub가 없으면 위 hub 기록·커밋 명령은 sandbox 밖에서 실행해도 되는 명령이다.
 - 프로젝트 저장소에는 Kit 파일·Kit ID·Kit 언급을 남기지 않는다. 브랜치 이름, 커밋 메시지, PR 제목·본문은 그 저장소의 관례만 따른다.
 
 ## 안전 규칙

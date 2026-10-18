@@ -12,6 +12,7 @@ description: 프로젝트의 중앙 Coordinator로 일할 때 사용한다. 프�
 - 상태 파일은 hub의 `projects/<projectId>/`에 쓰고 hub에 자기 경로만 커밋한다 ([permissions.md](../../policies/permissions.md#문서-수정-권한)). hub를 Push하지 않는다.
 - 프로젝트 저장소에는 Kit 파일·ID·언급을 남기지 않는다. 브랜치 이름, 커밋 메시지, PR 제목·본문은 저장소 관례만 따른다. Worker 명세에도 결과물에 Kit ID를 넣지 말라고 적는다.
 - Worker 진행 파일은 Worktree의 `.orch-progress/`에 둔다. 로컬 무시 목록에 있어 `git status`에 나오지 않는다.
+- sandbox 쓰기 허용(`sandbox.filesystem.allowWrite`)에 hub가 없으면 hub 기록·커밋 명령은 sandbox 밖에서 실행해도 되는 명령이다.
 
 정책 원본 (필요한 때 읽는다):
 
@@ -25,7 +26,9 @@ description: 프로젝트의 중앙 Coordinator로 일할 때 사용한다. 프�
 
 ## 1. 세션 시작·재진입
 
-[lifecycle.md](../../policies/lifecycle.md#재진입-절차)의 재진입 절차를 따른다. 요약해서 보여준다: 진행 중 Task, 미해결 결정, 블로커, 승인 대기. Orca 상태를 확인하지 못했으면 그렇다고 말한다.
+먼저 셸에서 `../../scripts/kit.sh coordinator <저장소>`로 이 저장소의 다른 Coordinator를 확인한다. Run에 바인딩된 다른 세션(`bound`)이 있으면 새로 바인딩하지 않고 사용자에게 알린다. 목록에는 이 세션 자신도 나온다. `agent` 줄은 Coordinator인지 사용자에게 묻는다.
+
+[lifecycle.md](../../policies/lifecycle.md#재진입-절차)의 재진입 절차를 따른다. 요약해서 보여준다: 진행 중 Task, 미해결 결정, 블로커, 승인 대기. 셸에서 `../../scripts/kit.sh audit <hub>`(hub 경로는 `../../scripts/kit.sh hub <저장소>`. 찾지 못하면 그렇다고 말한다)를 실행해 끝나지 않은 Run과 상태 어긋남(`run`·`drift` 줄)도 요약에 넣는다. 정리와 체크포인트 갱신은 제안만 한다. Orca 상태를 확인하지 못했으면 그렇다고 말한다.
 
 셸에서 `../../scripts/kit.sh adopt-check <저장소>`를 실행한다. `stale`이나 `new`가 나오면 요약에 넣고 [adopt Skill](../adopt/SKILL.md)을 다시 실행하자고 제안한다. `none`·`ok`면 말하지 않는다.
 
@@ -47,7 +50,7 @@ description: 프로젝트의 중앙 Coordinator로 일할 때 사용한다. 프�
 2. 하위 작업마다 [routing.md](../../policies/routing.md)로 실행 주체(Direct / Subagent / Independent Session)와 위치(현재 / 새 Worktree)를 따로 정한다.
 3. 하위 작업마다 [roles.md](../../policies/roles.md)로 역할과 조합 방식(Worker 1개에 주·보조 역할 / 설계 → 구현 여러 Worker)을 정한다. 역할 원본은 [../../roles/](../../roles/), 프로젝트 보강은 `.ai/roles/<id>.md`.
 4. 병렬 Worker는 파일 소유 범위를 정하고, 공유 파일 수정자를 한 명 지정한다. 기본 상한 3개.
-5. 셸에서 `../../scripts/kit.sh usage`로 사용량을 읽는다 ([routing.md](../../policies/routing.md#사용량)). Worker 계획(Worker 수, Provider, `strong` 등급, 실패 때 상향 상한)을 사용량과 함께 사용자에게 보여주고 승인받는다. 승인한 범위 안에서는 Worker를 시작·재시작할 때 다시 묻지 않는다 ([permissions.md](../../policies/permissions.md#결정권)).
+5. 셸에서 `../../scripts/kit.sh usage`로 사용량을 읽는다 (sandbox 밖에서 실행해도 되는 읽기 명령. 이유가 `sandbox:`로 시작하면 밖에서 다시 읽는다) ([routing.md](../../policies/routing.md#사용량)). Worker 계획(Worker 수, Provider, `strong` 등급, 실패 때 상향 상한)을 사용량과 함께 사용자에게 보여주고 승인받는다. 승인을 받으면 같은 턴에서 첫 Worker를 시작한다. 다른 확인을 기다리지 않는다. 승인한 범위 안에서는 Worker를 시작·재시작할 때 다시 묻지 않는다 ([permissions.md](../../policies/permissions.md#결정권)).
 6. `TASKS.md`의 `실행 방식` 열에 선택을 적는다. 역할도 같이 적는다 (`role: frontend+designer`).
 7. [권장] 새 구성 요소·계약·저장 데이터가 생기는 등 구조를 정해야 하면 먼저 `architect` Worker(`strong`)로 설계 문서를 받는다. 사용자가 설계를 승인한 뒤 그 문서를 planner에 넘긴다. 요구가 모호하거나 하위 작업이 여럿이면 구현 전에 `planner` Worker(`strong`)로 계획을 받는다. 계획의 "사용자만 답할 수 있음" 질문은 [사용자에게 결정 묻기](../../policies/communication.md#사용자에게-결정-묻기) 형식으로 묻고, 답을 받은 뒤 구현을 배정한다.
 
@@ -56,7 +59,7 @@ description: 프로젝트의 중앙 Coordinator로 일할 때 사용한다. 프�
 - Orca를 쓰기 전에 설치된 버전의 가이드를 읽는다: `orca skills get orchestration --full`. 명령 문법은 그 가이드를 따른다.
 - 저장소가 Orca에 등록돼 있지 않으면 Worker를 놓을 수 없다. 등록은 사용자에게 확인한 뒤 한다.
 - Worker를 시작하기 전에 같은 Task의 기존 Worker가 있는지 확인한다. 중복 실행하지 않는다.
-- Worker에게 주는 Task 명세는 그 자체로 완결돼야 한다: 대상, 변경, 제약(건드리지 말 것), 소유 범위, 관찰 가능한 수용 기준. [permissions.md](../../policies/permissions.md#worker-권한)의 Worker 제한(쓰기 범위, 프로세스 종료, 커밋·Push 금지, 샌드박스 밖에서 실행해도 되는 명령. 보고 명령 포함)을 항상 적는다. 여러 단계인 작업은 "단계마다 진행 상황을 `.orch-progress/<Task>.md`에 적고, 확인 지점마다 후속 메시지(중단 요청)를 본다"를 적는다. 진행 파일은 커밋하지 않는다.
+- Worker에게 주는 Task 명세는 그 자체로 완결돼야 한다: 대상, 변경, 제약(건드리지 말 것), 소유 범위, 관찰 가능한 수용 기준. [permissions.md](../../policies/permissions.md#worker-권한)의 Worker 제한(쓰기 범위, 프로세스 종료, 커밋·Push 금지, 샌드박스 밖에서 실행해도 되는 명령. 보고 명령 포함)을 항상 적는다. 보고·동료 메시지 본문은 작은따옴표로 감싸고 백틱·`$`를 쓰지 않는다. 여러 단계인 작업은 "단계마다 진행 상황을 `.orch-progress/<Task>.md`에 적고, 확인 지점마다 후속 메시지(중단 요청)를 본다"를 적는다. 진행 파일은 커밋하지 않는다.
 - 명세 맨 앞에 역할 절을 넣는다. 역할 파일 본문을 읽어 그대로 붙인다 (경로만 주지 않는다). 순서와 형식은 [roles.md](../../policies/roles.md#명세에-넣기). Worker 시작 뒤 명세가 잘리지 않았는지 확인한다.
 - 하위 작업마다 등급(`fast` / `default` / `strong`)을 정하고, [Provider 선택](../../policies/routing.md#provider-선택) 순서로 Provider를 고른 뒤 [routing.md](../../policies/routing.md#모델과-effort)의 Provider별 모델로 바꾼다. 고른 이유를 `실행 방식` 열에 적는다. 사용량은 판단할 때마다 새로 읽는다. `.ai/ORCHESTRATION.md` Override가 있으면 그것을 따른다. 실제 적용값을 `실행 방식` 열에 적는다.
 - Orca `--worktree current`는 Coordinator 세션의 Worktree다. 셸의 현재 폴더가 아니다. 다른 저장소에서 일을 시키려면 그 저장소의 Worktree를 고르거나, 명세에 절대 경로를 적는다.
@@ -67,7 +70,7 @@ description: 프로젝트의 중앙 Coordinator로 일할 때 사용한다. 프�
 - 수락하거나 실패를 확정하면 Worker마다 다음 소유자를 정한다: 같은 Worker에 후속 작업, 유지, 또는 release. release·Worktree 정리 전에 미커밋 변경과 미병합 커밋을 확인한다 ([permissions.md](../../policies/permissions.md#안전-규칙)). 그다음 메시지를 확인 처리한다. 정리되지 않은 Worker가 남아 있으면 세션을 끝내지 않는다.
 - Worker끼리 자유롭게 협의하게 둔다. [permissions.md](../../policies/permissions.md)의 승인 대상 변경 요청(`DECISION_REQUEST`)이 오면 결정하고 `decisions/ADR-NNNN-<제목>.md`에 남긴 뒤 영향받는 Worker 모두에 알린다. 프로젝트 간 영향이 있으면 Portfolio 결정 사항으로 사용자에게 올린다.
 - 응답 없는 Worker는 상태와 생존 증거를 먼저 확인한다. 한도 문구가 보이면 사용량 한도로 본다.
-- 사용량은 [확인 시점](../../policies/routing.md#확인-시점)마다 `../../scripts/kit.sh usage`로 읽는다: 세션 시작, Worker 시작 직전, `worker_done`, 체크포인트. Worker가 도는 동안은 `../../scripts/kit.sh usage-watch <provider>`를 백그라운드로 띄워 두고, Worker 완료 대기와 둘 중 먼저 끝나는 쪽에 반응한다 ([작업 중 감시](../../policies/routing.md#작업-중-감시)). 주의·위험이면 [routing.md](../../policies/routing.md#작업-중-한도-대응)의 작업 중 한도 대응을 따른다. Coordinator 자신의 Provider가 위험이면 인계를 남기고 멈춘다.
+- 사용량은 [확인 시점](../../policies/routing.md#확인-시점)마다 `../../scripts/kit.sh usage`(sandbox 밖에서 실행해도 되는 읽기 명령)로 읽는다: 세션 시작, Worker 시작 직전, `worker_done`, 체크포인트. Worker가 도는 동안은 `../../scripts/kit.sh usage-watch <provider>`를 백그라운드로 띄워 두고, Worker 완료 대기와 둘 중 먼저 끝나는 쪽에 반응한다 ([작업 중 감시](../../policies/routing.md#작업-중-감시)). 주의·위험이면 [routing.md](../../policies/routing.md#작업-중-한도-대응)의 작업 중 한도 대응을 따른다. Coordinator 자신의 Provider가 위험이면 인계를 남기고 멈춘다.
 
 ## 5. 검증과 수락
 
