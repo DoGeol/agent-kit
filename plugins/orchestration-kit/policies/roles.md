@@ -13,10 +13,11 @@ Worker·Subagent에 맡길 일마다 **역할**을 정한다. 역할은 관점, 
 | 역할 | 맡는 일 | 파일 수정 |
 |---|---|---|
 | [frontend](../roles/frontend.md) | 화면·컴포넌트·클라이언트 상태 구현 | 함 |
-| [designer](../roles/designer.md) | UI/UX 설계, 화면 흐름, 접근성·일관성 검토 | 설계 문서만 |
+| [designer](../roles/designer.md) ([참고](../roles/designer/reference.md)) | UI/UX 설계, 화면 흐름, 접근성·일관성 검토, 디자인 원칙 초안·변경 제안 | 설계 문서만 |
 | [backend](../roles/backend.md) | API, 도메인 로직, 데이터 저장 | 함 |
 | [qa](../roles/qa.md) ([참고](../roles/qa/reference.md)) | QA 시트, 테스트 작성·실행, 재현, 회귀 확인 | 테스트만 |
 | [planner](../roles/planner.md) ([참고](../roles/planner/reference.md)) | 구현 계획, PR 직전 최종 측정 시트 | 문서·시트만 |
+| [architect](../roles/architect.md) | 시스템 설계: 경계, 계약, 대안과 트레이드오프, 이전·되돌리기, 결정 기록 초안 | 설계 문서만 |
 | [reviewer](../roles/reviewer.md) | 코드·설계 리뷰 | 안 함 |
 | [docs](../roles/docs.md) | README, 가이드, 운영 문서 | 문서만 |
 
@@ -59,7 +60,16 @@ Worker·Subagent에 맡길 일마다 **역할**을 정한다. 역할은 관점, 
 | backend | [anthropics/claude-plugins-official](https://github.com/anthropics/claude-plugins-official) `pr-review-toolkit` silent-failure-hunter | Apache-2.0 | 빈 catch·조용한 기본값 대체를 숨은 실패로 보고 |
 | frontend | [anthropics/skills](https://github.com/anthropics/skills) `webapp-testing` | Apache-2.0 | 코드만 읽지 않고 브라우저에 띄워 상태별로 확인 |
 | frontend, designer | [vercel-labs/web-interface-guidelines](https://github.com/vercel-labs/web-interface-guidelines) | MIT | 색에만 의존하지 않는 표시, 알림 영역에 둘 내용, 표시 형식 |
-| designer | [anthropics/skills](https://github.com/anthropics/skills) `frontend-design` | Apache-2.0 | 흔한 장식을 넣기 전에 필요한지 묻기, 강조할 곳 하나 |
+| designer | [anthropics/skills](https://github.com/anthropics/skills) `frontend-design` | Apache-2.0 | 흔한 장식을 넣기 전에 필요한지 묻기, 강조할 곳 하나, 프로젝트 지시가 일반 기본값보다 우선 |
+| designer | [GOV.UK Design System 기여 기준](https://design-system.service.gov.uk/community/contribution-criteria/), [GOV.UK 디자인 원칙](https://www.gov.uk/guidance/government-design-principles) | OGL v3.0 | 원칙 변경은 쓰임 증거·중복 없음을 근거로 제안, 날짜를 단 변경 기록 |
+| designer | [pbakaus/impeccable](https://github.com/pbakaus/impeccable) | Apache-2.0 | 기존 화면에서 초안을 만들되 덮어쓰지 않고 근거 없는 내용은 질문으로 남김 |
+| designer, frontend | 원칙 문서 형식과 화면 목록 (principles.design, Atlassian 디자인 원칙, Jeremy Keith 디자인 원칙 강연, Brad Frost interface inventory) | 확인 못 함 (형식만 가져오고 문장은 쓰지 않음) | "A를 B보다 우선" 문장과 반대 문장 시험, 원칙마다 점검 질문, 3~5개, 같은 역할 요소의 변형 세기 |
+| frontend | [vercel-labs/web-interface-guidelines](https://github.com/vercel-labs/web-interface-guidelines) | MIT | 위반 보고 형식 `파일:줄 - 문제` |
+| architect | [rust-lang/rfcs](https://github.com/rust-lang/rfcs/blob/master/0000-template.md) 템플릿 | MIT OR Apache-2.0 | 버린 대안과 이유, 결과의 좋은 점·나쁜 점, 남은 질문 |
+| architect | [MADR](https://adr.github.io/madr/) | MIT OR CC0-1.0 | 결정마다 선택지 여럿과 확인 방법(Confirmation), `proposed` 상태 |
+| architect | [arc42](https://arc42.org/overview), [C4 모델](https://c4model.com/) | CC BY-SA 4.0, CC BY 4.0 | 수치로 쓰는 품질 요구, 그림은 맥락·큰 구성 요소 수준까지 |
+| architect | [obra/superpowers](https://github.com/obra/superpowers) `brainstorming` | MIT | 설계 승인 뒤에 계획으로 넘김, 질문 세 갈래 |
+| architect | [anthropics/claude-plugins-official](https://github.com/anthropics/claude-plugins-official) `feature-dev` code-architect | Apache-2.0 | 기존 구조를 먼저 읽음. 구현 단계는 planner 몫으로 빼서 겹치지 않게 함 |
 | docs | [anthropics/skills](https://github.com/anthropics/skills) `doc-coauthoring` | 표기 없음 (생각만 가져오고 문구는 쓰지 않음) | 다 쓴 뒤 처음 독자처럼 따라 해 보는 독자 시험 |
 
 - [확정] qa: 새 시험은 변경 범위(diff)와 그 호출자에만 쓰고 기존 시험은 전부 실행한다. QA를 통과시키려는 변경(제품 코드, 시험 삭제·skip, assertion 약화, 기준 이미지 갱신, 허용치 완화, 동작 우회 mock)을 하지 않는다. 시험 파일 검수는 별도 Task로만 한다.
@@ -75,6 +85,8 @@ Worker·Subagent에 맡길 일마다 **역할**을 정한다. 역할은 관점, 
 - [검증됨] designer 비교 (같은 기능의 설계 문서, 개수·보존·형식이 빠진 요청, 팀마다 `sonnet` 1, 10점 채점표): 기존 역할 9점, 보강 역할 10점. 차이는 사용자만 정할 값을 추천·가정·질문 표로 남겼는지 하나다. 두 팀 모두 실행하지 않은 코드 예시(`toLocaleTimeString('ko-KR', {hour12:false})`, 실제 출력 `14시 3분 1초`)와 틀린 기준 이미지 영향 짐작을 적었다. 그래서 "코드 예시와 시험 영향은 실행해 확인" 줄을 더했다 (PR 직전 재측정, 같은 함정·`sonnet` 1회: 10점. 기준 이미지 영향을 임시 사본에서 실행해 1px 밀림을 찾았다. 형식 예시는 오후 시각 하나만 실행해 오전 한 자리 시각(`4:03:07`)을 놓쳤다).
 
 - [검증됨] docs 비교 (sample-api README 실행 절, 틀린 기존 줄 `npm start`·포트 8080을 심음, 팀마다 `haiku` 1, 10점 채점표, README 명령을 그대로 실행해 판정): 기존 역할 7점, 보강 역할 8점. 두 팀 모두 틀린 줄을 실행으로 확인해 고쳤다. 차이는 독자 시험 하나다. 보강 역할 팀은 범위 밖 문서의 남은 항목도 보고했지만 기존 줄의 글자를 하나 지웠다. 그래서 "커밋 전에 diff를 다시 읽는다" 수용 기준을 더했다 (PR 직전 재측정, 같은 함정·`haiku`: 1회차 7점, 2회차 9점. 두 번 모두 기존 줄을 망가뜨리지 않았다).
+
+- [검증됨] architect 비교 (sample-api → sample-app "지난 24시간 비정상 이력" 요청. 서버가 꺼진 동안 스스로 기록할 수 없다는 함정과 공유 `/health` 계약이 있음. 팀마다 `opus` 1, 결과만 보는 가린 채점 10점): 지금 경로(planner가 바로 계획) 8점, architect 9점. 두 팀 모두 함정과 계약 승인을 짚었다. 차이는 배포 순서·호환·되돌리기 하나다. planner 문서는 확인 명령과 클라이언트 실패 모드까지 있어 바로 구현에 쓰기 좋았고, architect 문서는 대안 비교가 풍부해 승인 검토에 맞았다. architect는 보존 기간·개수를 묻지 않고 정하고 요청에 없는 필드를 더해서, 사용자 값과 과잉 계약을 막는 두 줄을 더했다. 재측정(`opus` 1회)도 9점이었다. 간격·보존·표시 방식은 질문으로 옮겨 갔지만 "24시간" 경계 해석 하나를 계약에 박았고, 문서가 길다(400줄). 그래서 architect는 새 저장 데이터·프로젝트 간 계약이 생길 때만 쓴다.
 
 ## 프로젝트 보강
 
@@ -123,6 +135,19 @@ Worker·Subagent에 맡길 일마다 **역할**을 정한다. 역할은 관점, 
 - [검증됨] 명세에 `쓸 Skill: <이름> (작업 전에 실행한다)` 한 줄을 넣으면 Claude Worker가 그 Skill을 실행했다.
 - [권장] 효과는 작업마다 다르다. 넣기 전과 뒤를 같은 Task·역할 수용 기준으로 비교한다. 접근성 Skill로 도움말 대화상자를 만든 비교(Claude `haiku` 2:2)에서는 채점 10항목이 양쪽 모두 만점이라 차이가 없었다. 모델이 이미 아는 내용이면 Skill이 더하는 것이 없다. 프로젝트 고유 규칙이나 모델이 모르는 사내 지식부터 Skill로 만든다.
 - Skill 추가는 저장소 파일을 늘리는 일이므로 사용자 승인을 받는다. 형식은 Agent Skills 규격(frontmatter는 `name`, `description`)을 따른다.
+
+## 디자인 원칙
+
+화면 결정의 기준은 프로젝트마다 다르다. Kit은 원칙 문서의 양식과 다루는 절차만 두고, 원칙 내용은 프로젝트가 정한다. 양식: [../templates/design/DESIGN-PRINCIPLES.md](../templates/design/DESIGN-PRINCIPLES.md).
+
+- 위치: 프로젝트 디자인 정책 문서에 원칙 절이 있으면 그 문서다. 없으면 상태 폴더의 `.ai/DESIGN-PRINCIPLES.md`다 (개인 모드면 hub 안이므로 팀 저장소에 남지 않는다). 둘 다 없으면 원칙 문서가 없는 프로젝트다.
+- 원칙은 "A를 B보다 우선한다" 문장 3~5개와 점검 질문으로 쓴다. 원칙(판단 기준), 규칙(예/아니오로 확인), 토큰(값의 위치)을 절로 나눈다.
+- 원칙의 결정권은 사용자에게 있다. designer가 초안과 변경 제안을 쓰고 ([designer 참고](../roles/designer/reference.md)), 사용자가 승인한 원칙만 `accepted`가 된다. Worker는 원칙 문서를 직접 고치지 않는다.
+- Coordinator는 designer·frontend 명세의 `## 작업`에 원칙 문서 경로를 적는다. 원칙 문서가 없고 화면 구조를 새로 정하는 Task면 designer 참고의 "디자인 원칙 초안 만들기" 절을 붙인다.
+- designer는 결정마다 원칙 ID를 적고, frontend는 구현 뒤 원칙·규칙마다 점검 결과를 적는다. Coordinator는 수락할 때 이 두 가지를 확인한다.
+- adopt는 원칙 문서를 찾아 designer·frontend 보강의 `## 작업 전 읽을 문서`와 `## 출처`에 넣는다. 원칙이 바뀌면 `adopt-check`가 `stale`로 알린다.
+- [검증됨] 원칙 문서가 있을 때 (sample-app 최근 확인 기록, 모델이 흔히 어기는 원칙 3개·규칙 3개를 심음, designer → frontend 순서, 팀마다 `sonnet` 1, 가린 채점 10점): 기존 역할 9점, 원칙 줄을 더한 역할 10점. 두 팀 모두 명세에 원칙 문서 경로만 있어도 원칙을 지켰다 (한 줄 목록, 글자 상태, `.state`보다 작은 글자). 차이는 frontend의 원칙·규칙별 점검 보고 하나다. 기존 역할 팀은 기록 결과에 색 강조를 더해 P1에 덜 맞았다. 원칙 문서 경로를 명세에 넣는 것이 가장 큰 몫이다.
+- [검증됨] 원칙 문서가 없을 때 (같은 화면에 설정 영역을 새로 설계, 팀마다 `sonnet` 1, 가린 채점 10점): 기존 역할 6점, 원칙 줄과 "원칙 초안 만들기" 절을 받은 역할 10점. 차이는 기존 화면 근거를 단 원칙 초안을 draft·질문으로 냈는지다. 기존 역할 팀은 원칙 초안이 없는 대신 대비 계산과 기존 문서 충돌 확인이 더 꼼꼼했다.
 
 ## 고르기
 

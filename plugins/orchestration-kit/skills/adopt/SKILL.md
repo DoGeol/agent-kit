@@ -20,7 +20,7 @@ description: 프로젝트에 이미 있는 규칙과 Skill(디자인 정책 문�
 
 | 찾을 것 | 예 |
 |---|---|
-| 규칙 문서 | `AGENTS.md`, `CLAUDE.md`, `CONTRIBUTING.md`, 디자인 정책 문서(`DESIGN.md` 등), 경험·스타일·문체 문서 |
+| 규칙 문서 | `AGENTS.md`, `CLAUDE.md`, `CONTRIBUTING.md`, 디자인 정책 문서(`DESIGN.md` 등), 디자인 원칙 문서(그 원칙 절 또는 `.ai/DESIGN-PRINCIPLES.md`), 경험·스타일·문체 문서 |
 | 검사 수단 | 패키지 스크립트(시험, lint, 형식, 문서 검사, 토큰 검사), lint 설정, CI 워크플로 |
 | 화면 기반 | 토큰 정의 위치, 공용 컴포넌트·상태 컴포넌트 위치, 날짜·숫자 형식 함수 |
 | Skill | 저장소 `.agents/skills/`, `.claude/skills/`, 설치된 Plugin Skill 목록 |
@@ -79,6 +79,7 @@ description: 프로젝트에 이미 있는 규칙과 Skill(디자인 정책 문�
 - 프로젝트에 디자인 정책 문서가 없거나 규칙에 ID가 없을 때, 흩어진 디자인 규칙을 한 문서로 모으거나 규칙 ID를 덧붙이는 변경안을 만든다.
 - 원문 문장과 위치는 그대로 두고 ID만 덧붙인다. 프로젝트에 이미 정한 형식(규칙 ID 체계, frontmatter)이 있으면 그 형식을 따른다. 새 형식을 만들지 않는다.
 - 프로젝트에 디자인 정책을 만드는 전용 Skill이 있으면 그 Skill을 실행하자고 먼저 제안한다.
+- 디자인 원칙("A를 B보다 우선" 판단 기준)은 adopt가 쓰지 않는다. 원칙이 어디에도 없으면 designer Worker의 원칙 초안 Task를 제안한다 ([roles.md](../../policies/roles.md#디자인-원칙)).
 - diff를 보여 주고 승인받은 뒤에만 쓴다. 쓴 뒤 보강의 `## 출처` 커밋을 새로 적는다.
 
 ## 8. 보고

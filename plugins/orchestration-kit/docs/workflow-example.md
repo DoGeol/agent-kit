@@ -86,9 +86,9 @@ Project Coordinator가 하는 일:
    | 테스트 보강 | Orca Worker, 새 Worktree | `qa` | `fast` / claude `haiku` |
    | 계약 리뷰 | Orca Worker, 읽기 전용 | `reviewer` | `strong` / claude `opus` |
 
-   이 Worker 계획(3개, codex·claude, `strong` 1개)을 사용자에게 보여 주고 승인받는다. 요구가 모호하거나 하위 작업이 여럿이면 먼저 `planner` Worker(`strong`)가 단계·확인 명령·멈출 조건을 쓰고, 사용자만 답할 수 있는 질문은 선택지로 묻는다.
+   이 Worker 계획(3개, codex·claude, `strong` 1개, 실패 때 상향 상한)을 사용자에게 보여 주고 승인받는다. 새 저장 데이터나 프로젝트 간 계약이 생기면 그 전에 `architect` Worker가 설계 문서를 쓰고, 사용자가 승인한 설계를 planner가 계획으로 바꾼다. 요구가 모호하거나 하위 작업이 여럿이면 먼저 `planner` Worker(`strong`)가 단계·확인 명령·멈출 조건을 쓰고, 사용자만 답할 수 있는 질문은 선택지로 묻는다.
 3. **실행**: 역할 파일 본문, 프로젝트 보강(`.ai/roles/<id>.md`가 있으면), Worker 제한(쓰기 범위, 커밋·Push 금지)을 Task 명세에 넣고 Orca Worker를 시작해 감독한다. 시작 직전에 `kit.sh usage codex`로 사용량을 읽고, 도는 동안 `kit.sh usage-watch codex`를 백그라운드로 띄워 둔다. 감시가 주의나 한도 임박으로 멈추면 Worker에 중단을 요청하고 다음 Provider로 넘긴다.
-4. **검증**: Worker가 "통과"라고 적어도 Coordinator가 테스트와 동작을 직접 확인하고, 역할 수용 기준을 하나씩 대조한다.
+4. **검증**: Worker가 "통과"라고 적어도 Coordinator가 테스트와 동작을 직접 확인하고, 역할 수용 기준을 하나씩 대조한다. 못 넘으면 상향 사다리를 탄다: 실패 증거를 붙여 같은 등급 1번 → (가끔 통과했으면) effort → 등급 한 단계 → 다른 Provider → 사용자에게 묻기. 권한·한도·사람만 답할 질문은 올리지 않는다.
 5. **커밋·반영·보고**: 반영 방식(`.ai/ORCHESTRATION.md`의 `integration`)에 따른다.
    - `direct-merge`: Coordinator가 커밋하고 기준 브랜치에 병합한 뒤 `.ai/reports/shop-api-API-0012-r01.md`를 커밋한다. Push는 사용자 승인 뒤에 한다.
    - `pull-request`: 작업 브랜치에 결과와 보고서를 커밋하고, 사용자 승인을 받아 Push와 PR을 연다. 병합은 프로젝트 규칙대로 하고 Coordinator가 스스로 하지 않는다. PR이 병합되면 Portfolio가 보고서를 읽는다.
@@ -99,6 +99,8 @@ Project Coordinator가 하는 일:
 1. `designer` Worker가 설계 문서만 쓴다.
 2. Coordinator가 설계를 수락한다.
 3. `frontend` Worker가 구현한다.
+
+설계와 구현 Worker 명세에는 프로젝트 디자인 원칙 문서 경로를 적는다. designer는 결정마다 원칙 ID를, frontend는 원칙마다 점검 결과를 남긴다. 원칙 문서가 없으면 designer가 기존 화면에서 원칙 초안을 만들어 질문으로 남긴다.
 
 작은 화면 수정이면 Worker 1개에 `frontend` + 보조 `designer`로 맡긴다. 규칙은 [roles.md](../policies/roles.md#조합-한-worker와-여러-worker).
 
