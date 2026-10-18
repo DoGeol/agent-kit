@@ -57,6 +57,9 @@ Worker·Subagent에 맡길 일마다 **역할**을 정한다. 역할은 관점, 
 | reviewer | [obra/superpowers](https://github.com/obra/superpowers) `requesting-code-review` 리뷰어 지침 | MIT | 명세 준수와 품질 판정 분리, 판단 보류 목록, 심각도 3단계, 병합 판정 |
 | backend | [obra/superpowers](https://github.com/obra/superpowers) `systematic-debugging`, `test-driven-development` | MIT | 원인 위치를 찾기 전 고치지 않음, 고치기 전 실패 확인, 3번 실패하면 멈춤 |
 | backend | [anthropics/claude-plugins-official](https://github.com/anthropics/claude-plugins-official) `pr-review-toolkit` silent-failure-hunter | Apache-2.0 | 빈 catch·조용한 기본값 대체를 숨은 실패로 보고 |
+| frontend | [anthropics/skills](https://github.com/anthropics/skills) `webapp-testing` | Apache-2.0 | 코드만 읽지 않고 브라우저에 띄워 상태별로 확인 |
+| frontend, designer | [vercel-labs/web-interface-guidelines](https://github.com/vercel-labs/web-interface-guidelines) | MIT | 색에만 의존하지 않는 표시, 알림 영역에 둘 내용, 표시 형식 |
+| designer | [anthropics/skills](https://github.com/anthropics/skills) `frontend-design` | Apache-2.0 | 흔한 장식을 넣기 전에 필요한지 묻기, 강조할 곳 하나 |
 
 - [확정] qa: 새 시험은 변경 범위(diff)와 그 호출자에만 쓰고 기존 시험은 전부 실행한다. QA를 통과시키려는 변경(제품 코드, 시험 삭제·skip, assertion 약화, 기준 이미지 갱신, 허용치 완화, 동작 우회 mock)을 하지 않는다. 시험 파일 검수는 별도 Task로만 한다.
 - [검증됨] qa 보강 비교 (sample-app, 심은 결함 3개, 팀마다 시트 `sonnet` 1 + 실행 `haiku` 1): 채점 8점은 두 팀 모두 8점이었다. 기준 이미지 갱신과 범위 함정은 두 팀의 시트 단계에서 이미 걸러져 차이가 나지 않았다. 보강한 팀에서만 나온 것: 결함을 고친 사본에서 새 시험이 통과함을 확인(red-green), 확인했고 없었던 결함 유형 목록, 차이 이미지 경로를 붙인 결정 요청.
@@ -66,6 +69,9 @@ Worker·Subagent에 맡길 일마다 **역할**을 정한다. 역할은 관점, 
 - [검증됨] reviewer 비교 (sample-app 자동 재확인 diff, 진짜 결함 2개와 오탐 미끼 3종, 팀마다 `sonnet` 1, 8점 채점표): 기존 역할 6점, 보강 역할 7점. 결함 검출은 같았고 차이는 명세·품질 판정 분리와 병합 판정 형식뿐이다. 두 팀 모두 취향 미끼(`const`로 써도 되는 `let`)를 Minor로 올렸다. 그래서 "취향은 Minor로도 넣지 않는다" 줄을 더했다 (이 줄의 효과는 아직 재지 않았다). 기존 역할 팀만 찾은 정당한 지적(자동 확인 중 버튼 클릭이 조용히 무시됨)도 있었다.
 
 - [검증됨] backend 비교 (sample-api, 공유 정수 해석 함수가 빈 값을 잃은 버그와 오류를 삼키는 진입부 catch, 팀마다 `sonnet` 1, 10점 채점표, 숨은 시험으로 기계 판정): 기존 역할 8점, 보강 역할 10점. 두 팀의 코드 수정은 같았다 (둘 다 공유 함수에서 원인을 고쳤고, 증상만 고치는 함정은 차이를 내지 못했다). 차이는 보강 역할에만 단서가 있는 두 항목이다: 고치기 전 실패한 시험 명령·출력 기록, 문서와 어긋나는 빈 catch를 고치지 않고 결정이 필요하다고 보고한 것.
+
+- [검증됨] frontend 비교 (sample-app 최근 확인 기록 구현, 팀마다 `sonnet` 1, 10점 채점표, 숨은 e2e 4개로 기계 판정): 두 팀 모두 9점. 숨은 e2e·토큰 사용·새 e2e는 같았다. 보강 역할 팀만 요소 대응표를 썼다. 대신 기준 이미지 갱신을 피하려고 기록 영역을 흐름 밖(`position:absolute`)으로 뺐다. 그래서 금지 문장을 "시험·기준 이미지를 맞추려고 화면 배치를 바꾸지 않는다, 의도된 변경이면 이유와 함께 갱신"으로 고쳤다 (고친 문장의 효과는 아직 재지 않았다).
+- [검증됨] designer 비교 (같은 기능의 설계 문서, 개수·보존·형식이 빠진 요청, 팀마다 `sonnet` 1, 10점 채점표): 기존 역할 9점, 보강 역할 10점. 차이는 사용자만 정할 값을 추천·가정·질문 표로 남겼는지 하나다. 두 팀 모두 실행하지 않은 코드 예시(`toLocaleTimeString('ko-KR', {hour12:false})`, 실제 출력 `14시 3분 1초`)와 틀린 기준 이미지 영향 짐작을 적었다. 그래서 "코드 예시와 시험 영향은 실행해 확인" 줄을 더했다 (이 줄의 효과는 아직 재지 않았다).
 
 ## 프로젝트 보강
 
