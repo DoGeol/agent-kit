@@ -55,6 +55,8 @@ Worker·Subagent에 맡길 일마다 **역할**을 정한다. 역할은 관점, 
 | planner | [anthropics/claude-plugins-official](https://github.com/anthropics/claude-plugins-official) `feature-dev` | Apache-2.0 | 명확화 질문을 건너뛰지 않음 |
 | reviewer | [anthropics/claude-plugins-official](https://github.com/anthropics/claude-plugins-official) `code-review` | Apache-2.0 | 확신도 80 미만은 올리지 않음, 오탐 유형 목록 |
 | reviewer | [obra/superpowers](https://github.com/obra/superpowers) `requesting-code-review` 리뷰어 지침 | MIT | 명세 준수와 품질 판정 분리, 판단 보류 목록, 심각도 3단계, 병합 판정 |
+| backend | [obra/superpowers](https://github.com/obra/superpowers) `systematic-debugging`, `test-driven-development` | MIT | 원인 위치를 찾기 전 고치지 않음, 고치기 전 실패 확인, 3번 실패하면 멈춤 |
+| backend | [anthropics/claude-plugins-official](https://github.com/anthropics/claude-plugins-official) `pr-review-toolkit` silent-failure-hunter | Apache-2.0 | 빈 catch·조용한 기본값 대체를 숨은 실패로 보고 |
 
 - [확정] qa: 새 시험은 변경 범위(diff)와 그 호출자에만 쓰고 기존 시험은 전부 실행한다. QA를 통과시키려는 변경(제품 코드, 시험 삭제·skip, assertion 약화, 기준 이미지 갱신, 허용치 완화, 동작 우회 mock)을 하지 않는다. 시험 파일 검수는 별도 Task로만 한다.
 - [검증됨] qa 보강 비교 (sample-app, 심은 결함 3개, 팀마다 시트 `sonnet` 1 + 실행 `haiku` 1): 채점 8점은 두 팀 모두 8점이었다. 기준 이미지 갱신과 범위 함정은 두 팀의 시트 단계에서 이미 걸러져 차이가 나지 않았다. 보강한 팀에서만 나온 것: 결함을 고친 사본에서 새 시험이 통과함을 확인(red-green), 확인했고 없었던 결함 유형 목록, 차이 이미지 경로를 붙인 결정 요청.
@@ -62,6 +64,8 @@ Worker·Subagent에 맡길 일마다 **역할**을 정한다. 역할은 관점, 
 - [검증됨] planner 비교 (sample-app, 간격·실패 동작·숨은 탭이 빠진 모호한 요청, 팀마다 `opus` 1, 미리 정한 10점 채점표): 지금 Coordinator 명세 규칙만 준 팀 7점, planner 역할 팀 10점. 차이는 간격 값을 확정했는지(가정+질문으로 남김), 단계마다 확인 명령·기대 결과, 멈출 조건. planner 팀만 결함을 넣어 새 시험이 실패하는지 보는 단계와 실패 모드별 코드 위치·확인 방법을 썼다.
 
 - [검증됨] reviewer 비교 (sample-app 자동 재확인 diff, 진짜 결함 2개와 오탐 미끼 3종, 팀마다 `sonnet` 1, 8점 채점표): 기존 역할 6점, 보강 역할 7점. 결함 검출은 같았고 차이는 명세·품질 판정 분리와 병합 판정 형식뿐이다. 두 팀 모두 취향 미끼(`const`로 써도 되는 `let`)를 Minor로 올렸다. 그래서 "취향은 Minor로도 넣지 않는다" 줄을 더했다 (이 줄의 효과는 아직 재지 않았다). 기존 역할 팀만 찾은 정당한 지적(자동 확인 중 버튼 클릭이 조용히 무시됨)도 있었다.
+
+- [검증됨] backend 비교 (sample-api, 공유 정수 해석 함수가 빈 값을 잃은 버그와 오류를 삼키는 진입부 catch, 팀마다 `sonnet` 1, 10점 채점표, 숨은 시험으로 기계 판정): 기존 역할 8점, 보강 역할 10점. 두 팀의 코드 수정은 같았다 (둘 다 공유 함수에서 원인을 고쳤고, 증상만 고치는 함정은 차이를 내지 못했다). 차이는 보강 역할에만 단서가 있는 두 항목이다: 고치기 전 실패한 시험 명령·출력 기록, 문서와 어긋나는 빈 catch를 고치지 않고 결정이 필요하다고 보고한 것.
 
 ## 프로젝트 보강
 
