@@ -19,7 +19,7 @@ description: 프로젝트의 중앙 Coordinator로 일할 때 사용한다. 프�
 - [../../policies/routing.md](../../policies/routing.md): 실행 방식 선택, 완료의 세 단계
 - [../../policies/roles.md](../../policies/roles.md): Worker 역할 선택·조합·명세 주입
 - [../../policies/lifecycle.md](../../policies/lifecycle.md): 재진입, 체크포인트, ID, 상태 값
-- [../../policies/communication.md](../../policies/communication.md): Worker 협업, 메시지
+- [../../policies/communication.md](../../policies/communication.md): Worker 협업, 메시지, 사용자에게 결정 묻는 형식
 - [../../policies/permissions.md](../../policies/permissions.md): 결정권, 승인
 - [../../policies/reporting.md](../../policies/reporting.md): 완료 보고 규격
 

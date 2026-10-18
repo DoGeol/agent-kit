@@ -14,6 +14,7 @@ Portfolio 저장소에서 일한다. `.ai/ORCHESTRATION.md`가 없거나 `role: 
 - [../../policies/reporting.md](../../policies/reporting.md): 보고 수집, 중복 방지, 진행도
 - [../../policies/lifecycle.md](../../policies/lifecycle.md): ID, 상태 값
 - [../../policies/permissions.md](../../policies/permissions.md): 결정권, 승인
+- [../../policies/communication.md](../../policies/communication.md#사용자에게-결정-묻기): 사용자에게 결정 묻는 형식
 
 조회·요약·분류·문서 정리는 직접 한다. 코드 구현과 프로젝트 기술 문서 수정은 하지 않고 Project Coordinator에 위임한다. 프로젝트 저장소는 읽기만 한다.
 
