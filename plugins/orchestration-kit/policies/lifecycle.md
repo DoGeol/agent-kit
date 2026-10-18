@@ -23,7 +23,7 @@
 3. `in-review` Task에 PR 주소가 있으면 PR 상태를 확인한다. 병합됐으면 `completed`로 바꾸고 보고서를 반영한다 ([routing.md](routing.md#pr-흐름-pull-request)).
 4. Orca를 쓰는 경우 체크포인트의 Run에 다시 바인딩하고(`run-use`) 쌓인 메시지를 받은 뒤, Orca 상태를 조회해 진행 중 Task·Worker와 맞춘다. 다르면 Orca를 따른다. `scripts/kit.sh audit <hub>`로 끝나지 않은 Task가 남은 Run과 상태 어긋남을 보고, 정리·체크포인트 갱신은 제안만 한다. Orca에 연결할 수 없으면 그 사실을 기록하고, 실행 상태를 확정하지 않는다.
 5. 종료 증거가 없는 Worker를 다시 실행하지 않는다. 다만 Orca 런타임이 재시작된 뒤 Worker 터미널이 `consumer_fenced`로 메시지를 받지 못하면 그 Worker는 재사용하지 않는다. 진행 파일을 확인하고 같은 Task를 새 Worker로 `--retry-of` 시작한 뒤 이전 Worker를 정리한다 (Orca 이슈 #30013, 우회).
-6. 미해결 결정과 사용자 승인 대기 항목을 먼저 보여준다.
+6. 미해결 결정과 사용자 승인 대기 항목을 먼저 보여준다. 답이 온 사용자 결정 요청은 `kit.sh decision-take`로 받아, 승인한 범위 안에서는 다시 묻지 않고 진행한다.
 
 ## 체크포인트
 
@@ -31,7 +31,7 @@
 
 - `observedAt`: 기록 시각 (ISO 8601)
 - 진행 중 Task와 Orca 참조 (Run·Task·Dispatch ID)
-- 미해결 결정
+- 미해결 결정 (사용자 결정 요청은 `decisionId`와 상태)
 - 블로커
 - 다음 안전한 행동
 - 인계 (사용량 한도나 세션 종료로 작업 중에 멈출 때): Worker별 Dispatch ID와 상태, Worktree 경로·브랜치·미커밋 변경 여부, 병합한 하위 작업과 남은 하위 작업, Worker 결과·진행 파일 경로, Provider별 사용량과 재개 가능 시각. 없으면 `없음`
@@ -51,6 +51,7 @@ Orca가 제공하는 기능이 아니라 이 Kit의 규약이다. 형식은 `scr
 | `portfolioTaskId` | `PORT-` + 4자리 일련번호 | `PORT-0001` | Portfolio |
 | `projectTaskId` | `<taskPrefix>-` + 4자리 일련번호. `taskPrefix`는 대문자로 시작하는 대문자·숫자 | `SAMPLE-0001` | Project |
 | `reportId` | `<projectId>-<projectTaskId>-r<2자리 개정번호>` | `sample-app-SAMPLE-0001-r01` | Project |
+| `decisionId` | `<projectTaskId>-d` + 2자리 일련번호 | `SAMPLE-0001-d01` | Project |
 | Orca Run·Task·Dispatch ID | Orca가 발급 | - | Orca |
 
 - 업무 ID와 Orca 실행 ID를 섞지 않는다. Orca ID는 참조로만 적는다.

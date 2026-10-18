@@ -21,6 +21,7 @@ orchestration-kit의 **유일한 정책 원본**이다. 특정 에이전트에 �
 | 남은 문제·위험 | 완료했지만 알려야 할 한계나 위험 | 보고서 `Risks / Blockers` |
 | 후속 업무 | 이번 Task 밖에서 할 일 | 보고서 `Follow-ups`, `backlog` |
 | 결정 요청 | Worker가 Coordinator에게 승인을 구하는 변경 | 메시지 `DECISION_REQUEST`, `decisions/` |
+| 사용자 결정 요청 | Coordinator가 사용자에게 구하는 결정. Portfolio 세션에서 순서대로 고를 수 있다 | Project 상태 폴더 `.ai/user-decisions/` ([communication.md](communication.md#사용자에게-결정-묻기)) |
 
 ## 문서
 

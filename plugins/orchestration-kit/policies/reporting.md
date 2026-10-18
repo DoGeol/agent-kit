@@ -83,7 +83,7 @@ PORT-0001: in-progress → completed
 
 `outcome`: `applied` | `superseded` | `needs-review` | `invalid`.
 
-동시성: [권장] Portfolio 파일은 한 번에 Portfolio 세션 하나만 갱신한다. 여러 작성자가 필요해지면 잠금 전략을 따로 정한다 (미결정).
+동시성: [권장] Portfolio 파일은 한 번에 Portfolio 세션 하나만 갱신한다. 여러 작성자가 필요해지면 잠금 전략을 따로 정한다 (미결정). 사용자 결정 답은 결정 명령이 묻는 중 표지(`<decisionId>.asking/`)로 세션끼리 막는다.
 
 ## 진행도
 

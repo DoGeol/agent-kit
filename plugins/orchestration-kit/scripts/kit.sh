@@ -9,6 +9,7 @@
 #   kit.sh hub <dir>
 #   kit.sh pending <hubDir>
 #   kit.sh board <hubDir>
+#   kit.sh decision-take <projectDir> <decisionId>
 #   kit.sh mark <hubDir> <projectId> <reportId> <applied|superseded|needs-review|invalid> [note]
 #   kit.sh usage [claude|codex|antigravity ...]
 #   kit.sh usage-watch [--interval sec] [--until caution|danger] [--for min] <provider>...
@@ -294,6 +295,192 @@ cmd_pending() {
   done
 }
 
+# --- User decision requests (.ai/user-decisions/<decisionId>.md in a project's state folder) ---
+# A Project writes a request; the Kit commands (/decide) write the answer file; `decision-take` takes an answer exactly once.
+sha256_of() { # file
+  if command -v shasum > /dev/null; then shasum -a 256 "$1" | cut -d' ' -f1; else sha256sum "$1" | cut -d' ' -f1; fi
+}
+# Names (without .md) of the requests in a folder: temp files, dot files and answer/done/result files are not requests.
+request_names() { # dir
+  for f in "$1"/*.md; do
+    [ -f "$f" ] || continue
+    n=${f##*/}
+    case $n in .*|*.tmp|*.answer.md|*.done.md|*.result.md) continue ;; esac
+    printf '%s\n' "${n%.md}"
+  done
+}
+# One pass over a request on stdin (the board reads every open request, so this is one process, not one per field).
+# Args: projectId name. Prints "ok<TAB>createdAt<TAB>epoch<TAB>questions<TAB>irreversible<TAB>title", or "bad<TAB>why".
+# The epoch (seconds, the offset applied) orders requests by the moment they were made, not by how their times are written.
+# shortcut: no {n} intervals in the patterns, older awks (mawk) lack them.
+request_info() {
+  # LC_ALL=C: macOS awk compares Korean headings as equal under a UTF-8 locale.
+  LC_ALL=C awk -v pid="$1" -v name="$2" '
+    function fin(m) { fail = m; exit }
+    { sub(/\r$/, "") }
+    NR == 1 { if ($0 != "---") fin("머리말이 없음"); inf = 1; next }
+    inf { if ($0 == "---") { inf = 0; next }
+      i = index($0, ":"); if (i) { k = substr($0, 1, i - 1); v = substr($0, i + 1); sub(/^[ \t]+/, "", v); sub(/[ \t]+#.*$/, "", v); sub(/[ \t]+$/, "", v); if (!(k in fm)) fm[k] = v }
+      next }
+    /^# / && !title { t = $0; sub(/^# /, "", t); gsub(/\t/, " ", t); title = t; next }
+    /^## 질문 [0-9]+/ { q++; sec = "q"; next }
+    /^## 실행 내용/ { sec = "x"; hasx = 1; next }
+    /^## / { sec = "o"; next }
+    sec == "q" && /^[0-9]+\. / { o[q]++ }
+    sec == "x" && /[^ \t]/ { xs++ }
+    END {
+      if (fail == "") {
+        n = split("schema decisionId projectId projectTaskId createdAt irreversible", req, " ")
+        for (j = 1; j <= n; j++) if (fm[req[j]] == "") { fail = "필드 없음: " req[j]; break } }
+      if (fail == "" && fm["schema"] != "user-decision/v1") fail = "schema가 user-decision/v1이 아님"
+      if (fail == "" && fm["decisionId"] != name) fail = "파일 이름과 decisionId가 다름"
+      if (fail == "" && fm["projectId"] != pid) fail = "projectId가 등록 정보와 다름"
+      if (fail == "" && fm["projectTaskId"] !~ /^[A-Z][A-Z0-9]*-[0-9][0-9][0-9][0-9]$/) fail = "projectTaskId 형식 오류"
+      if (fail == "" && fm["decisionId"] !~ ("^" fm["projectTaskId"] "-d[0-9][0-9]$")) fail = "decisionId 형식 오류"
+      if (fail == "" && fm["createdAt"] !~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9](Z|[+-][0-9][0-9]:[0-9][0-9])$/) fail = "createdAt 형식 오류"
+      if (fail == "" && fm["irreversible"] != "true" && fm["irreversible"] != "false") fail = "irreversible은 true|false"
+      if (fail == "" && q < 1) fail = "질문이 없음"
+      if (fail == "" && q > 4) fail = "질문이 4개를 넘음"
+      for (j = 1; fail == "" && j <= q; j++) if (o[j] < 2 || o[j] > 4) fail = "질문 " j " 선택지가 " o[j] + 0 "개 (2~4개여야 함)"
+      if (fail == "" && fm["irreversible"] == "true" && xs + 0 == 0) fail = "irreversible인데 ## 실행 내용이 없음"
+      if (fail != "") { print "bad\t" fail; exit }
+      s = fm["createdAt"]; y = substr(s, 1, 4) + 0; m = substr(s, 6, 2) + 0; d = substr(s, 9, 2) + 0
+      h = substr(s, 12, 2) + 0; mi = substr(s, 15, 2) + 0; sc = substr(s, 18, 2) + 0; z = substr(s, 20); off = 0
+      if (z ~ /^[+-][0-9][0-9]:[0-9][0-9]$/) off = (substr(z, 2, 2) * 3600 + substr(z, 5, 2) * 60) * (substr(z, 1, 1) == "-" ? -1 : 1)
+      if (m <= 2) y--
+      era = int(y / 400); yoe = y - era * 400; doy = int((153 * (m > 2 ? m - 3 : m + 9) + 2) / 5) + d - 1
+      doe = yoe * 365 + int(yoe / 4) - int(yoe / 100) + doy
+      printf "ok\t%s\t%012.0f\t%d\t%s\t%s\n", s, (era * 146097 + doe - 719468) * 86400 + h * 3600 + mi * 60 + sc - off, q, fm["irreversible"], (title == "" ? "-" : title) }'
+}
+# Prints why a request is invalid, or nothing when it is valid. Args: projectId name; content on stdin.
+check_decision() {
+  ri=$(request_info "$1" "$2")
+  [ "${ri%%"$tab"*}" = ok ] || printf '%s\n' "${ri#*"$tab"}"
+  return 0
+}
+# The answer lines ("- 질문 N: ...") after the front matter, from stdin.
+answer_lines() {
+  awk '{ sub(/\r$/, "") } NR == 1 && $0 != "---" { exit } NR > 1 && $0 == "---" { f = 1; next } f' | LC_ALL=C grep '^- 질문 [0-9]*:' | sed 's/[ 	]*$//' || true
+}
+# Prints why an answer file is not accepted, or nothing when it is. Args: file projectId decisionId digest where(portfolio|project) questions
+# A digest that is the only difference prints "stale-request: ..." (the request changed after it was asked).
+answer_reason() {
+  ac=$(cat "$1")
+  aget() { printf '%s\n' "$ac" | fm "$1"; }
+  for k in schema decisionId projectId answeredAt recordedBy origin where requestDigest; do
+    [ -n "$(aget "$k")" ] || { echo "필드 없음: $k"; return 0; }
+  done
+  [ "$(aget schema)" = user-decision-answer/v1 ] || { echo "schema가 user-decision-answer/v1이 아님"; return 0; }
+  [ "$(aget recordedBy)" = dialog ] || { echo "recordedBy가 dialog가 아님 (결정 명령이 쓴 답만 받는다)"; return 0; }
+  [ "$(aget where)" = "$5" ] || { echo "위치: where=$(aget where)인 답이 $5 폴더에 있음"; return 0; }
+  case $(aget origin) in composer|bridge) ;; *) echo "origin이 composer|bridge가 아님"; return 0 ;; esac
+  [ "$(aget projectId)" = "$2" ] || { echo "projectId가 요청과 다름"; return 0; }
+  [ "$(aget decisionId)" = "$3" ] || { echo "decisionId가 요청과 다름"; return 0; }
+  an=$(printf '%s\n' "$ac" | answer_lines | wc -l | tr -d ' ')
+  [ "$an" = "$6" ] || { echo "답 줄이 ${an}개 (질문 ${6}개)"; return 0; }
+  [ "$(aget requestDigest)" = "sha256:$4" ] || { echo "stale-request: 요청 해시가 다름"; return 0; }
+  return 0
+}
+# Board lines for the open requests of one project, each led by a sort key (the cmd_board sorts and strips it):
+#   <key><TAB>decision<TAB>projectId<TAB>decisionId<TAB>state<TAB>createdAt<TAB>title<TAB>request file<TAB>hub answer folder
+#   <key><TAB>invalid<TAB>projectId<TAB>user-decisions/<file><TAB>reason
+# state: waiting | asking (a asking/ marker is there) | answered (an accepted answer) | conflict (two accepted answers differ).
+# A request with a done marker is finished and not listed. An answer that fails answer_reason (forged, stale) is not counted.
+decision_lines() { # stateRoot projectId hubDir
+  ud="$1/.ai/user-decisions"; ad="$3/handoffs/user-decisions/$2"
+  [ -d "$ud" ] || return 0
+  dnames=$(request_names "$ud")
+  while IFS= read -r dn; do
+    [ -n "$dn" ] || continue
+    [ -e "$ud/$dn.done.md" ] && continue
+    ri=$(request_info "$2" "$dn" < "$ud/$dn.md")
+    if [ "${ri%%"$tab"*}" != ok ]; then printf '999999999999\tinvalid\t%s\tuser-decisions/%s.md\t%s\n' "$2" "$dn" "${ri#*"$tab"}"; continue; fi
+    IFS="$tab" read -r _ created epoch dq _ title <<INFO
+$ri
+INFO
+    state=waiting
+    if [ -e "$ud/$dn.answer.md" ] || [ -e "$ad/$dn.answer.md" ]; then
+      dd=$(sha256_of "$ud/$dn.md"); v1=; v2=
+      if [ -f "$ud/$dn.answer.md" ] && [ -z "$(answer_reason "$ud/$dn.answer.md" "$2" "$dn" "$dd" project "$dq")" ]; then v1=$(answer_lines < "$ud/$dn.answer.md"); fi
+      if [ -f "$ad/$dn.answer.md" ] && [ -z "$(answer_reason "$ad/$dn.answer.md" "$2" "$dn" "$dd" portfolio "$dq")" ]; then v2=$(answer_lines < "$ad/$dn.answer.md"); fi
+      if [ -n "$v1" ] && [ -n "$v2" ] && [ "$v1" != "$v2" ]; then state=conflict; elif [ -n "$v1$v2" ]; then state=answered; fi
+    fi
+    if [ "$state" = waiting ] && { [ -d "$ud/$dn.asking" ] || [ -d "$ad/$dn.asking" ]; }; then state=asking; fi
+    printf '%s\tdecision\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$epoch" "$2" "$dn" "$state" "$created" "$title" "$ud/$dn.md" "$ad"
+  done <<NAMES
+$dnames
+NAMES
+  return 0
+}
+
+usage_err() { echo "kit.sh: $*" >&2; exit 2; }
+# Creates a done marker only if none exists (set -C), so the first caller wins. Args: file decisionId projectId source outcome digest body
+write_done() {
+  ( set -C; printf -- '---\nschema: user-decision-done/v1\ndecisionId: %s\nprojectId: %s\ntakenAt: %s\nanswerSource: %s\noutcome: %s\nrequestDigest: sha256:%s\n---\n%s\n' \
+    "$2" "$3" "$(now)" "$4" "$5" "$6" "$7" > "$1" ) 2> /dev/null
+}
+# Takes the answer to a user decision request, once. It reads the answer from the project's state folder (a direct answer, where: project)
+# and from the hub (where: portfolio), accepts one only if answer_reason passes, and closes the request with a done marker.
+# Exit: 0 taken (stdout: the answer lines) | 1 no accepted answer (stdout: none; stderr: why each file was refused)
+#   | 2 bad input | 3 already closed (stdout: the marker, with its outcome) | 4 the two answers differ (marker outcome: conflict)
+#   | 5 the request changed after it was asked (marker outcome: stale-request). Only 0 means: go ahead.
+cmd_decision_take() {
+  dir=${1:-}; id=${2:-}
+  [ $# = 2 ] && [ -d "$dir" ] || usage_err "usage: kit.sh decision-take <projectDir> <decisionId>"
+  matches "$id" '^[A-Z][A-Z0-9]*-[0-9]{4}-d[0-9]{2}$' || usage_err "잘못된 decisionId: '$id'"
+  loc=$(locate "$dir") || usage_err "$dir: 초기화되지 않음 (setup Skill로 초기화)"
+  sroot=${loc#*"$tab"}
+  [ "$(fm role < "$sroot/.ai/ORCHESTRATION.md")" = project ] || usage_err "$sroot: role이 project가 아님"
+  pid=$(fm projectId < "$sroot/.ai/ORCHESTRATION.md")
+  ud="$sroot/.ai/user-decisions"; req="$ud/$id.md"
+  [ -f "$req" ] || usage_err "$id: 요청 파일이 없음"
+  why=$(check_decision "$pid" "$id" < "$req"); [ -z "$why" ] || usage_err "$id: 요청 형식 오류: $why"
+  digest=$(sha256_of "$req"); nq=$(request_info "$pid" "$id" < "$req" | cut -f4)
+  hub=$(cmd_hub "$dir" 2> /dev/null) || { hub=; echo "kit.sh: hub를 찾지 못해 Portfolio 답은 읽지 않음 (이 프로젝트의 직접 답만 본다)" >&2; }
+  ad=; [ -z "$hub" ] || ad="$hub/handoffs/user-decisions/$pid"
+  v_pf=; v_pr=; stale=
+  for w in portfolio project; do
+    if [ "$w" = portfolio ]; then f="$ad/$id.answer.md"; [ -n "$ad" ] || continue; else f="$ud/$id.answer.md"; fi
+    [ -f "$f" ] || continue
+    r=$(answer_reason "$f" "$pid" "$id" "$digest" "$w" "$nq")
+    if [ -z "$r" ]; then
+      if [ "$w" = portfolio ]; then v_pf=$(answer_lines < "$f"); else v_pr=$(answer_lines < "$f"); fi
+    else
+      case $r in stale-request*) stale=1 ;; esac
+      echo "kit.sh: 거부 $f: $r" >&2
+    fi
+  done
+  # An answer for this request anywhere else is not read; say so.
+  { [ -z "$hub" ] || find "$hub/handoffs" -name "$id.answer.md" -not -path "$ad/*" 2> /dev/null
+    find "$sroot/.ai" -name "$id.answer.md" -not -path "$ud/*" 2> /dev/null; } | while IFS= read -r f; do
+    echo "kit.sh: 거부 $f: 위치 (답 파일은 $ad/ 또는 $ud/ 에만 둔다)" >&2
+  done
+  done_file="$ud/$id.done.md"
+  # The winner may still be writing the marker the loser is shown.
+  already() { w=0; while [ ! -s "$done_file" ] && [ "$w" -lt 40 ]; do sleep 0.05; w=$((w + 1)); done; cat "$done_file"; exit 3; }
+  if [ -z "$v_pf$v_pr" ]; then
+    if [ -n "$stale" ]; then
+      if write_done "$done_file" "$id" "$pid" - stale-request "$digest" '요청이 답을 받은 뒤 바뀜: 새 decisionId로 다시 묻는다'; then echo stale-request; exit 5; fi
+      already
+    fi
+    echo none; exit 1
+  fi
+  if [ -n "$v_pf" ] && [ -n "$v_pr" ] && [ "$v_pf" != "$v_pr" ]; then
+    body="portfolio: $(printf '%s' "$v_pf" | tr '\n' ' ')${nl}project: $(printf '%s' "$v_pr" | tr '\n' ' ')"
+    if write_done "$done_file" "$id" "$pid" both conflict "$digest" "$body"; then printf 'conflict\n%s\n' "$body"; exit 4; fi
+    already
+  fi
+  if [ -n "$v_pf" ] && [ -n "$v_pr" ]; then src=both; elif [ -n "$v_pf" ]; then src=portfolio; else src=project; fi
+  body=${v_pf:-$v_pr}
+  write_done "$done_file" "$id" "$pid" "$src" taken "$digest" "$body" || already
+  # An answer typed by hand to a question that cannot be undone is not one of the choices that were shown.
+  if [ "$(fm irreversible < "$req")" = true ] && printf '%s\n' "$body" | grep -q '직접 입력:'; then
+    echo "kit.sh: irreversible 요청에 직접 입력 답이 있음. 실행하지 말고 다시 묻는다" >&2
+  fi
+  printf '%s\n' "$body"
+  exit 0
+}
+
 # Board lines from a Kit task table: blocked rows, rows waiting for review, "row<TAB>id<TAB>status<TAB>cell 4<TAB>cell 6<TAB>cell 2"
 # for every task (the board's own use; cell 2, the title, comes last), then "open<TAB>id<TAB>n" (work not done yet).
 # Project cells: 1 id, 2 title, 3 status, 4 portfolioTaskId, 6 Orca ref; review is in-review.
@@ -372,6 +559,8 @@ board_workers() { # lines "projectId<TAB>repo root<TAB>projectTaskId<TAB>Orca re
 # One snapshot for a status view: what needs someone, and every active project. Read-only.
 #   project <id> <shared|personal|-> <open tasks> <lastPulled> <observedAt> <next work>
 #   blocked <id|portfolio> <taskId> <title> / review <id|portfolio> <taskId> <title> <Orca ref|report> / handoff <id> <PORT> <title>
+#   decision <projectId> <decisionId> <waiting|asking|answered|conflict> <createdAt> <title> <request file> <hub answer folder>, then invalid <id> user-decisions/<file> <reason>
+#     (open user decision requests in the order they were made, before pending; see decision_lines)
 #   pending|invalid|error (as kit.sh pending) / worker (13 columns, see board_workers) / workers unknown|partial <reason>
 cmd_board() {
   hub=${1:-}
@@ -382,7 +571,7 @@ cmd_board() {
   printf '%s\n' "$pt" | grep -Ev '^(open|row)	' || true
   # PORTs the Portfolio closed keep their outbox file but need no one.
   closed=$(printf '%s\n' "$pt" | awk -F'\t' '$1 == "row" && $3 ~ /^(cancelled|completed)$/ { print $2 }')
-  refs=
+  refs=; dl=
   # shortcut: TASKS.md, STATUS.md and the outbox are read from the working tree, while pending reads reportsRef.
   while IFS="$tab" read -r id path status pulled; do
     [ -n "$id" ] && [ "$status" = active ] || continue
@@ -407,9 +596,12 @@ cmd_board() {
       title=$(awk '/^# / { sub(/^# /, ""); print; exit }' "$f")
       printf 'handoff\t%s\t%s\t%s\n' "$id" "${port:--}" "${title:--}"
     done
+    dl="$dl$(decision_lines "$p" "$id" "$hub")$nl"
   done <<ROWS
 $(projects "$hub")
 ROWS
+  # Open user decision requests in the order they were made, before the reports; the sort key leads each line.
+  printf '%s\n' "$dl" | grep -v '^$' | LC_ALL=C sort -t "$tab" -k1,1 -k3,3 -k4,4 | cut -f2- || true
   cmd_pending "$hub"
   board_workers "$refs"
 }
@@ -734,6 +926,7 @@ case ${1:-} in
   pending) shift; cmd_pending "$@" ;;
   board) shift; cmd_board "$@" ;;
   mark) shift; cmd_mark "$@" ;;
+  decision-take) shift; cmd_decision_take "$@" ;;
   usage) shift; cmd_usage "$@" ;;
   usage-watch) shift; cmd_usage_watch "$@" ;;
   coordinator) shift; cmd_coordinator "$@" ;;

@@ -70,7 +70,7 @@ Skill은 Plugin 폴더 안의 상대 경로(`../../policies/...`)로 정책을 �
 Claude Code 세션의 입력창 위, mods-hud 카드 아래에 한 줄이 붙는다. Portfolio 전체의 처리할 것을 센다. Project 세션에서는 자기 프로젝트가 먼저 나온다.
 
 ```text
-◆ 포트폴리오  블로커 1  보고 대기 7  위임 미수락 1  검토 필요 1 · 진행 3 ●●● · 멈춤 1 · 프로젝트 5 · 확인 3초 전
+◆ 포트폴리오  블로커 1  결정 대기 2  보고 대기 7  위임 미수락 1  검토 필요 1 · 진행 3 ●●● · 멈춤 1 · 프로젝트 5 · 확인 3초 전
 ◆ 포트폴리오  처리할 것 없음 · 진행 0 · 프로젝트 5 · 확인 3초 전   ← 처리할 것과 진행이 모두 0
 ◆ 포트폴리오  api Task 3 · 블로커 1  보고 대기 7 · 진행 ? · 확인 실패 · 마지막 성공 2분 전   ← api 프로젝트 세션, Orca를 읽지 못함
 ```
@@ -78,6 +78,7 @@ Claude Code 세션의 입력창 위, mods-hud 카드 아래에 한 줄이 붙는
 두 plugin은 입력창 위 자리를 나눠 쓴다. 각 plugin은 아래 plugin이 그린 것을 버리지 않고 자기 것을 덧붙인다(mods-hud는 카드 아래에, 이 plugin은 맨 아래에). 그래서 어느 쪽이 바깥에 로드돼도 카드와 줄이 함께 보인다.
 
 - 처리할 것은 0인 항목을 숨기고, 모두 0이면 `처리할 것 없음`이 나온다. hub를 찾은 세션에는 줄이 항상 있다. Orca Worker 세션에서는 뜨지 않고, Worker로 확인되면 읽기도 멈춘다. Orca를 읽지 못하면 Worker 세션인지 알 수 없어 줄이 뜰 수 있다.
+- `결정 대기 N`은 Project가 쓴 사용자 결정 요청(`.ai/user-decisions/`)이다. `/decide`를 치면 맨 앞 요청을 도착순으로 선택지 대화상자로 묻고(같은 프로젝트의 다음 요청은 이어서), 답은 명령이 기록한다. 모델이 쓰지 않는다. Project 세션의 `/decide`는 그 프로젝트의 요청만 묻는다. 답이 오면 그 Project 세션에 한 번 알려 주고, Project는 `kit.sh decision-take`로 받아 정확히 한 번 진행한다. pane에는 요청마다 상태(대기·묻는 중·답 도착·답 충돌)가 보이고 맨 앞 요청 옆에 `→ /decide`가 붙는다. 답을 받은 요청도 Project가 받기 전까지 센다.
 - 색: 빨강 블로커·`멈춤`, 노랑 사람이 처리할 것, 파랑 `진행`. `진행 N` 뒤의 점은 업무 하나마다 하나: 초록(5분 안에 활동), 노랑(5~15분), 빨강(15분 넘음, 멈춤 의심), 회색(`ask` 답을 기다리는 중, 멈춤 아님), `?`(활동 시각을 모름). 점은 `멈춤 N`과 pane의 글자를 보태는 표시이고, 상태는 글자로도 적힌다. 점은 8개까지 보이고 나머지는 `+N`.
 - `멈춤 N`은 빨강 업무와, Worker가 사람 입력(승인·선택 프롬프트)을 기다리는 업무의 수다. 한 업무에 Worker가 여럿이면 가장 최근에 활동한 Worker의 색이 업무의 색이다. 긴 포그라운드 명령 하나를 15분 넘게 돌리는 Worker는 활동 신호가 없어 빨강으로 보일 수 있다.
 - 읽지 못한 값은 0이나 `없음`이 아니라 `?`로 보인다: Orca를 읽지 못하면 `진행 ?`, 일부 Run만 못 읽으면 `진행 3?`. `kit.sh board`가 실패하면 마지막 성공 데이터를 흐리게 두고 `확인 실패 · 마지막 성공 N분 전`이 뜬다.
@@ -91,6 +92,8 @@ Claude Code 세션의 입력창 위, mods-hud 카드 아래에 한 줄이 붙는
 - 항목의 출처: 블로커는 각 `TASKS.md`의 `blocked`, 검토 필요는 프로젝트 `TASKS.md`의 `in-review`와 Portfolio `TASKS.md`의 `needs-review` (작업 트리 기준), 보고 대기는 `kit.sh pending`, 위임 미수락은 `handoffs/outbox/<projectId>/`에 있지만 그 프로젝트 `TASKS.md`가 아직 가리키지 않는 PORT (Portfolio에서 `cancelled`·`completed`인 PORT는 뺀다), 진행 중은 Orca `worker-list`에서 `workerState`가 끝난 값(`succeeded`·`failed`·`stopped`·`abandoned`)이 아니고 liveness가 `exited`가 아닌 Worker다. 터미널 회계 값(`terminalState`)은 보지 않으므로 사람이 Worker 터미널을 넘겨받아도(`retained`) 일하는 Worker가 세어진다. 활동 시각은 같은 응답의 `evidence.lastObservedAt`, 회색은 `attention`의 `input`, 사람 입력 필요는 `activity`가 `blocked`이거나 `attention`에 `approval`이 있을 때다. Worker의 업무는 `Orca 참조` 열에 같은 Orca Task ID 또는 Dispatch ID가 있는 행이고, 그 행의 portfolioTaskId(없으면 projectTaskId)를 쓴다. 행이 없으면 `업무 연결 모름`이다.
 
 `kit.sh board`의 `worker` 줄은 `worker<TAB>projectId<TAB>projectTaskId<TAB>runId<TAB>state<TAB>provider/model<TAB>terminal<TAB>portfolioTaskId<TAB>title<TAB>liveness<TAB>lastObservedAt<TAB>activity<TAB>attention`이다. 앞 7열은 전과 같고 8열부터는 덧붙인 것이며 없는 값은 `-`다. 일부 Run을 못 읽으면 `workers<TAB>partial<TAB>이유` 줄이 함께 나온다.
+
+`decision` 줄은 `decision<TAB>projectId<TAB>decisionId<TAB>state<TAB>createdAt<TAB>title<TAB>요청 파일<TAB>hub 답 폴더`이고 `state`는 `waiting`·`asking`·`answered`·`conflict`다. 요청이 만들어진 순서(시각)대로 나오고 `pending`보다 앞에 온다. 형식이 틀린 요청은 `invalid<TAB>projectId<TAB>user-decisions/<파일><TAB>이유`다. `kit.sh decision-take <프로젝트 폴더> <decisionId>`의 종료 코드: 0 받음(표준 출력이 답), 1 받을 답 없음, 2 입력 오류, 3 이미 받음, 4 두 곳의 답이 다름(`conflict`), 5 요청이 답 뒤에 바뀜(`stale-request`). 0일 때만 진행한다.
 
 ## 역할
 
