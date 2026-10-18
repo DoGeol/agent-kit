@@ -28,10 +28,29 @@ claude plugin install orchestration-kit@dg-agent-kit
 | `workspace-hub` | "이 저장소 오케스트레이션 Portfolio로 초기화해줘" | `portfolio/PROJECTS.md`, `TASKS.md`, `DASHBOARD.md` 등 생성 |
 | `shop-api` | "Project로 초기화하고 hub에 연결해줘. taskPrefix는 API" | `.ai/` 생성, hub에 등록 |
 | `shop-web` | 같은 요청, taskPrefix는 WEB | 같은 결과 |
+| 규칙 문서·Skill이 있는 저장소 | "프로젝트 규칙 가져와" (setup 끝에서도 묻는다) | adopt: 역할 보강 `.ai/roles/<id>.md`, 대응표 `.ai/ADOPT.md` |
 
 - 없는 파일만 만든다. 기존 `CLAUDE.md`, `AGENTS.md`는 덮어쓰지 않는다. 진입점 문구 추가는 승인을 받는다.
 - Orca 저장소 등록은 확인을 받고 한다.
 - Codex Worker를 쓸 저장소면 원본 저장소 경로를 Codex 신뢰 목록에 한 번 등록할지 묻는다. 한 번 등록하면 그 저장소의 새 Worktree 전체에 적용된다.
+
+## 자주 쓰는 말
+
+Skill은 말로 골라진다. 이름을 몰라도 아래처럼 말하면 된다. `/orchestration-kit:<skill>`로 직접 불러도 된다.
+
+| 어디서 | 말하기 | 골라지는 Skill |
+|---|---|---|
+| hub | "오늘 브리핑", "전체 현황" | portfolio |
+| hub | "<업무> 등록하고 <프로젝트>에 위임해줘" | portfolio |
+| hub | "보고 수집해줘" | portfolio |
+| 프로젝트 | "Coordinator로 시작" (세션을 열 때) | project |
+| 프로젝트 | "PORT-0010 받아서 진행해줘" | project |
+| 프로젝트 | "<작업> 해줘" (직접 요청) | project |
+| 프로젝트 | "이슈 확인해줘" | issue-review |
+| 프로젝트 | "보강 다시 가져와", "디자인 규칙 바뀐 거 반영해줘" | adopt |
+| 처음 한 번 | "오케스트레이션 초기화", "이 프로젝트 등록" | setup |
+
+입력창 위 `◆ 포트폴리오` 줄에 처리할 것(블로커, 보고 대기, 위임 미수락, 검토 필요)과 진행 중 Worker 수가 뜬다. 누르거나 `/portfolio-board`를 실행하면 프로젝트별 상세가 열린다. 모델을 부르지 않고 hub 파일과 Orca만 읽는다.
 
 ## 1. Portfolio: 업무를 나눠 맡긴다
 
@@ -57,6 +76,7 @@ Portfolio는 코드를 고치지 않는다. 나누고 맡기고 결과를 모은
 
 Project Coordinator가 하는 일:
 
+0. **세션 시작**: 진행 중 Task, 결정 대기, 블로커를 요약한다. `kit.sh adopt-check`로 보강의 출처(규칙 문서, Skill)가 바뀌었는지 보고, 바뀌었으면 adopt를 다시 실행하자고 한다.
 1. **수락**: 명세의 `projectId`가 `shop-api`인지 확인하고, `.ai/TASKS.md`에 `API-0012`를 만들어 `PORT-0010`과 연결한다. 수락하지 못하면 같은 ID를 `blocked`로 두고 `blocked` 보고를 낸다.
 2. **라우팅**: 하위 작업마다 실행 방식, 위치, 역할, 등급, Provider를 정한다.
 
@@ -66,8 +86,8 @@ Project Coordinator가 하는 일:
    | 테스트 보강 | Orca Worker, 새 Worktree | `qa` | `fast` / claude `haiku` |
    | 계약 리뷰 | Orca Worker, 읽기 전용 | `reviewer` | `strong` / claude `opus` |
 
-   이 Worker 계획(3개, codex·claude, `strong` 1개)을 사용자에게 보여 주고 승인받는다.
-3. **실행**: 역할 파일 본문과 Worker 제한(쓰기 범위, 커밋·Push 금지)을 Task 명세에 넣고 Orca Worker를 시작해 감독한다. 시작 직전에 `kit.sh usage codex`로 사용량을 읽고, 도는 동안 `kit.sh usage-watch codex`를 백그라운드로 띄워 둔다. 감시가 주의나 한도 임박으로 멈추면 Worker에 중단을 요청하고 다음 Provider로 넘긴다.
+   이 Worker 계획(3개, codex·claude, `strong` 1개)을 사용자에게 보여 주고 승인받는다. 요구가 모호하거나 하위 작업이 여럿이면 먼저 `planner` Worker(`strong`)가 단계·확인 명령·멈출 조건을 쓰고, 사용자만 답할 수 있는 질문은 선택지로 묻는다.
+3. **실행**: 역할 파일 본문, 프로젝트 보강(`.ai/roles/<id>.md`가 있으면), Worker 제한(쓰기 범위, 커밋·Push 금지)을 Task 명세에 넣고 Orca Worker를 시작해 감독한다. 시작 직전에 `kit.sh usage codex`로 사용량을 읽고, 도는 동안 `kit.sh usage-watch codex`를 백그라운드로 띄워 둔다. 감시가 주의나 한도 임박으로 멈추면 Worker에 중단을 요청하고 다음 Provider로 넘긴다.
 4. **검증**: Worker가 "통과"라고 적어도 Coordinator가 테스트와 동작을 직접 확인하고, 역할 수용 기준을 하나씩 대조한다.
 5. **커밋·반영·보고**: 반영 방식(`.ai/ORCHESTRATION.md`의 `integration`)에 따른다.
    - `direct-merge`: Coordinator가 커밋하고 기준 브랜치에 병합한 뒤 `.ai/reports/shop-api-API-0012-r01.md`를 커밋한다. Push는 사용자 승인 뒤에 한다.
