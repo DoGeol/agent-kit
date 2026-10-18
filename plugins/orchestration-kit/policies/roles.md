@@ -15,7 +15,7 @@ Worker·Subagent에 맡길 일마다 **역할**을 정한다. 역할은 관점, 
 | [frontend](../roles/frontend.md) | 화면·컴포넌트·클라이언트 상태 구현 | 함 |
 | [designer](../roles/designer.md) | UI/UX 설계, 화면 흐름, 접근성·일관성 검토 | 설계 문서만 |
 | [backend](../roles/backend.md) | API, 도메인 로직, 데이터 저장 | 함 |
-| [qa](../roles/qa.md) | 테스트 작성·실행, 재현, 회귀 확인 | 테스트만 |
+| [qa](../roles/qa.md) ([참고](../roles/qa/reference.md)) | QA 시트, 테스트 작성·실행, 재현, 회귀 확인 | 테스트만 |
 | [reviewer](../roles/reviewer.md) | 코드·설계 리뷰 | 안 함 |
 | [docs](../roles/docs.md) | README, 가이드, 운영 문서 | 문서만 |
 
@@ -36,6 +36,22 @@ Worker·Subagent에 맡길 일마다 **역할**을 정한다. 역할은 관점, 
 - [ ] <Coordinator가 확인할 수 있는 항목>
 ## 하지 않는 것
 ```
+
+## 참고 문서
+
+역할 파일은 어느 Task에나 걸리는 관점·수용 기준만 둔다. 도구나 Task 종류별 절차는 `roles/<id>/reference.md`에 절로 나눠 둔다.
+
+- Coordinator가 Task에 걸리는 절만 골라 명세의 역할 절 뒤에 붙인다. 절 이름은 도구·Task 종류로 짓는다 (예: `## Playwright e2e와 화면 비교`).
+- 유명한 공개 Skill에서 가져오는 것은 절차, 관문, 산출물 형식뿐이다. 모델이 이미 아는 지식은 넣지 않는다. 문구를 복사하지 않고 다시 쓰며, 출처와 라이선스를 아래 표에 적는다.
+
+| 역할 | 출처 | 라이선스 | 가져온 것 |
+|---|---|---|---|
+| qa | [obra/superpowers](https://github.com/obra/superpowers) `verification-before-completion`, `test-driven-development` | MIT | 새로 실행한 결과 없이 완료 주장 금지, 결함 상태에서 실패하는지 확인 |
+| qa | [openai/skills](https://github.com/openai/skills) `playwright-interactive` | Apache-2.0 | QA 인벤토리(요구사항·구현·주장), 확인했고 없었던 결함 유형 |
+| qa | [anthropics/skills](https://github.com/anthropics/skills) `webapp-testing` | Apache-2.0 | 조건 대기, 렌더 뒤 셀렉터 확보 |
+
+- [확정] qa: 새 시험은 변경 범위(diff)와 그 호출자에만 쓰고 기존 시험은 전부 실행한다. QA를 통과시키려는 변경(제품 코드, 시험 삭제·skip, assertion 약화, 기준 이미지 갱신, 허용치 완화, 동작 우회 mock)을 하지 않는다. 시험 파일 검수는 별도 Task로만 한다.
+- [검증됨] qa 보강 비교 (sample-app, 심은 결함 3개, 팀마다 시트 `sonnet` 1 + 실행 `haiku` 1): 채점 8점은 두 팀 모두 8점이었다. 기준 이미지 갱신과 범위 함정은 두 팀의 시트 단계에서 이미 걸러져 차이가 나지 않았다. 보강한 팀에서만 나온 것: 결함을 고친 사본에서 새 시험이 통과함을 확인(red-green), 확인했고 없었던 결함 유형 목록, 차이 이미지 경로를 붙인 결정 요청.
 
 ## 프로젝트 보강
 
@@ -89,6 +105,7 @@ Worker·Subagent에 맡길 일마다 **역할**을 정한다. 역할은 관점, 
 ## 역할: <주 역할> (+ <보조 역할>)
 <roles/<주 역할>.md 본문>
 <.ai/roles/<주 역할>.md 본문, 있으면>
+<roles/<주 역할>/reference.md 중 이번 Task에 걸리는 절, 있으면>
 <보조 역할의 관점과 수용 기준, 있으면>
 쓸 Skill: <이름> (작업 전에 실행한다), 있으면
 
