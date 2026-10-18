@@ -22,7 +22,7 @@ orchestration-kit/
 │  ├─ setup/SKILL.md
 │  └─ issue-review/SKILL.md
 ├─ policies/                    공통 정책 원본 (벤더 중립)
-├─ roles/                       Worker 역할 프로필 (frontend, designer, backend, qa, reviewer, docs)
+├─ roles/                       Worker 역할 프로필 (frontend, designer, backend, qa, planner, reviewer, docs)
 ├─ templates/                   초기화·위임·보고 템플릿
 │  ├─ project/                  Project 저장소에 만들 .ai/ 파일
 │  ├─ portfolio/                Portfolio 저장소에 만들 파일
@@ -63,7 +63,7 @@ Claude Code 세션의 입력창 위, mods-hud 카드 아래에 한 줄이 붙는
 
 ## 역할
 
-Project Coordinator는 하위 작업마다 Worker 역할을 고른다: `frontend`, `designer`, `backend`, `qa`, `reviewer`, `docs`. 역할 파일(`roles/<id>.md`)에는 관점, 산출물, 수용 기준, 하지 않는 것이 있다. Coordinator는 이 본문을 Task 명세 맨 앞에 넣고, 같은 수용 기준으로 결과를 검증한다.
+Project Coordinator는 하위 작업마다 Worker 역할을 고른다: `frontend`, `designer`, `backend`, `qa`, `planner`, `reviewer`, `docs`. 역할 파일(`roles/<id>.md`)에는 관점, 산출물, 수용 기준, 하지 않는 것이 있다. Coordinator는 이 본문을 Task 명세 맨 앞에 넣고, 같은 수용 기준으로 결과를 검증한다.
 
 - 역할은 명세 본문으로 전달하므로 Claude·Codex·AGY Worker가 같은 방식으로 받는다. Orca `--agent`는 Provider 선택이다.
 - 역할, 모델 등급, Provider는 따로 정한다.

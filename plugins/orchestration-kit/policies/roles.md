@@ -16,6 +16,7 @@ Worker·Subagent에 맡길 일마다 **역할**을 정한다. 역할은 관점, 
 | [designer](../roles/designer.md) | UI/UX 설계, 화면 흐름, 접근성·일관성 검토 | 설계 문서만 |
 | [backend](../roles/backend.md) | API, 도메인 로직, 데이터 저장 | 함 |
 | [qa](../roles/qa.md) ([참고](../roles/qa/reference.md)) | QA 시트, 테스트 작성·실행, 재현, 회귀 확인 | 테스트만 |
+| [planner](../roles/planner.md) ([참고](../roles/planner/reference.md)) | 구현 계획, PR 직전 최종 측정 시트 | 문서·시트만 |
 | [reviewer](../roles/reviewer.md) | 코드·설계 리뷰 | 안 함 |
 | [docs](../roles/docs.md) | README, 가이드, 운영 문서 | 문서만 |
 
@@ -49,9 +50,14 @@ Worker·Subagent에 맡길 일마다 **역할**을 정한다. 역할은 관점, 
 | qa | [obra/superpowers](https://github.com/obra/superpowers) `verification-before-completion`, `test-driven-development` | MIT | 새로 실행한 결과 없이 완료 주장 금지, 결함 상태에서 실패하는지 확인 |
 | qa | [openai/skills](https://github.com/openai/skills) `playwright-interactive` | Apache-2.0 | QA 인벤토리(요구사항·구현·주장), 확인했고 없었던 결함 유형 |
 | qa | [anthropics/skills](https://github.com/anthropics/skills) `webapp-testing` | Apache-2.0 | 조건 대기, 렌더 뒤 셀렉터 확보 |
+| planner | [obra/superpowers](https://github.com/obra/superpowers) `writing-plans`, `brainstorming` | MIT | 단계마다 확인 명령·기대 결과, TBD 금지, 실패 모드, 하지 않을 것, 질문 세 갈래 |
+| planner | [openai/skills](https://github.com/openai/skills) `define-goal` | Apache-2.0 | 판정 기준과 멈출 조건 |
+| planner | [anthropics/claude-plugins-official](https://github.com/anthropics/claude-plugins-official) `feature-dev` | Apache-2.0 | 명확화 질문을 건너뛰지 않음 |
 
 - [확정] qa: 새 시험은 변경 범위(diff)와 그 호출자에만 쓰고 기존 시험은 전부 실행한다. QA를 통과시키려는 변경(제품 코드, 시험 삭제·skip, assertion 약화, 기준 이미지 갱신, 허용치 완화, 동작 우회 mock)을 하지 않는다. 시험 파일 검수는 별도 Task로만 한다.
 - [검증됨] qa 보강 비교 (sample-app, 심은 결함 3개, 팀마다 시트 `sonnet` 1 + 실행 `haiku` 1): 채점 8점은 두 팀 모두 8점이었다. 기준 이미지 갱신과 범위 함정은 두 팀의 시트 단계에서 이미 걸러져 차이가 나지 않았다. 보강한 팀에서만 나온 것: 결함을 고친 사본에서 새 시험이 통과함을 확인(red-green), 확인했고 없었던 결함 유형 목록, 차이 이미지 경로를 붙인 결정 요청.
+
+- [검증됨] planner 비교 (sample-app, 간격·실패 동작·숨은 탭이 빠진 모호한 요청, 팀마다 `opus` 1, 미리 정한 10점 채점표): 지금 Coordinator 명세 규칙만 준 팀 7점, planner 역할 팀 10점. 차이는 간격 값을 확정했는지(가정+질문으로 남김), 단계마다 확인 명령·기대 결과, 멈출 조건. planner 팀만 결함을 넣어 새 시험이 실패하는지 보는 단계와 실패 모드별 코드 위치·확인 방법을 썼다.
 
 ## 프로젝트 보강
 
