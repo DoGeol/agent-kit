@@ -31,12 +31,12 @@ fm() {
 }
 is_git() { git -C "$1" rev-parse --git-dir >/dev/null 2>&1; }
 expand_path() { case $1 in "~/"*) printf '%s/%s\n' "$HOME" "${1#\~/}" ;; *) printf '%s\n' "$1" ;; esac; }
-# Data rows of portfolio/PROJECTS.md as "id<TAB>path<TAB>status".
+# Data rows of portfolio/PROJECTS.md as "id<TAB>path<TAB>status<TAB>lastPulled" (- when empty).
 projects() {
   awk -F'|' '/^\|/ {
-    for (i = 2; i <= 4; i++) { gsub(/^[ \t]+|[ \t]+$/, "", $i) }
+    for (i = 2; i <= 5; i++) { gsub(/^[ \t]+|[ \t]+$/, "", $i) }
     if ($2 == "projectId" || $2 ~ /^-+$/ || $2 == "") next
-    print $2 "\t" $3 "\t" $4 }' "$1/portfolio/PROJECTS.md"
+    print $2 "\t" $3 "\t" $4 "\t" ($5 == "" ? "-" : $5) }' "$1/portfolio/PROJECTS.md"
 }
 require_role() { # dir role
   [ -f "$1/.ai/ORCHESTRATION.md" ] || die "$1: .ai/ORCHESTRATION.md 없음. 먼저 init 실행"
@@ -226,7 +226,7 @@ cmd_pending() {
   [ -d "$hub" ] || die "usage: kit.sh pending <hubDir>"
   require_role "$hub" portfolio
   hub=$(cd "$hub" && pwd)
-  projects "$hub" | while IFS="$tab" read -r id path status; do
+  projects "$hub" | while IFS="$tab" read -r id path status _; do
     [ "$status" = active ] || continue
     p=$(project_root "$hub" "$id" "$path")
     if [ ! -f "$p/.ai/ORCHESTRATION.md" ]; then printf 'error\t%s\t-\t%s\n' "$id" "$path/.ai/ORCHESTRATION.md 없음"; continue; fi
@@ -257,19 +257,24 @@ cmd_pending() {
   done
 }
 
-# Board lines from a Kit task table: blocked and in-review rows, then "open<TAB>id<TAB>n" (work not done yet).
-# Cells: 1 id, 2 title, 3 status, 6 Orca ref (the Portfolio table has no Orca column).
+# Board lines from a Kit task table: blocked rows, rows waiting for review, "row<TAB>id<TAB>status<TAB>cell 4<TAB>cell 6"
+# for every task (the board's own use), then "open<TAB>id<TAB>n" (work not done yet).
+# Project cells: 1 id, 2 title, 3 status, 4 portfolioTaskId, 6 Orca ref; review is in-review.
+# Portfolio cells: 4 priority, 6 report; review is needs-review (a person decides).
 task_lines() { # file projectId
   [ -f "$1" ] || { printf 'open\t%s\t0\n' "$2"; return 0; }
   awk -F'|' -v id="$2" '
+    BEGIN { rv = "in-review" }
     { sub(/\r$/, "") }
     /^\|/ {
       for (i = 2; i < NF; i++) { c[i - 1] = $i; gsub(/^[ \t]+|[ \t]+$/, "", c[i - 1]); gsub(/\t/, " ", c[i - 1]); if (c[i - 1] == "") c[i - 1] = "-" }
+      if (c[1] == "portfolioTaskId") rv = "needs-review"
       if (c[1] ~ /^:?-+:?$/ || c[1] == "projectTaskId" || c[1] == "portfolioTaskId") { split("", c); next }
-      s = c[3]
+      s = c[3]; c4 = (4 in c) ? c[4] : "-"; c6 = (6 in c) ? c[6] : "-"
       if (s ~ /^(assigned|accepted|in-progress|in-review|needs-review|blocked)$/) open++
       if (s == "blocked") print "blocked\t" id "\t" c[1] "\t" c[2]
-      if (s == "in-review") print "review\t" id "\t" c[1] "\t" c[2] "\t" ((6 in c) ? c[6] : "-")
+      if (s == rv) print "review\t" id "\t" c[1] "\t" c[2] "\t" c6
+      print "row\t" c[1] "\t" s "\t" c4 "\t" c6
       split("", c) }
     END { print "open\t" id "\t" open + 0 }' "$1"
 }
@@ -285,12 +290,9 @@ status_line() { # STATUS.md
     /^- 다음 안전한 행동:/ { safe = $0; sub(/^- 다음 안전한 행동:[ \t]*/, "", safe) }
     END { if (nxt == "") nxt = safe; if (obs == "") obs = "-"; if (nxt == "") nxt = "-"; gsub(/\t/, " ", nxt); print obs "\t" nxt }' "$1"
 }
-pulled() { # hub id: lastPulled column of PROJECTS.md
-  awk -F'|' -v id="$2" '/^\|/ { a = $2; gsub(/^[ \t]+|[ \t]+$/, "", a); if (a == id) { p = $5; gsub(/^[ \t]+|[ \t]+$/, "", p); print (p == "" ? "-" : p); exit } }' "$1/portfolio/PROJECTS.md"
-}
 # Live Orca workers: "worker<TAB>projectId<TAB>projectTaskId<TAB>runId<TAB>state<TAB>provider/model<TAB>terminal".
 # worker-list without --run sees only the caller's bound Run, so each Run that still has a coordinator is read.
-board_workers() { # lines "projectId<TAB>repo root<TAB>state root"
+board_workers() { # lines "projectId<TAB>repo root<TAB>projectTaskId<TAB>Orca ref"
   if ! command -v orca > /dev/null || ! command -v jq > /dev/null; then printf 'workers\tunknown\torca 또는 jq 없음\n'; return 0; fi
   # jq reads empty input as success, so the answer is taken first and must say ok.
   if ! j=$(orca orchestration run-list --json 2>/dev/null) || [ "$(printf '%s' "$j" | jq -r '.ok' 2>/dev/null)" != true ]; then
@@ -304,50 +306,58 @@ board_workers() { # lines "projectId<TAB>repo root<TAB>state root"
          ((.projection.workspace.id // "") | split("::") | .[1] // "-"), (.agentTerminalHandle // "-")] | @tsv' 2>/dev/null || true
   done | while IFS="$tab" read -r run state task model ws term; do
     c=$(common_dir "$ws") || c=; c=${c%/.git}
-    # shortcut: a worker maps to the first project in the same repository; two projects in one monorepo are not told apart.
-    id=$(printf '%s\n' "$1" | awk -F'\t' -v c="$c" 'c != "" && $2 == c { print $1; exit }')
-    sr=$(printf '%s\n' "$1" | awk -F'\t' -v c="$c" 'c != "" && $2 == c { print $3; exit }')
-    pt=-; [ -z "$sr" ] || pt=$(grep -F "$task" "$sr/.ai/TASKS.md" 2>/dev/null | awk -F'|' '{ v = $2; gsub(/^[ \t]+|[ \t]+$/, "", v); print v; exit }')
-    printf 'worker\t%s\t%s\t%s\t%s\t%s\t%s\n' "${id:--}" "${pt:--}" "$run" "$state" "$model" "$term"
+    # The task whose Orca ref names this Orca task exactly ("run_x / task_y / ctx_z"), else the repo's first project.
+    m=$(printf '%s\n' "$1" | awk -F'\t' -v c="$c" -v t="$task" '
+      c == "" || $2 != c { next }
+      first == "" { first = $1 }
+      t != "-" { n = split($4, a, /[\/, \t]+/); for (i = 1; i <= n; i++) if (a[i] == t) { print $1 "\t" $3; hit = 1; exit } }
+      END { if (!hit) print (first == "" ? "-" : first) "\t-" }')
+    printf 'worker\t%s\t%s\t%s\t%s\t%s\t%s\n' "${m%%"$tab"*}" "${m#*"$tab"}" "$run" "$state" "$model" "$term"
   done
 }
 # One snapshot for a status view: what needs someone, and every active project. Read-only.
 #   project <id> <shared|personal|-> <open tasks> <lastPulled> <observedAt> <next work>
-#   blocked <id|portfolio> <taskId> <title> / review <id> <taskId> <title> <Orca ref> / handoff <id> <PORT> <title>
+#   blocked <id|portfolio> <taskId> <title> / review <id|portfolio> <taskId> <title> <Orca ref|report> / handoff <id> <PORT> <title>
 #   pending|invalid|error (as kit.sh pending) / worker ... / workers unknown <reason>
 cmd_board() {
   hub=${1:-}
   [ -d "$hub" ] || die "usage: kit.sh board <hubDir>"
   require_role "$hub" portfolio
   hub=$(cd "$hub" && pwd)
-  task_lines "$hub/portfolio/TASKS.md" portfolio | grep -v '^open	' || true
-  rows=$(projects "$hub")
+  pt=$(task_lines "$hub/portfolio/TASKS.md" portfolio)
+  printf '%s\n' "$pt" | grep -Ev '^(open|row)	' || true
+  # PORTs the Portfolio closed keep their outbox file but need no one.
+  closed=$(printf '%s\n' "$pt" | awk -F'\t' '$1 == "row" && $3 ~ /^(cancelled|completed)$/ { print $2 }')
+  refs=
   # shortcut: TASKS.md, STATUS.md and the outbox are read from the working tree, while pending reads reportsRef.
-  printf '%s\n' "$rows" | while IFS="$tab" read -r id path status; do
+  while IFS="$tab" read -r id path status pulled; do
     [ -n "$id" ] && [ "$status" = active ] || continue
     p=$(project_root "$hub" "$id" "$path")
-    if [ ! -f "$p/.ai/ORCHESTRATION.md" ]; then printf 'project\t%s\t-\t0\t%s\t-\t-\n' "$id" "$(pulled "$hub" "$id")"; continue; fi
+    c=$(common_dir "$(expand_path "$path")") || c=; c=${c%/.git}
+    [ -z "$c" ] || refs="$refs$id$tab$c$tab-$tab-$nl"
+    if [ ! -f "$p/.ai/ORCHESTRATION.md" ]; then printf 'project\t%s\t-\t0\t%s\t-\t-\n' "$id" "$pulled"; continue; fi
     if [ "$p" = "$hub/projects/$id" ]; then mode=personal; else mode=shared; fi
     t=$(task_lines "$p/.ai/TASKS.md" "$id")
     open=$(printf '%s\n' "$t" | awk -F'\t' '$1 == "open" { print $3 }')
-    printf 'project\t%s\t%s\t%s\t%s\t%s\n' "$id" "$mode" "$open" "$(pulled "$hub" "$id")" "$(status_line "$p/.ai/STATUS.md")"
-    printf '%s\n' "$t" | grep -v '^open	' || true
+    printf 'project\t%s\t%s\t%s\t%s\t%s\n' "$id" "$mode" "$open" "$pulled" "$(status_line "$p/.ai/STATUS.md")"
+    printf '%s\n' "$t" | grep -Ev '^(open|row)	' || true
+    [ -z "$c" ] || refs="$refs$(printf '%s\n' "$t" | awk -F'\t' -v id="$id" -v c="$c" '$1 == "row" { print id "\t" c "\t" $2 "\t" $5 }')$nl"
     # A delegation is accepted once a project task names its portfolioTaskId (the outbox file keeps status: assigned).
     for f in "$hub/handoffs/outbox/$id"/*.md; do
       [ -f "$f" ] || continue
       port=$(fm portfolioTaskId < "$f")
-      awk -F'|' -v k="$port" '/^\|/ { v = $5; gsub(/^[ \t]+|[ \t]+$/, "", v); if (v == k) { f = 1; exit } } END { exit !f }' "$p/.ai/TASKS.md" 2>/dev/null && continue
+      if [ -n "$port" ]; then
+        printf '%s\n' "$closed" | grep -qxF -- "$port" && continue
+        printf '%s\n' "$t" | awk -F'\t' -v k="$port" '$1 == "row" && $4 == k { f = 1; exit } END { exit !f }' && continue
+      fi
       title=$(awk '/^# / { sub(/^# /, ""); print; exit }' "$f")
       printf 'handoff\t%s\t%s\t%s\n' "$id" "${port:--}" "${title:--}"
     done
-  done
+  done <<ROWS
+$(projects "$hub")
+ROWS
   cmd_pending "$hub"
-  roots=$(printf '%s\n' "$rows" | while IFS="$tab" read -r id path status; do
-    [ -n "$id" ] && [ "$status" = active ] || continue
-    c=$(common_dir "$(expand_path "$path")") || continue
-    printf '%s\t%s\t%s\n' "$id" "${c%/.git}" "$(project_root "$hub" "$id" "$path")"
-  done)
-  board_workers "$roots"
+  board_workers "$refs"
 }
 
 cmd_mark() {

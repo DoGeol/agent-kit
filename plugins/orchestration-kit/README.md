@@ -51,15 +51,15 @@ Skill은 Plugin 폴더 안의 상대 경로(`../../policies/...`)로 정책을 �
 Claude Code 세션의 입력창 위, mods-hud 카드 아래에 한 줄이 붙는다. 어느 세션에서나 같은 Portfolio 전체 정보이고, 처리할 것만 센다.
 
 ```text
-◆ 포트폴리오  블로커 1  보고 대기 7  위임 미수락 1  PR 리뷰 1  Worker 2 진행
+◆ 포트폴리오  블로커 1  보고 대기 7  위임 미수락 1  검토 필요 1  Worker 2 진행
 ```
 
-- 0인 항목은 숨긴다. 모두 0이면 줄이 없다. Orca Worker 세션에서는 뜨지 않는다.
+- 0인 항목은 숨긴다. 모두 0이면 줄이 없다. Orca Worker 세션에서는 뜨지 않고, Worker로 확인되면 읽기도 멈춘다. Orca를 읽지 못하면 Worker 세션인지 알 수 없어 줄이 뜰 수 있다.
 - 색: 빨강 블로커, 노랑 사람이 처리할 것, 파랑 진행 중.
 - `포트폴리오`를 누르거나 `/portfolio-board`를 실행하면 pane이 열린다. 처리할 것(프로젝트별 한 줄씩), 진행 중 Worker(프로젝트·Task·Provider/모델), 전체 프로젝트(진행 Task 수, 체크포인트·Pull 경과 시간, 다음 작업). Project 세션에서는 그 프로젝트가 각 구역 맨 위에 온다.
-- 30초마다 `kit.sh board <hub>`를 실행한다. 읽기만 하고 모델을 부르지 않는다. hub 4개 프로젝트에서 한 번에 1~2.5초.
+- 30초마다 `kit.sh board <hub>`를 실행한다. 읽기만 하고 모델을 부르지 않는다. 결과가 바뀔 때만 다시 그린다. 읽기에 실패하면 pane에 이유가 나온다. hub 4개 프로젝트에서 한 번에 1~2.5초.
 - hub 위치: Portfolio 세션과 개인 모드 Project는 스스로 찾는다. 공유 모드 Project 세션은 `/config`에서 orchestration-kit의 `hubPath`를 설정해야 줄이 뜬다.
-- 항목의 출처: 블로커와 PR 리뷰는 각 `TASKS.md`의 `blocked`·`in-review` (작업 트리 기준), 보고 대기는 `kit.sh pending`, 위임 미수락은 `handoffs/outbox/<projectId>/`에 있지만 그 프로젝트 `TASKS.md`가 아직 가리키지 않는 PORT, Worker는 Coordinator가 붙은 Orca Run의 활성 Worker.
+- 항목의 출처: 블로커는 각 `TASKS.md`의 `blocked`, 검토 필요는 프로젝트 `TASKS.md`의 `in-review`와 Portfolio `TASKS.md`의 `needs-review` (작업 트리 기준), 보고 대기는 `kit.sh pending`, 위임 미수락은 `handoffs/outbox/<projectId>/`에 있지만 그 프로젝트 `TASKS.md`가 아직 가리키지 않는 PORT (Portfolio에서 `cancelled`·`completed`인 PORT는 뺀다), Worker는 Coordinator가 붙은 Orca Run의 활성 Worker. Worker의 Task는 `Orca 참조` 열에 같은 Orca Task ID가 있는 행이다.
 
 ## 역할
 

@@ -217,13 +217,17 @@ ok "personal mode: repo untouched, pointer + exclude only, idempotent, found fro
 # 8f. board: blocked and in-review tasks, a delegation until a task names it, working-tree STATUS, workers via a stub orca
 if command -v jq > /dev/null; then
   printf '| SAMPLE-0007 | 상태 화면 | in-review | - | Direct | PR #4 | - |\n| SAMPLE-0008 | 계약 결정 | blocked | - | Session | run_t / task_t1 / ctx_t | - |\n' >> "$app/.ai/TASKS.md"
+  # Portfolio needs-review is listed for review; a cancelled PORT and an outbox file without a PORT id are told apart.
+  printf '| PORT-0005 | 결정 필요 | needs-review | high | sample-app | sample-app-SAMPLE-0001-r01 | - |\n| PORT-0006 | 취소 | cancelled | low | sample-app | - | - |\n' >> "$hub/portfolio/TASKS.md"
+  printf -- '---\nportfolioTaskId: PORT-0006\n---\n# 취소된 위임\n' > "$hub/handoffs/outbox/sample-app/PORT-0006.md"
+  printf -- '---\nportfolioTaskId:\n---\n# 번호 없는 위임\n' > "$hub/handoffs/outbox/sample-app/PORT-none.md"
   bb="$tmp/board-bin"; mkdir "$bb"
   cat > "$bb/orca" <<EOF
 #!/bin/sh
 echo "\$*" >> "$tmp/orca.calls"
 case "\$2" in
   run-list) echo '{"ok":true,"result":{"runs":[{"id":"run_t","coordinator_handle":"term_c"},{"id":"run_old","coordinator_handle":null}]}}' ;;
-  worker-list) echo '{"ok":true,"result":{"workers":[{"runId":"run_t","workerState":"ready","taskId":"task_t1","agentTerminalHandle":"term_w","projection":{"provider":{"id":"claude","model":"haiku"},"workspace":{"id":"w1::$app"}}},{"runId":"run_t","workerState":"succeeded","taskId":"task_t0","agentTerminalHandle":"term_d","projection":{"workspace":{"id":"w1::$app"}}}]}}' ;;
+  worker-list) echo '{"ok":true,"result":{"workers":[{"runId":"run_t","workerState":"ready","taskId":"task_t1","agentTerminalHandle":"term_w","projection":{"provider":{"id":"claude","model":"haiku"},"workspace":{"id":"w1::$app"}}},{"runId":"run_t","workerState":"succeeded","taskId":"task_t0","agentTerminalHandle":"term_d","projection":{"workspace":{"id":"w1::$app"}}},{"runId":"run_t","workerState":"ready","taskId":"task_t","agentTerminalHandle":"term_x","projection":{"workspace":{"id":"w1::$app"}}},{"runId":"run_t","workerState":"ready","taskId":null,"agentTerminalHandle":"term_y","projection":{"workspace":{"id":"w1::$app"}}}]}}' ;;
 esac
 EOF
   chmod +x "$bb/orca"
@@ -236,13 +240,20 @@ EOF
   printf '%s\n' "$out" | grep -q '^project	own-app	personal	0	' || fail "personal project row: $out"
   printf '%s\n' "$out" | grep -q '^pending	own-app	own-app-OWN-0001-r01	' || fail "board lost pending reports: $out"
   printf '%s\n' "$out" | grep -qx 'worker	sample-app	SAMPLE-0008	run_t	ready	claude/haiku	term_w' || fail "worker not mapped to its project task: $out"
-  [ "$(printf '%s\n' "$out" | grep -c '^worker	')" = 1 ] || fail "settled worker listed: $out"
+  printf '%s\n' "$out" | grep -qx 'worker	sample-app	-	run_t	ready	-/-	term_x' || fail "task_t matched the task_t1 row by substring: $out"
+  printf '%s\n' "$out" | grep -qx 'worker	sample-app	-	run_t	ready	-/-	term_y' || fail "worker without a task id mapped to a task: $out"
+  [ "$(printf '%s\n' "$out" | grep -c '^worker	')" = 3 ] || fail "settled worker listed: $out"
+  printf '%s\n' "$out" | grep -qx 'review	portfolio	PORT-0005	결정 필요	sample-app-SAMPLE-0001-r01' || fail "portfolio needs-review not listed: $out"
+  if printf '%s\n' "$out" | grep -q '^handoff	sample-app	PORT-0006	'; then fail "cancelled PORT listed as a delegation: $out"; fi
+  printf '%s\n' "$out" | grep -qx 'handoff	sample-app	-	번호 없는 위임' || fail "outbox file without a PORT id taken as accepted: $out"
+  if printf '%s\n' "$out" | grep -q '^row	'; then fail "board leaked its row lines: $out"; fi
   if grep -q 'run_old' "$tmp/orca.calls"; then fail "board read a Run without a coordinator"; fi
   printf '| SAMPLE-0009 | 클라이언트 | in-progress | PORT-0001 | Direct | - | - |\n' >> "$app/.ai/TASKS.md"
   if PATH="$bb:$PATH" "$kit" board "$hub" | grep -q '^handoff	sample-app	PORT-0001	'; then fail "accepted delegation still listed"; fi
   printf '#!/bin/sh\nexit 1\n' > "$bb/orca"
   PATH="$bb:$PATH" "$kit" board "$hub" | grep -q '^workers	unknown	' || fail "board without orca did not say workers unknown"
-  ok "board: blocked/in-review rows, delegation until accepted, STATUS next action, personal row, workers mapped via Orca, unknown without it"
+  rm "$hub/handoffs/outbox/sample-app/PORT-0006.md" "$hub/handoffs/outbox/sample-app/PORT-none.md"
+  ok "board: blocked/review rows, delegation until accepted or closed, STATUS next action, personal row, workers mapped by exact Orca ref, unknown without it"
 fi
 
 # 8c. Usage readers against stub orca, claude, codex and agy (no real provider is called)

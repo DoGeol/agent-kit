@@ -44,7 +44,7 @@ const KINDS: readonly (readonly [Item['kind'], string, Tone])[] = [
   ['blocked', '블로커', 'error'],
   ['pending', '보고 대기', 'warning'],
   ['handoff', '위임 미수락', 'warning'],
-  ['review', 'PR 리뷰', 'warning'],
+  ['review', '검토 필요', 'warning'],
 ]
 
 /** The band's counts, in the order they matter; zero counts are left out. */
@@ -97,30 +97,51 @@ export const register: Register = (on, options) => {
       const kit = `${$.plugin.root}/scripts/kit.sh`
       const home = (await $.env.get('HOME')) ?? ''
       const me = await $.env.get('ORCA_TERMINAL_HANDLE')
-      const w = await $.process.run(['sh', kit, 'where', '.']).catch(() => null)
-      const where = w && w.exitCode === 0 ? w.stdout : null
+      const whereOf = async (dir: string) => {
+        const w = await $.process.run(['sh', kit, 'where', dir]).catch(() => null)
+        return w && w.exitCode === 0 ? w.stdout : null
+      }
+      // A session started in a subfolder finds its project through the repository root.
+      let where = await whereOf('.')
+      if (!where) {
+        const g = await $.process.run(['git', 'rev-parse', '--show-toplevel']).catch(() => null)
+        const top = g && g.exitCode === 0 ? g.stdout.trim() : ''
+        if (top) where = await whereOf(top)
+      }
       const root = where?.trim().split('\t')[1]
       const config = root ? await $.fs.read(`${root}/.ai/ORCHESTRATION.md`).catch(() => null) : null
       const { hub, mine } = hubFrom(String((options as { hubPath?: unknown } | undefined)?.hubPath ?? ''), home, where, config)
       if (!hub) return
+      const shown = home && hub.startsWith(`${home}/`) ? `~${hub.slice(home.length)}` : hub
       let isBusy = false
+      let last = ''
+      // Written only when something but the time changed, so an unchanged poll does not redraw (and drop a click).
+      const write = async (raw: Raw, isWorker: boolean) => {
+        const key = JSON.stringify([raw, isWorker])
+        if (key === last) return
+        last = key
+        const at = await $.clock.now()
+        await update($, boardAtom, () => ({ ...raw, at, mine, hub: shown, isWorker }))
+      }
       const refresh = async () => {
         if (isBusy) return
         isBusy = true
         try {
           const r = await $.process.run(['sh', kit, 'board', hub], { timeoutMs: 60_000 })
-          const raw = r.exitCode === 0 ? parseBoard(r.stdout) : null
-          const at = await $.clock.now()
-          const isWorker = !!me && !!raw && raw.workers.some(x => x.terminal === me)
-          await update($, boardAtom, () => (raw ? { ...raw, at, mine, hub: home ? hub.replace(home, '~') : hub, isWorker } : null))
-        } catch {
-          await update($, boardAtom, () => null)
+          const raw = parseBoard(r.stdout)
+          if (r.exitCode !== 0) raw.errors.push(`kit.sh board 실패 (exit ${r.exitCode}): ${r.stderr.trim().split('\n')[0] || '이유 없음'}`)
+          const isWorker = !!me && raw.workers.some(x => x.terminal === me)
+          await write(raw, isWorker)
+          // A worker session never shows the line, so it stops reading.
+          if (isWorker) tick.cancel()
+        } catch (err) {
+          await write({ projects: [], items: [], workers: [], errors: [`kit.sh board 실행 실패: ${String(err)}`] }, false)
         } finally {
           isBusy = false
         }
       }
+      const tick = $.clock.every(POLL_MS, () => void refresh())
       void refresh()
-      $.clock.every(POLL_MS, () => void refresh())
     }
     void start()
     return next(e)
@@ -164,7 +185,7 @@ export const register: Register = (on, options) => {
     const projects = mineFirst(b.projects, p => p.id, b.mine)
     return (
       <Box flexDirection="column">
-        <Text dimColor wrap="truncate-end">{new Date(b.at).toTimeString().slice(0, 5)} 갱신 · {POLL_MS / 1000}초마다 · {b.hub}</Text>
+        <Text dimColor wrap="truncate-end">{new Date(b.at).toTimeString().slice(0, 5)} 변경 · {POLL_MS / 1000}초마다 확인 · {b.hub}</Text>
         <Text> </Text>
         <Text bold>처리할 것 {b.items.length}</Text>
         {groups.length === 0 && <Text dimColor>  없음</Text>}
@@ -186,8 +207,8 @@ export const register: Register = (on, options) => {
         <Text bold>진행 중 Worker {b.workersUnknown ? '?' : b.workers.length}</Text>
         {b.workersUnknown && <Text dimColor wrap="truncate-end">  읽지 못함: {b.workersUnknown}</Text>}
         {!b.workersUnknown && workers.length === 0 && <Text dimColor>  없음</Text>}
-        {workers.map(w => (
-          <Text key={`w-${w.terminal}`} wrap="truncate-end">
+        {workers.map((w, i) => (
+          <Text key={`w-${i}-${w.terminal}`} wrap="truncate-end">
             <Text>  {label(w.project)}  {w.task}  </Text>
             <Text dimColor>{w.model} · {w.state}</Text>
           </Text>

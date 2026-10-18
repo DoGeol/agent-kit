@@ -30,7 +30,7 @@ export type WorkerRow = {
 }
 
 export type Board = {
-  /** When it was read, epoch ms. */
+  /** When it last changed, epoch ms (an unchanged read keeps it). */
   at: number
   projects: ProjectRow[]
   items: Item[]

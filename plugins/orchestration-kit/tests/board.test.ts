@@ -1,4 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
+import type { TestBody } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import { ago, bandParts, hubFrom, mineFirst, parseBoard } from '../hooks/register'
@@ -32,7 +33,7 @@ test('parseBoard reads every kind and skips unknown ones', () => {
 
 test('bandParts: blocker first, zero counts hidden, nothing when all clear', () => {
   const b = parseBoard(BOARD)
-  expect(bandParts(b).map(p => `${p.label}/${p.tone}`)).toEqual(['블로커 1/error', '보고 대기 2/warning', '위임 미수락 1/warning', 'PR 리뷰 1/warning', 'Worker 1 진행/suggestion'])
+  expect(bandParts(b).map(p => `${p.label}/${p.tone}`)).toEqual(['블로커 1/error', '보고 대기 2/warning', '위임 미수락 1/warning', '검토 필요 1/warning', 'Worker 1 진행/suggestion'])
   expect(bandParts({ items: [], workers: [] })).toEqual([])
 })
 
@@ -57,18 +58,22 @@ test('mineFirst and ago', () => {
 
 const BAND = { hasSurvey: false, isWorking: false, maxRows: 16, bodyColumns: 120, scroll: { offset: 0, bodyRows: 12 }, view: {} } as const
 
-type World = { terminal?: string; where?: string; config?: string; opened?: string[] }
+type World = { terminal?: string; where?: string; config?: string; opened?: string[]; exit?: number; stderr?: string; boards?: string[] }
 
 const world = (on: On, board: string, w: World = {}) => {
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('env.get', (_, e) => ({ value: e.name === 'HOME' ? '/h' : e.name === 'ORCA_TERMINAL_HANDLE' ? w.terminal : undefined }))
-  on('process.run', (_, e) => ({
-    value: {
-      exitCode: 0, stdout: e.argv.includes('where') ? (w.where ?? 'shared\t/h/hub\n') : board, stderr: '',
-      isStdoutTruncated: false, isStderrTruncated: false,
-    },
-  }))
+  on('process.run', (_, e) => {
+    const isWhere = e.argv.includes('where')
+    if (!isWhere) w.boards?.push(e.argv.join(' '))
+    return {
+      value: {
+        exitCode: isWhere ? 0 : (w.exit ?? 0), stdout: isWhere ? (w.where ?? 'shared\t/h/hub\n') : board, stderr: isWhere ? '' : (w.stderr ?? ''),
+        isStdoutTruncated: false, isStderrTruncated: false,
+      },
+    }
+  })
   on('fs.read', () => ({ value: w.config ?? 'role: portfolio\n' }))
   on('ui.open', (_, e) => {
     w.opened?.push(e.id)
@@ -76,6 +81,15 @@ const world = (on: On, board: string, w: World = {}) => {
   })
   // stands for mods-hud's card or the engine's own band beneath this plugin
   on('ui.render', () => ({ type: 'Text', children: ['HUD card'] }))
+}
+
+// Starts the session and lets the first read land.
+const boot = async ($: Parameters<TestBody>[0], on: On, surface: 'terminal' | 'desktop', board: string, w: World = {}) => {
+  const clock = mock.clock(on, { now: Date.parse('2026-10-18T12:00:00+09:00') })
+  world(on, board, w)
+  await $.session.start({ cwd: '/h/hub', surface, isInteractive: true })
+  await clock.advance(10)
+  return clock
 }
 
 const PANE = { title: '포트폴리오', isFocused: false, bodyColumns: 80, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} } as const
@@ -98,10 +112,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
   })
 
   test(`band line on ${surface}: counts shown under the card beneath`, async ($, on) => {
-    const clock = mock.clock(on, { now: Date.parse('2026-10-18T12:00:00+09:00') })
-    world(on, BOARD)
-    await $.session.start({ cwd: '/h/hub', surface, isInteractive: true })
-    await clock.advance(10)
+    await boot($, on, surface, BOARD)
     const band = await $.ui.mount({ plugin: 'orchestration-kit', surface, component: 'AbovePrompt', props: BAND })
     expect(await band.find({ type: 'Text', text: 'HUD card' })).toBeDefined()
     expect(await band.find({ type: 'Text', text: '보고 대기 2' })).toBeDefined()
@@ -110,23 +121,39 @@ for (const surface of ['terminal', 'desktop'] as const) {
   })
 
   test(`band line on ${surface}: quiet in a worker session`, async ($, on) => {
-    const clock = mock.clock(on, { now: Date.parse('2026-10-18T12:00:00+09:00') })
-    world(on, BOARD, { terminal: 'term_w' })
-    await $.session.start({ cwd: '/h/hub', surface, isInteractive: true })
-    await clock.advance(10)
+    const boards: string[] = []
+    const clock = await boot($, on, surface, BOARD, { terminal: 'term_w', boards })
     const band = await $.ui.mount({ plugin: 'orchestration-kit', surface, component: 'AbovePrompt', props: BAND })
     expect(await band.find({ type: 'Text', text: '보고 대기 2' })).toBeUndefined()
     await band.unmount()
+    await clock.advance(61_000)
+    expect(boards).toHaveLength(1)
   })
 
   test(`band line on ${surface}: nothing when all clear`, async ($, on) => {
-    const clock = mock.clock(on, { now: Date.parse('2026-10-18T12:00:00+09:00') })
-    world(on, ['project', 'app', 'shared', '0', '-', '-', '-'].join(T))
-    await $.session.start({ cwd: '/h/hub', surface, isInteractive: true })
-    await clock.advance(10)
+    await boot($, on, surface, ['project', 'app', 'shared', '0', '-', '-', '-'].join(T))
     const band = await $.ui.mount({ plugin: 'orchestration-kit', surface, component: 'AbovePrompt', props: BAND })
     expect(await band.find({ type: 'Text', text: '◆' })).toBeUndefined()
     expect(await band.find({ type: 'Text', text: 'HUD card' })).toBeDefined()
     await band.unmount()
+  })
+
+  test(`pane on ${surface}: an unchanged board keeps its time`, async ($, on) => {
+    const boards: string[] = []
+    const clock = await boot($, on, surface, BOARD, { boards })
+    const pane = await $.ui.mount({ plugin: 'orchestration-kit', surface, component: 'Pane', requestId: 'portfolio-board', props: PANE } as never)
+    const head = (await pane.find({ type: 'Text', text: /변경 · / }))?.text
+    expect(head).toContain('~/hub')
+    await clock.advance(61_000)
+    expect(boards.length).toBeGreaterThan(1)
+    expect((await pane.find({ type: 'Text', text: /변경 · / }))?.text).toBe(head)
+    await pane.unmount()
+  })
+
+  test(`pane on ${surface}: a failed read shows why`, async ($, on) => {
+    await boot($, on, surface, '', { exit: 1, stderr: 'kit.sh: /h/hub: role이 portfolio가 아님\n' })
+    const pane = await $.ui.mount({ plugin: 'orchestration-kit', surface, component: 'Pane', requestId: 'portfolio-board', props: PANE } as never)
+    expect(await pane.find({ type: 'Text', text: /role이 portfolio가 아님/ })).toBeDefined()
+    await pane.unmount()
   })
 }
