@@ -271,9 +271,9 @@ EOF
   printf '%s\n' "$out" | grep -q '^project	sample-api	shared	0	.*	프로젝트 문서 작성$' || fail "next safe action from STATUS.md: $out"
   printf '%s\n' "$out" | grep -q '^project	own-app	personal	0	' || fail "personal project row: $out"
   printf '%s\n' "$out" | grep -q '^pending	own-app	own-app-OWN-0001-r01	' || fail "board lost pending reports: $out"
-  printf '%s\n' "$out" | grep -qx 'worker	sample-app	SAMPLE-0008	run_t	ready	claude/haiku	term_w' || fail "worker not mapped to its project task: $out"
-  printf '%s\n' "$out" | grep -qx 'worker	sample-app	-	run_t	ready	-/-	term_x' || fail "task_t matched the task_t1 row by substring: $out"
-  printf '%s\n' "$out" | grep -qx 'worker	sample-app	-	run_t	ready	-/-	term_y' || fail "worker without a task id mapped to a task: $out"
+  printf '%s\n' "$out" | cut -f1-7 | grep -qx 'worker	sample-app	SAMPLE-0008	run_t	ready	claude/haiku	term_w' || fail "worker not mapped to its project task: $out"
+  printf '%s\n' "$out" | cut -f1-7 | grep -qx 'worker	sample-app	-	run_t	ready	-/-	term_x' || fail "task_t matched the task_t1 row by substring: $out"
+  printf '%s\n' "$out" | cut -f1-7 | grep -qx 'worker	sample-app	-	run_t	ready	-/-	term_y' || fail "worker without a task id mapped to a task: $out"
   [ "$(printf '%s\n' "$out" | grep -c '^worker	')" = 3 ] || fail "settled worker listed: $out"
   printf '%s\n' "$out" | grep -qx 'review	portfolio	PORT-0005	결정 필요	sample-app-SAMPLE-0001-r01' || fail "portfolio needs-review not listed: $out"
   if printf '%s\n' "$out" | grep -q '^handoff	sample-app	PORT-0006	'; then fail "cancelled PORT listed as a delegation: $out"; fi
@@ -550,6 +550,93 @@ grep -q 'kit.sh audit' "$po/reporting.md" && grep -q 'kit.sh audit' "$sk/portfol
 grep -q 'kit.sh coordinator' "$po/communication.md" || fail "communication lacks kit.sh coordinator"
 grep -q 'portfolio/SKILL.md' "$po/delegation.md" || fail "delegation does not point to the session start procedure"
 ok "docs: same-turn start, session start and delivery procedure (start prompt example <= 300 bytes), allowWrite question, report quoting, sandbox: re-read, coordinator and audit steps"
+
+# 8k. board v2: live Workers by workerState and liveness (not terminalState), task link, Run range, partial reads; a stub orca answers
+if command -v jq > /dev/null; then
+  k8="$tmp/k8"; mkdir -p "$k8/bin" "$k8/repo"; git -C "$k8/repo" init -q -b main; printf 'code\n' > "$k8/repo/a.txt"; git_commit "$k8/repo" base
+  kr=$(cd "$k8/repo" && pwd -P)
+  "$kit" init project "$kr" k8-app K8 > /dev/null
+  khub="$k8/hub"; mkdir "$khub"; "$kit" init portfolio "$khub" > /dev/null; "$kit" register "$khub" "$kr" > /dev/null
+  # The stub answers from files in $k8: a missing file is an Orca failure. It records every call.
+  cat > "$k8/bin/orca" <<EOF
+#!/bin/sh
+echo "\$*" >> "$k8/calls"
+case "\$1 \$2" in
+  "orchestration run-list") cat "$k8/runs.json" ;;
+  "terminal list") [ -f "$k8/tl.json" ] && cat "$k8/tl.json" || exit 1 ;;
+  # Like Orca, --terminal-state keeps only the rows in that accounting state.
+  "orchestration worker-list") [ -f "$k8/wl-\$4.json" ] || exit 1
+    case " \$* " in *" --terminal-state active "*) jq -c '.result.workers |= map(select(.terminalState == "active"))' "$k8/wl-\$4.json" ;; *) cat "$k8/wl-\$4.json" ;; esac ;;
+  *) exit 1 ;;
+esac
+EOF
+  chmod +x "$k8/bin/orca"
+  kboard() { PATH="$k8/bin:$PATH" "$kit" board "$khub"; }
+  # One worker-list row. Args: run state taskId dispatchId terminal verdict reason lastObservedAt activity attention terminalState retainedReason ("-" = absent)
+  krow() { jq -nc --arg ws "w1::$kr" '$ARGS.positional as $a | def v($i): if $a[$i] == "-" then null else $a[$i] end;
+    {runId: $a[0], workerState: $a[1], taskId: v(2), dispatchId: v(3), agentTerminalHandle: $a[4], terminalState: $a[10], resource: {retainedReason: v(11)},
+       projection: {provider: {id: "claude", model: "haiku"}, workspace: {id: $ws}, liveness: {verdict: $a[5], reason: v(6)},
+         evidence: {lastObservedAt: (v(7) | if . == null then null else tonumber end)}, stage: {activity: v(8)},
+         attention: {categories: ($a[9] | if . == "-" then [] else split(",") end)}}}' --args "$@"; }
+  kwl() { run=$1; shift; printf '{"ok":true,"result":{"workers":[%s],"page":{"hasMore":false}}}\n' "$(printf '%s\n' "$@" | paste -sd, -)" > "$k8/wl-$run.json"; }
+  printf '{"ok":true,"result":{"runs":[{"id":"run_a","coordinator_handle":"term_c"}]}}\n' > "$k8/runs.json"
+  printf '{"ok":true,"result":{"terminals":[{"handle":"term_c"}]}}\n' > "$k8/tl.json"
+  # B1 the dg-studio shape: a person took the terminal over (retained, user_takeover) and the Worker is still working
+  kwl run_a \
+    "$(krow run_a ready task_a ctx_a term_a live - 1790000000000 working - retained user_takeover)" \
+    "$(krow run_a succeeded task_b ctx_b term_b live - 1790000000000 done - retained external_terminal)" \
+    "$(krow run_a abandoned task_c ctx_c term_c2 unverifiable stale_status 1790000000000 unknown - retained user_takeover)" \
+    "$(krow run_a stopped task_d ctx_d term_d exited - - done - retained -)" \
+    "$(krow run_a failed task_e ctx_e term_e live - 1790000000000 done - reclaimable -)" \
+    "$(krow run_a ready task_f ctx_f term_f exited - - done - released -)"
+  out=$(kboard)
+  [ "$(printf '%s\n' "$out" | grep -c '^worker	')" = 1 ] || fail "B1 expected the one working Worker only: $out"
+  line=$(printf '%s\n' "$out" | grep '^worker	')
+  [ "$(printf '%s\n' "$line" | cut -f10-12)" = "live	1790000000000	working" ] || fail "B1 liveness, lastObservedAt, activity: $line"
+  ok "B1 a Worker a person took over is live; succeeded, abandoned, stopped, failed and exited ones are not"
+  # B2 the link to a task: taskId or dispatchId named exactly in the Orca ref cell, in any separator; never a substring
+  printf '| K8-0001 | 제목 하나 | in-progress | P1 | Session | run_a · task_a | - |\n| K8-0002 | 제목 둘 | in-progress | - | Direct | task_old; ctx_p(worker-start receipt) | - |\n| K8-0003 | 제목 셋 | in-progress | P3 | Session | run_a / task_t1 / ctx_t1 | - |\n' >> "$kr/.ai/TASKS.md"
+  kwl run_a \
+    "$(krow run_a ready task_a ctx_a term_1 live - 1790000000000 working - retained user_takeover)" \
+    "$(krow run_a ready task_zz ctx_p term_2 live - 1790000000000 working - active -)" \
+    "$(krow run_a ready task_none ctx_none term_3 live - 1790000000000 working - active -)" \
+    "$(krow run_a ready task_t ctx_t term_4 live - 1790000000000 working - active -)"
+  out=$(kboard)
+  [ "$(printf '%s\n' "$out" | grep -c '^worker	')" = 4 ] || fail "B2 expected four Workers: $out"
+  link() { printf '%s\n' "$out" | awk -F'\t' -v t="$1" '$1 == "worker" && $7 == t { print $2 "|" $3 "|" $8 "|" $9 }'; }
+  [ "$(link term_1)" = "k8-app|K8-0001|P1|제목 하나" ] || fail "B2 taskId link: $(link term_1)"
+  [ "$(link term_2)" = "k8-app|K8-0002|-|제목 둘" ] || fail "B2 dispatchId link ('ctx_p(' cell, no PORT): $(link term_2)"
+  [ "$(link term_3)" = "k8-app|-|-|-" ] || fail "B2 no row must stay unlinked: $(link term_3)"
+  [ "$(link term_4)" = "k8-app|-|-|-" ] || fail "B2 task_t matched the task_t1 row by substring: $(link term_4)"
+  ok "B2 task link: taskId, dispatchId inside 'ctx_p(', Project-direct task without a PORT, no row, no substring match"
+  # B5 an old consumer that reads seven columns sees the same line as before
+  [ "$(printf '%s\n' "$out" | grep '^worker' | cut -f1-7 | head -1)" = "worker	k8-app	K8-0001	run_a	ready	claude/haiku	term_1" ] || fail "B5 first seven columns changed: $out"
+  ok "B5 the first seven columns of a worker line keep their order and meaning"
+  # B3 Run range: a Run is read when its coordinator terminal is live or an open task names it; a done task does not count
+  printf '| K8-0004 | 열린 | in-progress | - | Session | run_b / task_b9 | - |\n| K8-0005 | 끝난 | completed | - | Session | run_c / task_c9 | - |\n' >> "$kr/.ai/TASKS.md"
+  printf '{"ok":true,"result":{"runs":[{"id":"run_a","coordinator_handle":"term_ca"},{"id":"run_b","coordinator_handle":"term_cb"},{"id":"run_c","coordinator_handle":"term_cc"},{"id":"run_d","coordinator_handle":null}]}}\n' > "$k8/runs.json"
+  printf '{"ok":true,"result":{"terminals":[{"handle":"term_ca"}]}}\n' > "$k8/tl.json"
+  for r in run_a run_b run_c run_d; do kwl "$r"; done
+  : > "$k8/calls"; kboard > /dev/null
+  grep -qx 'orchestration worker-list --run run_a --json' "$k8/calls" || fail "B3 live coordinator Run not read: $(cat "$k8/calls")"
+  grep -qx 'orchestration worker-list --run run_b --json' "$k8/calls" || fail "B3 Run named by an open task not read: $(cat "$k8/calls")"
+  if grep -q 'run_c' "$k8/calls"; then fail "B3 Run named only by a done task was read: $(cat "$k8/calls")"; fi
+  if grep -q 'run_d' "$k8/calls"; then fail "B3 Run without a coordinator was read: $(cat "$k8/calls")"; fi
+  mv "$k8/tl.json" "$k8/tl.off"; : > "$k8/calls"; kboard > /dev/null
+  [ "$(grep -c 'worker-list' "$k8/calls")" = 3 ] || fail "B3 terminal list failure must read every Run with a coordinator: $(cat "$k8/calls")"
+  mv "$k8/tl.off" "$k8/tl.json"
+  ok "B3 Run range: live coordinator or open task only; every coordinator Run when the terminal list fails"
+  # B4 a Run that cannot be read, a Run with more rows than a page: the rest still shows, and it is said to be partial
+  printf '{"ok":true,"result":{"runs":[{"id":"run_a","coordinator_handle":"term_ca"},{"id":"run_b","coordinator_handle":"term_cb"}]}}\n' > "$k8/runs.json"
+  printf '{"ok":true,"result":{"terminals":[{"handle":"term_ca"},{"handle":"term_cb"}]}}\n' > "$k8/tl.json"
+  rm "$k8/wl-run_a.json"
+  printf '{"ok":true,"result":{"workers":[%s],"page":{"hasMore":true}}}\n' "$(krow run_b ready task_b1 ctx_b1 term_b live - 1790000000000 working - active -)" > "$k8/wl-run_b.json"
+  out=$(kboard)
+  [ "$(printf '%s\n' "$out" | grep -c '^workers	partial	')" = 2 ] || fail "B4 expected a partial line for each Run: $out"
+  printf '%s\n' "$out" | grep -q '^worker	.*	term_b	' || fail "B4 the readable Run's Worker is missing: $out"
+  if printf '%s\n' "$out" | grep -q '^workers	unknown'; then fail "B4 a partial read was reported as unknown: $out"; fi
+  ok "B4 partial read: a failed Run and a Run with more pages give workers partial lines, the rest stays, not unknown"
+fi
 
 # 9. Marketplace keeps the existing plugin and registers this one
 mp="$root/../../.claude-plugin/marketplace.json"
