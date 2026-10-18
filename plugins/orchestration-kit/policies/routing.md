@@ -59,6 +59,7 @@ Provider별 모델 (별칭은 도구가 최신 버전으로 해석한다):
 | `strong` | `opus` | `gpt-6-astra` + effort `high` | `gemini-4-argon-high` |
 
 - `default`는 모델·effort를 넘기지 않는다. Worker는 사용자의 에이전트 기본 설정을 따른다.
+- [확정] 계획과 QA 시트 작성은 `strong`(Claude는 `opus` 또는 `fable`), 그 계획·시트대로 시험을 작성·실행하는 일은 `fast` 또는 `default`(Claude는 `haiku` 또는 `sonnet`)로 나눠 Worker를 따로 띄운다. Codex·AGY도 같은 등급으로 나눈다. 이 분리에 쓰는 `strong`은 Task마다 다시 묻지 않는다. 비용을 줄이려는 비교 실험에서는 사용자 승인으로 작성 등급을 낮출 수 있다. [검증됨] Claude Code `--model fable`은 `claude-fable-5-1`로 동작한다. 짧은 호출 한 번에 약 0.58 USD가 들어 `opus`보다 비싸다.
 - Codex 모델 ID는 별칭이 없어 세대마다 바뀐다. 쓸 수 있는 ID와 설명은 Codex 모델 목록에서 확인한다 ("Fast and affordable" 계열을 `fast`로). Orca Codex Worker에서 `gpt-6-luna` + `low`가 실제 적용되고 완료까지 동작했다. `strong`은 "Frontier intelligence" 계열(`gpt-6-astra`)이다.
 - AGY 모델 ID는 effort를 이름에 담는다 (`-low`·`-medium`·`-high`). effort를 따로 넘기지 않는다. 목록은 `agy models`로 확인한다. Gemini 계열과 Claude·GPT 계열은 AGY 안에서 한도를 따로 쓰므로, AGY에서는 Gemini 계열을 기본으로 한다.
 - [검증됨] Codex `strong`, AGY `fast`·`strong`은 Orca Worker에서 실제 적용값(`launch.effective`)과 읽기 전용 작업 완료까지 확인했다.

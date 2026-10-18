@@ -20,9 +20,10 @@ orchestration-kit/
 │  ├─ portfolio/SKILL.md
 │  ├─ project/SKILL.md
 │  ├─ setup/SKILL.md
-│  └─ issue-review/SKILL.md
+│  ├─ issue-review/SKILL.md
+│  └─ adopt/SKILL.md
 ├─ policies/                    공통 정책 원본 (벤더 중립)
-├─ roles/                       Worker 역할 프로필 (frontend, designer, backend, qa, reviewer, docs)
+├─ roles/                       Worker 역할 프로필 (frontend, designer, backend, qa, planner, reviewer, docs)
 ├─ templates/                   초기화·위임·보고 템플릿
 │  ├─ project/                  Project 저장소에 만들 .ai/ 파일
 │  ├─ portfolio/                Portfolio 저장소에 만들 파일
@@ -43,6 +44,7 @@ Skill은 Plugin 폴더 안의 상대 경로(`../../policies/...`)로 정책을 �
 | project | `/orchestration-kit:project` | 컨텍스트 확인, 작업 분해, Direct/Subagent/Session/Worktree 선택, Orca Worker 감독, 검증, 완료 보고 |
 | portfolio | `/orchestration-kit:portfolio` | 프로젝트 등록·목록, 업무·우선순위, 위임, 완료 보고 Pull, 전체 요약 |
 | issue-review | `/orchestration-kit:issue-review` | GitHub 저장소 이슈를 마지막 확인 이후분만 모아 분류·검토하고 다음 행동 제안. 요청할 때만, 댓글·닫기는 승인 뒤 |
+| adopt | `/orchestration-kit:adopt` | 프로젝트의 규칙 문서·검사 수단·Skill을 찾아 역할 보강(`.ai/roles/<id>.md`)과 대응표로 연결. 원본이 바뀌면 다시 실행. 프로젝트 문서는 요청·승인 때만 |
 
 "이 저장소 오케스트레이션 초기화해줘", "전체 현황 보여줘"처럼 말해도 description으로 골라진다.
 
@@ -63,7 +65,7 @@ Claude Code 세션의 입력창 위, mods-hud 카드 아래에 한 줄이 붙는
 
 ## 역할
 
-Project Coordinator는 하위 작업마다 Worker 역할을 고른다: `frontend`, `designer`, `backend`, `qa`, `reviewer`, `docs`. 역할 파일(`roles/<id>.md`)에는 관점, 산출물, 수용 기준, 하지 않는 것이 있다. Coordinator는 이 본문을 Task 명세 맨 앞에 넣고, 같은 수용 기준으로 결과를 검증한다.
+Project Coordinator는 하위 작업마다 Worker 역할을 고른다: `frontend`, `designer`, `backend`, `qa`, `planner`, `reviewer`, `docs`. 역할 파일(`roles/<id>.md`)에는 관점, 산출물, 수용 기준, 하지 않는 것이 있다. Coordinator는 이 본문을 Task 명세 맨 앞에 넣고, 같은 수용 기준으로 결과를 검증한다.
 
 - 역할은 명세 본문으로 전달하므로 Claude·Codex·AGY Worker가 같은 방식으로 받는다. Orca `--agent`는 Provider 선택이다.
 - 역할, 모델 등급, Provider는 따로 정한다.

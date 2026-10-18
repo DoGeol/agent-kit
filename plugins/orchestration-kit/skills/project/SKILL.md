@@ -27,6 +27,8 @@ description: 프로젝트의 중앙 Coordinator로 일할 때 사용한다. 프�
 
 [lifecycle.md](../../policies/lifecycle.md#재진입-절차)의 재진입 절차를 따른다. 요약해서 보여준다: 진행 중 Task, 미해결 결정, 블로커, 승인 대기. Orca 상태를 확인하지 못했으면 그렇다고 말한다.
 
+셸에서 `../../scripts/kit.sh adopt-check <저장소>`를 실행한다. `stale`이나 `new`가 나오면 요약에 넣고 [adopt Skill](../adopt/SKILL.md)을 다시 실행하자고 제안한다. `none`·`ok`면 말하지 않는다.
+
 `.ai/ORCHESTRATION.md`의 `integration`이 `unset`이거나 없으면 첫 Task 전에 [반영 방식](../../policies/routing.md#반영-방식)을 정한다. 근거가 분명하면 정해서 적고, 아니면 Portfolio에 묻는다.
 
 ## 2. 업무 접수
@@ -47,6 +49,7 @@ description: 프로젝트의 중앙 Coordinator로 일할 때 사용한다. 프�
 4. 병렬 Worker는 파일 소유 범위를 정하고, 공유 파일 수정자를 한 명 지정한다. 기본 상한 3개.
 5. 셸에서 `../../scripts/kit.sh usage`로 사용량을 읽는다 ([routing.md](../../policies/routing.md#사용량)). Worker 계획(Worker 수, Provider, `strong` 등급)을 사용량과 함께 사용자에게 보여주고 승인받는다. 승인한 범위 안에서는 Worker를 시작·재시작할 때 다시 묻지 않는다 ([permissions.md](../../policies/permissions.md#결정권)).
 6. `TASKS.md`의 `실행 방식` 열에 선택을 적는다. 역할도 같이 적는다 (`role: frontend+designer`).
+7. [권장] 요구가 모호하거나 하위 작업이 여럿이면 구현 전에 `planner` Worker(`strong`)로 계획을 받는다. 계획의 "사용자만 답할 수 있음" 질문은 [사용자에게 결정 묻기](../../policies/communication.md#사용자에게-결정-묻기) 형식으로 묻고, 답을 받은 뒤 구현을 배정한다.
 
 ## 4. 실행 감독
 
@@ -69,6 +72,8 @@ description: 프로젝트의 중앙 Coordinator로 일할 때 사용한다. 프�
 ## 5. 검증과 수락
 
 `worker_done`이 오면 Task를 `in-review`로 바꾸고 [routing.md](../../policies/routing.md#완료의-세-단계)의 수락 절차를 따른다. 테스트·Diff를 직접 확인하고, 명세에 넣은 역할의 수용 기준을 항목마다 확인한다. Worker가 통과라고 적은 항목도 직접 본다. 소유 범위 밖 변경이 없는지도 본다. 통과하면 Coordinator가 커밋하고 [반영 방식](../../policies/routing.md#반영-방식)대로 반영한다: `direct-merge`는 병합한 뒤 `completed`, `pull-request`는 PR을 연 뒤 `in-review`, 병합되면 `completed`. 실패하면 재작업 또는 `failed`·`blocked`. 재작업은 맥락이 남아 있는 같은 Worker에 후속 Task로 맡기는 것을 먼저 검토한다. [권장] 같은 Task를 두 번 재작업해도 수락하지 못하면 `failed`로 두고 사용자에게 알린다. 결과가 형식은 맞아도 정책·계약과 어긋나면 수락하지 않는다.
+
+[권장] 반영(병합·PR) 직전, 한 번에 반영할 Task가 여럿이면 전체 측정을 한다: `planner`가 Task별 QA 시트를 모아 최종 시트를 만들고, `qa`(`fast`·`default`)가 시트대로 전부 실행하고, Coordinator가 결과를 보고 수락한다.
 
 ## 6. 문서 갱신과 완료 보고
 
