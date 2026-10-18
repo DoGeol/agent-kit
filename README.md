@@ -32,7 +32,7 @@ git clone https://github.com/DoGeol/agent-kit.git ~/agent-kit
 | 플러그인 | 설명 |
 |---|---|
 | [mods-hud](plugins/mods-hud) | 입력창 위 현황판: 세션 요약, 서브에이전트, 오케스트레이션, 브랜치, 사용량 |
-| [orchestration-kit](plugins/orchestration-kit) | Orca + Claude Code 멀티 AI 오케스트레이션. Portfolio(hub 저장소)가 여러 프로젝트의 업무·위임·보고를 모으고, 프로젝트마다 Coordinator가 역할(frontend·qa·planner 등 7개)을 붙인 Worker(Claude·Codex·AGY)를 감독한다. Skill 5개(setup, project, portfolio, issue-review, adopt), 공통 정책, 입력창 위 Portfolio 현황판. 개념은 [README의 개념 절](plugins/orchestration-kit/README.md#개념) |
+| [orchestration-kit](plugins/orchestration-kit) | Orca + Claude Code 멀티 AI 오케스트레이션. Portfolio(hub 저장소)가 여러 프로젝트의 업무·위임·보고를 모으고, 프로젝트마다 Coordinator가 역할(frontend·qa·planner·architect 등 8개)을 붙인 Worker(Claude·Codex·AGY)를 감독한다. Skill 5개(setup, project, portfolio, issue-review, adopt), 공통 정책, 입력창 위 Portfolio 현황판. 개념은 [README의 개념 절](plugins/orchestration-kit/README.md#개념) |
 
 설치: `/plugin install <플러그인> --marketplace DoGeol/agent-kit`. 업데이트: `claude plugin update <플러그인>`
 

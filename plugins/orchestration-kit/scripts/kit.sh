@@ -518,8 +518,10 @@ adopt_findings() {
             printf 'stale\t%s\t%s\t%s\n' "${o##*/}" "skill $name" "없어짐: $where/$name" ;; esac ;;
         *" @ "*)
           path=${src% @ *}; at=${src##* @ }
-          if [ ! -e "$repo/$path" ]; then printf 'stale\t%s\t%s\t%s\n' "${o##*/}" "$path" "없어짐"; continue; fi
-          cur=$(git -C "$repo" log -1 --format=%H -- "$path")
+          # .ai/ sources live in the state folder (the hub in personal mode), not in the repo.
+          case $path in .ai/*) base=${ai%/.ai} ;; *) base=$repo ;; esac
+          if [ ! -e "$base/$path" ]; then printf 'stale\t%s\t%s\t%s\n' "${o##*/}" "$path" "없어짐"; continue; fi
+          cur=$(git -C "$base" log -1 --format=%H -- "$path")
           case $cur in "$at"*) ;; *) printf 'stale\t%s\t%s\t%s\n' "${o##*/}" "$path" "$at -> $(printf %.7s "$cur")" ;; esac ;;
       esac
     done <<SRC

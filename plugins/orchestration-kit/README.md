@@ -39,12 +39,13 @@ orchestration-kit/
 │  ├─ issue-review/SKILL.md
 │  └─ adopt/SKILL.md
 ├─ policies/                    공통 정책 원본 (벤더 중립)
-├─ roles/                       Worker 역할 프로필 (frontend, designer, backend, qa, planner, reviewer, docs)
-├─ templates/                   초기화·위임·보고 템플릿
+├─ roles/                       Worker 역할 프로필 (frontend, designer, backend, qa, planner, architect, reviewer, docs)
+├─ templates/                   초기화·위임·보고·디자인 원칙 양식
 │  ├─ project/                  Project 저장소에 만들 .ai/ 파일
 │  ├─ portfolio/                Portfolio 저장소에 만들 파일
 │  ├─ handoffs/                 위임 명세
-│  └─ reports/                  완료 보고
+│  ├─ reports/                  완료 보고
+│  └─ design/                   프로젝트 디자인 원칙 문서 양식 (초기화 때 만들지 않음)
 ├─ docs/                        사용 예시
 ├─ scripts/kit.sh               초기화(공유·개인 모드)·상태 위치·등록·미처리 보고 목록·현황판 데이터·처리 마커·사용량 읽기와 감시·보강 출처 확인 (POSIX sh, 덮어쓰기 없음)
 └─ tests/                       로컬 검사 (run.sh), 현황판 mod 테스트 (board.test.ts)
@@ -81,12 +82,15 @@ Claude Code 세션의 입력창 위, mods-hud 카드 아래에 한 줄이 붙는
 
 ## 역할
 
-Project Coordinator는 하위 작업마다 Worker 역할을 고른다: `frontend`, `designer`, `backend`, `qa`, `planner`, `reviewer`, `docs`. 역할 파일(`roles/<id>.md`)에는 관점, 산출물, 수용 기준, 하지 않는 것이 있다. Coordinator는 이 본문을 Task 명세 맨 앞에 넣고, 같은 수용 기준으로 결과를 검증한다.
+Project Coordinator는 하위 작업마다 Worker 역할을 고른다: `frontend`, `designer`, `backend`, `qa`, `planner`, `architect`, `reviewer`, `docs`. 역할 파일(`roles/<id>.md`)에는 관점, 산출물, 수용 기준, 하지 않는 것이 있다. Coordinator는 이 본문을 Task 명세 맨 앞에 넣고, 같은 수용 기준으로 결과를 검증한다.
 
 - 역할은 명세 본문으로 전달하므로 Claude·Codex·AGY Worker가 같은 방식으로 받는다. Orca `--agent`는 Provider 선택이다.
 - 역할, 모델 등급, Provider는 따로 정한다.
 - 작은 UI 수정은 Worker 1개에 `frontend` + 보조 `designer`, 큰 개편은 `designer`가 설계 문서를 쓰고 `frontend`가 구현한다.
 - 프로젝트별 보강(스택, 디자인 시스템)은 프로젝트의 `.ai/roles/<id>.md`에 쓴다. adopt Skill이 프로젝트에 이미 있는 규칙 문서·검사 명령·Skill을 찾아 보강(역할마다 핵심 15줄 이하, 출처 커밋 포함)과 대응표(`.ai/ADOPT.md`)로 만든다. Coordinator는 세션을 시작할 때 `kit.sh adopt-check <저장소>`로 출처가 바뀌었는지 보고, 바뀌면 adopt를 다시 실행하자고 제안한다.
+- 구조를 새로 정해야 하면 `architect`가 설계 문서(경계, 계약, 버린 대안, 이전·되돌리기, 결정 기록 초안)를 쓰고, 사용자가 승인한 뒤 `planner`가 실행 계획으로 바꾼다.
+- 화면 결정의 기준은 프로젝트의 디자인 원칙 문서다 (양식 `templates/design/DESIGN-PRINCIPLES.md`). designer는 결정마다 원칙 ID를 적고, frontend는 원칙마다 점검 결과를 적는다. 원칙이 없으면 designer가 기존 화면에서 초안을 만들어 사용자 승인을 받는다.
+- Worker가 수락 기준을 못 넘으면 상향 사다리를 탄다: 실패 증거를 붙여 같은 등급 1번 → effort → 등급 → 다른 Provider → 사용자에게 묻기 ([routing.md](policies/routing.md#실패했을-때-상향-사다리)).
 - 계획과 QA 시트는 `strong` 등급으로, 그대로 시험을 쓰고 돌리는 일은 `fast`·`default` 등급으로 Worker를 나눠 띄운다 ([routing.md](policies/routing.md)).
 - 긴 직군 지식은 저장소의 Agent Skill(`.agents/skills/`, Claude용 `.claude/skills/` symlink)로 두고 명세에는 이름만 적는다. Provider별로 읽는 위치가 다르다 ([roles.md](policies/roles.md#직군-지식-skill)).
 

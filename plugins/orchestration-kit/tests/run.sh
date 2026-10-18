@@ -278,6 +278,13 @@ printf '%s\n' "$out" | grep -q '^stale	frontend.md	skill ui-build	없어짐' || 
 printf '%s\n' "$out" | grep -q '^new	skill	qa-sheet	.claude/skills' || fail "new skill not listed: $out"
 if printf '%s\n' "$out" | grep -q 'design-review\|ADOPT.md'; then fail "plugin skill or unchanged source flagged: $out"; fi
 ok "adopt-check: none (also non-git), ok (non-source @ lines ignored), stale on changed file and removed skill, new skill; plugin skills not checked"
+# Personal mode: .ai/ sources resolve against the hub state folder, not the project repo
+pa="$hub/projects/own-app/.ai"; printf 'P1\n' > "$pa/DESIGN-PRINCIPLES.md"; git_commit "$hub" principles
+mkdir -p "$pa/roles"; printf '# designer 보강\n\n## 출처\n- .ai/DESIGN-PRINCIPLES.md @ %s\n' "$(git -C "$hub" log -1 --format=%h -- projects/own-app/.ai/DESIGN-PRINCIPLES.md)" > "$pa/roles/designer.md"
+[ "$("$kit" adopt-check "$own")" = ok ] || fail "personal adopt-check fresh: $("$kit" adopt-check "$own")"
+printf 'P2\n' > "$pa/DESIGN-PRINCIPLES.md"; git_commit "$hub" principles2
+"$kit" adopt-check "$own" | grep -q '^stale	designer.md	.ai/DESIGN-PRINCIPLES.md	' || fail "personal state source not stale: $("$kit" adopt-check "$own")"
+ok "adopt-check in personal mode reads .ai/ sources from the hub"
 
 # 8c. Usage readers against stub orca, claude, codex and agy (no real provider is called)
 if command -v jq > /dev/null; then
