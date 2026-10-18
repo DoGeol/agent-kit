@@ -56,6 +56,7 @@ description: 프로젝트에 이미 있는 규칙과 Skill(디자인 정책 문�
 - 줄마다 원본 위치나 규칙 ID를 괄호로 단다. 원문을 길게 옮기지 않는다.
 - 나머지는 `## 작업 전 읽을 문서`에 경로로 넘긴다. 원본에 대상별 문서 표가 있으면 표를 옮기지 않고 그 파일 경로만 적는다.
 - Skill은 본문을 옮기지 않고 `쓸 Skill: <이름> (작업 전에 실행한다)`만 적는다. Worker가 실행할 때 Skill을 읽으므로 Skill 내용이 바뀌어도 보강은 그대로 둔다.
+- 어떤 Provider가 못 읽는 위치의 Skill이면 그 줄에 읽는 Provider를 적는다 (예: `.agents/skills`에만 있으면 `(Codex·AGY만)`). Coordinator는 그 Provider의 Worker 명세에만 그 줄을 넣는다.
 - Plugin 역할의 내용과 [permissions.md](../../policies/permissions.md) 제한을 빼거나 푸는 줄은 넣지 않는다. 그런 원본 규칙은 대응표에 적고 사용자에게 알린다.
 
 ## 5. Skill 정리 제안
