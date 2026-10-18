@@ -13,7 +13,9 @@ USER
 
 ```text
 orchestration-kit/
-├─ .claude-plugin/plugin.json   Claude Code Plugin Manifest (이 폴더의 유일한 Claude 전용 파일)
+├─ .claude-plugin/plugin.json   Claude Code Plugin Manifest
+├─ hooks/register.tsx           Claude Code 현황판 mod (입력창 위 한 줄 + pane). Claude 전용
+├─ types/index.d.ts             현황판 mod의 상태 타입. Claude 전용
 ├─ skills/                      Agent Skills 형식. 정책을 실행하는 Adapter
 │  ├─ portfolio/SKILL.md
 │  ├─ project/SKILL.md
@@ -27,8 +29,8 @@ orchestration-kit/
 │  ├─ handoffs/                 위임 명세
 │  └─ reports/                  완료 보고
 ├─ docs/                        사용 예시
-├─ scripts/kit.sh               초기화(공유·개인 모드)·상태 위치·등록·미처리 보고 목록·처리 마커·사용량 읽기와 감시 (POSIX sh, 덮어쓰기 없음)
-└─ tests/run.sh                 로컬 검사
+├─ scripts/kit.sh               초기화(공유·개인 모드)·상태 위치·등록·미처리 보고 목록·현황판 데이터·처리 마커·사용량 읽기와 감시 (POSIX sh, 덮어쓰기 없음)
+└─ tests/                       로컬 검사 (run.sh), 현황판 mod 테스트 (board.test.ts)
 ```
 
 Skill은 Plugin 폴더 안의 상대 경로(`../../policies/...`)로 정책을 읽는다. Plugin을 설치하면 폴더 전체가 함께 복사되므로 설치 위치에서도 그대로 읽힌다 (GitHub 마켓플레이스 설치본에서 Skill의 정책 읽기와 `kit.sh init`을 확인했다). 정책은 `policies/`에만 있고 Skill에 복제하지 않는다.
@@ -43,6 +45,21 @@ Skill은 Plugin 폴더 안의 상대 경로(`../../policies/...`)로 정책을 �
 | issue-review | `/orchestration-kit:issue-review` | GitHub 저장소 이슈를 마지막 확인 이후분만 모아 분류·검토하고 다음 행동 제안. 요청할 때만, 댓글·닫기는 승인 뒤 |
 
 "이 저장소 오케스트레이션 초기화해줘", "전체 현황 보여줘"처럼 말해도 description으로 골라진다.
+
+## 현황판
+
+Claude Code 세션의 입력창 위, mods-hud 카드 아래에 한 줄이 붙는다. 어느 세션에서나 같은 Portfolio 전체 정보이고, 처리할 것만 센다.
+
+```text
+◆ 포트폴리오  블로커 1  보고 대기 7  위임 미수락 1  PR 리뷰 1  Worker 2 진행
+```
+
+- 0인 항목은 숨긴다. 모두 0이면 줄이 없다. Orca Worker 세션에서는 뜨지 않는다.
+- 색: 빨강 블로커, 노랑 사람이 처리할 것, 파랑 진행 중.
+- `포트폴리오`를 누르거나 `/portfolio-board`를 실행하면 pane이 열린다. 처리할 것(프로젝트별 한 줄씩), 진행 중 Worker(프로젝트·Task·Provider/모델), 전체 프로젝트(진행 Task 수, 체크포인트·Pull 경과 시간, 다음 작업). Project 세션에서는 그 프로젝트가 각 구역 맨 위에 온다.
+- 30초마다 `kit.sh board <hub>`를 실행한다. 읽기만 하고 모델을 부르지 않는다. hub 4개 프로젝트에서 한 번에 1~2.5초.
+- hub 위치: Portfolio 세션과 개인 모드 Project는 스스로 찾는다. 공유 모드 Project 세션은 `/config`에서 orchestration-kit의 `hubPath`를 설정해야 줄이 뜬다.
+- 항목의 출처: 블로커와 PR 리뷰는 각 `TASKS.md`의 `blocked`·`in-review` (작업 트리 기준), 보고 대기는 `kit.sh pending`, 위임 미수락은 `handoffs/outbox/<projectId>/`에 있지만 그 프로젝트 `TASKS.md`가 아직 가리키지 않는 PORT, Worker는 Coordinator가 붙은 Orca Run의 활성 Worker.
 
 ## 역할
 
@@ -103,13 +120,14 @@ Portfolio가 꺼져 있어도 Project는 일하고 보고서를 남긴다. 자�
 ```bash
 plugins/orchestration-kit/tests/run.sh
 claude plugin validate plugins/orchestration-kit
+claude plugin test plugins/orchestration-kit
 claude plugin validate .
 ```
 
 ## Codex·AGY 확장
 
-정책(`policies/`), 템플릿, `scripts/kit.sh`, 프로젝트의 `.ai/`는 에이전트와 무관하다. 확장할 때는 이 폴더에 각 도구의 Manifest만 더한다. Claude·Codex·AGY의 `plugin.json`은 형식이 서로 다르므로 같은 파일을 재사용하지 않는다. Skill 폴더를 따로 떼어 링크하면 `../../policies` 경로가 깨지므로, 폴더 전체를 설치 단위로 쓴다.
+정책(`policies/`), 템플릿, `scripts/kit.sh`, 프로젝트의 `.ai/`는 에이전트와 무관하다. 확장할 때는 이 폴더에 각 도구의 Manifest만 더한다. 현황판 mod(`hooks/`, `types/`)는 Claude Code 전용이고, 그 데이터는 `kit.sh board`라서 다른 도구에서도 읽을 수 있다. Claude·Codex·AGY의 `plugin.json`은 형식이 서로 다르므로 같은 파일을 재사용하지 않는다. Skill 폴더를 따로 떼어 링크하면 `../../policies` 경로가 깨지므로, 폴더 전체를 설치 단위로 쓴다.
 
 ## 아직 없는 것
 
-Orca 병렬 Worktree 자동 실행, Worker 협업 자동화, 자동 Bootstrap, 자동 동기화·알림, Coordinator Provider 교체, 대시보드 UI. MCP 서버와 DB는 쓰지 않는다.
+Orca 병렬 Worktree 자동 실행, Worker 협업 자동화, 자동 Bootstrap, 자동 동기화·알림, Coordinator Provider 교체. MCP 서버와 DB는 쓰지 않는다.

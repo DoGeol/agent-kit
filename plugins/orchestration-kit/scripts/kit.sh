@@ -7,6 +7,7 @@
 #   kit.sh where <projectDir>
 #   kit.sh register <hubDir> <projectDir>
 #   kit.sh pending <hubDir>
+#   kit.sh board <hubDir>
 #   kit.sh mark <hubDir> <projectId> <reportId> <applied|superseded|needs-review|invalid> [note]
 #   kit.sh usage [claude|codex|antigravity ...]
 #   kit.sh usage-watch [--interval sec] [--until caution|danger] [--for min] <provider>...
@@ -256,6 +257,99 @@ cmd_pending() {
   done
 }
 
+# Board lines from a Kit task table: blocked and in-review rows, then "open<TAB>id<TAB>n" (work not done yet).
+# Cells: 1 id, 2 title, 3 status, 6 Orca ref (the Portfolio table has no Orca column).
+task_lines() { # file projectId
+  [ -f "$1" ] || { printf 'open\t%s\t0\n' "$2"; return 0; }
+  awk -F'|' -v id="$2" '
+    { sub(/\r$/, "") }
+    /^\|/ {
+      for (i = 2; i < NF; i++) { c[i - 1] = $i; gsub(/^[ \t]+|[ \t]+$/, "", c[i - 1]); gsub(/\t/, " ", c[i - 1]); if (c[i - 1] == "") c[i - 1] = "-" }
+      if (c[1] ~ /^:?-+:?$/ || c[1] == "projectTaskId" || c[1] == "portfolioTaskId") { split("", c); next }
+      s = c[3]
+      if (s ~ /^(assigned|accepted|in-progress|in-review|needs-review|blocked)$/) open++
+      if (s == "blocked") print "blocked\t" id "\t" c[1] "\t" c[2]
+      if (s == "in-review") print "review\t" id "\t" c[1] "\t" c[2] "\t" ((6 in c) ? c[6] : "-")
+      split("", c) }
+    END { print "open\t" id "\t" open + 0 }' "$1"
+}
+# "observedAt<TAB>next work" from STATUS.md: the first item under 다음 업무, else the checkpoint's next safe action.
+status_line() { # STATUS.md
+  [ -f "$1" ] || { printf '%s\t%s\n' - -; return 0; }
+  # LC_ALL=C: macOS awk compares Korean strings by collation and calls different headings equal.
+  LC_ALL=C awk '
+    { sub(/\r$/, "") }
+    /^## / { sec = $0; next }
+    sec == "## 다음 업무" && /^- / && nxt == "" { nxt = substr($0, 3) }
+    /^- observedAt:/ { obs = $0; sub(/^- observedAt:[ \t]*/, "", obs) }
+    /^- 다음 안전한 행동:/ { safe = $0; sub(/^- 다음 안전한 행동:[ \t]*/, "", safe) }
+    END { if (nxt == "") nxt = safe; if (obs == "") obs = "-"; if (nxt == "") nxt = "-"; gsub(/\t/, " ", nxt); print obs "\t" nxt }' "$1"
+}
+pulled() { # hub id: lastPulled column of PROJECTS.md
+  awk -F'|' -v id="$2" '/^\|/ { a = $2; gsub(/^[ \t]+|[ \t]+$/, "", a); if (a == id) { p = $5; gsub(/^[ \t]+|[ \t]+$/, "", p); print (p == "" ? "-" : p); exit } }' "$1/portfolio/PROJECTS.md"
+}
+# Live Orca workers: "worker<TAB>projectId<TAB>projectTaskId<TAB>runId<TAB>state<TAB>provider/model<TAB>terminal".
+# worker-list without --run sees only the caller's bound Run, so each Run that still has a coordinator is read.
+board_workers() { # lines "projectId<TAB>repo root<TAB>state root"
+  if ! command -v orca > /dev/null || ! command -v jq > /dev/null; then printf 'workers\tunknown\torca 또는 jq 없음\n'; return 0; fi
+  # jq reads empty input as success, so the answer is taken first and must say ok.
+  if ! j=$(orca orchestration run-list --json 2>/dev/null) || [ "$(printf '%s' "$j" | jq -r '.ok' 2>/dev/null)" != true ]; then
+    printf 'workers\tunknown\torca 응답 없음 (sandbox 안이면 밖에서 실행)\n'; return 0
+  fi
+  runs=$(printf '%s' "$j" | jq -r '.result.runs[]? | select(.coordinator_handle != null) | .id')
+  for r in $runs; do
+    orca orchestration worker-list --run "$r" --terminal-state active --json 2>/dev/null | jq -r '.result.workers[]?
+      | select(.workerState | test("^(succeeded|failed|cancelled|abandoned|stopped)$") | not)
+      | [.runId, .workerState, (.taskId // "-"), ((.projection.provider.id // "-") + "/" + (.projection.provider.model // "-")),
+         ((.projection.workspace.id // "") | split("::") | .[1] // "-"), (.agentTerminalHandle // "-")] | @tsv' 2>/dev/null || true
+  done | while IFS="$tab" read -r run state task model ws term; do
+    c=$(common_dir "$ws") || c=; c=${c%/.git}
+    # shortcut: a worker maps to the first project in the same repository; two projects in one monorepo are not told apart.
+    id=$(printf '%s\n' "$1" | awk -F'\t' -v c="$c" 'c != "" && $2 == c { print $1; exit }')
+    sr=$(printf '%s\n' "$1" | awk -F'\t' -v c="$c" 'c != "" && $2 == c { print $3; exit }')
+    pt=-; [ -z "$sr" ] || pt=$(grep -F "$task" "$sr/.ai/TASKS.md" 2>/dev/null | awk -F'|' '{ v = $2; gsub(/^[ \t]+|[ \t]+$/, "", v); print v; exit }')
+    printf 'worker\t%s\t%s\t%s\t%s\t%s\t%s\n' "${id:--}" "${pt:--}" "$run" "$state" "$model" "$term"
+  done
+}
+# One snapshot for a status view: what needs someone, and every active project. Read-only.
+#   project <id> <shared|personal|-> <open tasks> <lastPulled> <observedAt> <next work>
+#   blocked <id|portfolio> <taskId> <title> / review <id> <taskId> <title> <Orca ref> / handoff <id> <PORT> <title>
+#   pending|invalid|error (as kit.sh pending) / worker ... / workers unknown <reason>
+cmd_board() {
+  hub=${1:-}
+  [ -d "$hub" ] || die "usage: kit.sh board <hubDir>"
+  require_role "$hub" portfolio
+  hub=$(cd "$hub" && pwd)
+  task_lines "$hub/portfolio/TASKS.md" portfolio | grep -v '^open	' || true
+  rows=$(projects "$hub")
+  # shortcut: TASKS.md, STATUS.md and the outbox are read from the working tree, while pending reads reportsRef.
+  printf '%s\n' "$rows" | while IFS="$tab" read -r id path status; do
+    [ -n "$id" ] && [ "$status" = active ] || continue
+    p=$(project_root "$hub" "$id" "$path")
+    if [ ! -f "$p/.ai/ORCHESTRATION.md" ]; then printf 'project\t%s\t-\t0\t%s\t-\t-\n' "$id" "$(pulled "$hub" "$id")"; continue; fi
+    if [ "$p" = "$hub/projects/$id" ]; then mode=personal; else mode=shared; fi
+    t=$(task_lines "$p/.ai/TASKS.md" "$id")
+    open=$(printf '%s\n' "$t" | awk -F'\t' '$1 == "open" { print $3 }')
+    printf 'project\t%s\t%s\t%s\t%s\t%s\n' "$id" "$mode" "$open" "$(pulled "$hub" "$id")" "$(status_line "$p/.ai/STATUS.md")"
+    printf '%s\n' "$t" | grep -v '^open	' || true
+    # A delegation is accepted once a project task names its portfolioTaskId (the outbox file keeps status: assigned).
+    for f in "$hub/handoffs/outbox/$id"/*.md; do
+      [ -f "$f" ] || continue
+      port=$(fm portfolioTaskId < "$f")
+      awk -F'|' -v k="$port" '/^\|/ { v = $5; gsub(/^[ \t]+|[ \t]+$/, "", v); if (v == k) { f = 1; exit } } END { exit !f }' "$p/.ai/TASKS.md" 2>/dev/null && continue
+      title=$(awk '/^# / { sub(/^# /, ""); print; exit }' "$f")
+      printf 'handoff\t%s\t%s\t%s\n' "$id" "${port:--}" "${title:--}"
+    done
+  done
+  cmd_pending "$hub"
+  roots=$(printf '%s\n' "$rows" | while IFS="$tab" read -r id path status; do
+    [ -n "$id" ] && [ "$status" = active ] || continue
+    c=$(common_dir "$(expand_path "$path")") || continue
+    printf '%s\t%s\t%s\n' "$id" "${c%/.git}" "$(project_root "$hub" "$id" "$path")"
+  done)
+  board_workers "$roots"
+}
+
 cmd_mark() {
   hub=${1:-}; id=${2:-}; rid=${3:-}; outcome=${4:-}; note=${5:-}
   [ -d "$hub" ] || die "usage: kit.sh mark <hubDir> <projectId> <reportId> <outcome> [note]"
@@ -400,8 +494,9 @@ case ${1:-} in
   where) [ -d "${2:-}" ] || die "usage: kit.sh where <projectDir>"; locate "$2" || die "$2: 초기화되지 않음 (setup Skill로 초기화)" ;;
   register) shift; cmd_register "$@" ;;
   pending) shift; cmd_pending "$@" ;;
+  board) shift; cmd_board "$@" ;;
   mark) shift; cmd_mark "$@" ;;
   usage) shift; cmd_usage "$@" ;;
   usage-watch) shift; cmd_usage_watch "$@" ;;
-  *) sed -n '3,12p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
+  *) sed -n '3,13p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
 esac

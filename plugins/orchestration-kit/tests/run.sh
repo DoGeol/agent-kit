@@ -214,6 +214,37 @@ printf '%s\n' "$out" | grep -q '^pending	own-app	own-app-OWN-0001-r01	completed	
 printf '%s\n' "$out" | grep -q '^pending	svc-app	' || fail "shared projects no longer listed next to a personal one: $out"
 ok "personal mode: repo untouched, pointer + exclude only, idempotent, found from worktrees, reports read from hub HEAD"
 
+# 8f. board: blocked and in-review tasks, a delegation until a task names it, working-tree STATUS, workers via a stub orca
+if command -v jq > /dev/null; then
+  printf '| SAMPLE-0007 | 상태 화면 | in-review | - | Direct | PR #4 | - |\n| SAMPLE-0008 | 계약 결정 | blocked | - | Session | run_t / task_t1 / ctx_t | - |\n' >> "$app/.ai/TASKS.md"
+  bb="$tmp/board-bin"; mkdir "$bb"
+  cat > "$bb/orca" <<EOF
+#!/bin/sh
+echo "\$*" >> "$tmp/orca.calls"
+case "\$2" in
+  run-list) echo '{"ok":true,"result":{"runs":[{"id":"run_t","coordinator_handle":"term_c"},{"id":"run_old","coordinator_handle":null}]}}' ;;
+  worker-list) echo '{"ok":true,"result":{"workers":[{"runId":"run_t","workerState":"ready","taskId":"task_t1","agentTerminalHandle":"term_w","projection":{"provider":{"id":"claude","model":"haiku"},"workspace":{"id":"w1::$app"}}},{"runId":"run_t","workerState":"succeeded","taskId":"task_t0","agentTerminalHandle":"term_d","projection":{"workspace":{"id":"w1::$app"}}}]}}' ;;
+esac
+EOF
+  chmod +x "$bb/orca"
+  out=$(PATH="$bb:$PATH" "$kit" board "$hub")
+  printf '%s\n' "$out" | grep -q '^project	sample-app	shared	2	' || fail "board open count: $out"
+  printf '%s\n' "$out" | grep -qx 'review	sample-app	SAMPLE-0007	상태 화면	PR #4' || fail "board review row: $out"
+  printf '%s\n' "$out" | grep -qx 'blocked	sample-app	SAMPLE-0008	계약 결정' || fail "board blocked row: $out"
+  printf '%s\n' "$out" | grep -q '^handoff	sample-app	PORT-0001	' || fail "unaccepted delegation not listed: $out"
+  printf '%s\n' "$out" | grep -q '^project	sample-api	shared	0	.*	프로젝트 문서 작성$' || fail "next safe action from STATUS.md: $out"
+  printf '%s\n' "$out" | grep -q '^project	own-app	personal	0	' || fail "personal project row: $out"
+  printf '%s\n' "$out" | grep -q '^pending	own-app	own-app-OWN-0001-r01	' || fail "board lost pending reports: $out"
+  printf '%s\n' "$out" | grep -qx 'worker	sample-app	SAMPLE-0008	run_t	ready	claude/haiku	term_w' || fail "worker not mapped to its project task: $out"
+  [ "$(printf '%s\n' "$out" | grep -c '^worker	')" = 1 ] || fail "settled worker listed: $out"
+  if grep -q 'run_old' "$tmp/orca.calls"; then fail "board read a Run without a coordinator"; fi
+  printf '| SAMPLE-0009 | 클라이언트 | in-progress | PORT-0001 | Direct | - | - |\n' >> "$app/.ai/TASKS.md"
+  if PATH="$bb:$PATH" "$kit" board "$hub" | grep -q '^handoff	sample-app	PORT-0001	'; then fail "accepted delegation still listed"; fi
+  printf '#!/bin/sh\nexit 1\n' > "$bb/orca"
+  PATH="$bb:$PATH" "$kit" board "$hub" | grep -q '^workers	unknown	' || fail "board without orca did not say workers unknown"
+  ok "board: blocked/in-review rows, delegation until accepted, STATUS next action, personal row, workers mapped via Orca, unknown without it"
+fi
+
 # 8c. Usage readers against stub orca, claude, codex and agy (no real provider is called)
 if command -v jq > /dev/null; then
   bin="$tmp/bin"; mkdir "$bin"; nowms=$(( $(date +%s) * 1000 )); reset=$(( $(date +%s) + 3600 ))
