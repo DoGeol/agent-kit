@@ -53,14 +53,14 @@ description: 프로젝트의 중앙 Coordinator로 일할 때 사용한다. 프�
 - Orca를 쓰기 전에 설치된 버전의 가이드를 읽는다: `orca skills get orchestration --full`. 명령 문법은 그 가이드를 따른다.
 - 저장소가 Orca에 등록돼 있지 않으면 Worker를 놓을 수 없다. 등록은 사용자에게 확인한 뒤 한다.
 - Worker를 시작하기 전에 같은 Task의 기존 Worker가 있는지 확인한다. 중복 실행하지 않는다.
-- Worker에게 주는 Task 명세는 그 자체로 완결돼야 한다: 대상, 변경, 제약(건드리지 말 것), 소유 범위, 관찰 가능한 수용 기준. [permissions.md](../../policies/permissions.md#worker-권한)의 Worker 제한(쓰기 범위, 프로세스 종료, 커밋·Push 금지, 샌드박스 밖에서 실행해도 되는 명령)을 항상 적는다. 여러 단계인 작업은 "단계마다 진행 상황을 `.orch-progress/<Task>.md`에 적고, 확인 지점마다 후속 메시지(중단 요청)를 본다"를 적는다. 진행 파일은 커밋하지 않는다.
+- Worker에게 주는 Task 명세는 그 자체로 완결돼야 한다: 대상, 변경, 제약(건드리지 말 것), 소유 범위, 관찰 가능한 수용 기준. [permissions.md](../../policies/permissions.md#worker-권한)의 Worker 제한(쓰기 범위, 프로세스 종료, 커밋·Push 금지, 샌드박스 밖에서 실행해도 되는 명령. 보고 명령 포함)을 항상 적는다. 여러 단계인 작업은 "단계마다 진행 상황을 `.orch-progress/<Task>.md`에 적고, 확인 지점마다 후속 메시지(중단 요청)를 본다"를 적는다. 진행 파일은 커밋하지 않는다.
 - 명세 맨 앞에 역할 절을 넣는다. 역할 파일 본문을 읽어 그대로 붙인다 (경로만 주지 않는다). 순서와 형식은 [roles.md](../../policies/roles.md#명세에-넣기). Worker 시작 뒤 명세가 잘리지 않았는지 확인한다.
 - 하위 작업마다 등급(`fast` / `default` / `strong`)을 정하고, [Provider 선택](../../policies/routing.md#provider-선택) 순서로 Provider를 고른 뒤 [routing.md](../../policies/routing.md#모델과-effort)의 Provider별 모델로 바꾼다. 고른 이유를 `실행 방식` 열에 적는다. 사용량은 판단할 때마다 새로 읽는다. `.ai/ORCHESTRATION.md` Override가 있으면 그것을 따른다. 실제 적용값을 `실행 방식` 열에 적는다.
 - Orca `--worktree current`는 Coordinator 세션의 Worktree다. 셸의 현재 폴더가 아니다. 다른 저장소에서 일을 시키려면 그 저장소의 Worktree를 고르거나, 명세에 절대 경로를 적는다.
 - Orca Run·Task·Dispatch ID를 `TASKS.md`의 `Orca 참조` 열에 적는다.
 - Worker 시작이 에이전트 준비 단계에서 막히면(예: Codex의 작업 폴더 신뢰 확인 `agent-trust-workspace`, 업데이트 안내 `agent-update-prompt`) 응답의 recovery대로 그 터미널을 release하고 사용자에게 알린다. 에이전트 설정 변경·업데이트는 사용자 결정이다. 해결 뒤 같은 Task를 `--retry-of`로 다시 시작한다. Codex는 Worktree의 신뢰를 원본 저장소 경로로 판단한다. 원본 저장소 경로를 신뢰 목록에 한 번 등록하면 새 Worktree에서도 막히지 않는다 (setup Skill). Worktree 상위 폴더를 신뢰하는 것으로는 해결되지 않았다. Orca는 Worker를 시작할 때 Worktree 경로를 각 에이전트 신뢰 목록에 더하고, Worktree를 지워도 그 항목을 지우지 않는다. 정리할지는 사용자에게 묻는다. 해결되지 않으면 같은 Task를 다른 Provider로 다시 시작할 수 있다. 승인한 후보 순서 밖의 Provider로 바꾸는 것은 계획 변경이므로 승인을 받는다 ([routing.md](../../policies/routing.md#provider-선택)).
 - Coordinator 하나는 한 번에 Run 하나에 바인딩된다. 새 Run을 만들면 바인딩이 옮겨 가서 앞 Run의 `worker-start`와 `check`가 거부된다 (`consumer_fenced`). 앞 Run의 Worker를 모두 정리한 뒤 `run-use`로 바꾼다. 여러 프로젝트를 동시에 감독하려면 프로젝트마다 Coordinator 세션을 따로 둔다.
-- `worker_done`이 오면 Task·Dispatch ID가 기대한 것과 같은지 확인한다. 이것은 Worker 완료일 뿐이다 (`in-review`).
+- `worker_done`이 오면 Task·Dispatch ID가 기대한 것과 같은지 확인한다. 이것은 Worker 완료일 뿐이다 (`in-review`). 처리한 메시지 묶음은 다음 `check`에 `--ack <deliveryId>`로 확인 처리한다. 하지 않으면 뒤 메시지가 가려진다 ([routing.md](../../policies/routing.md#작업-중-감시)).
 - 수락하거나 실패를 확정하면 Worker마다 다음 소유자를 정한다: 같은 Worker에 후속 작업, 유지, 또는 release. release·Worktree 정리 전에 미커밋 변경과 미병합 커밋을 확인한다 ([permissions.md](../../policies/permissions.md#안전-규칙)). 그다음 메시지를 확인 처리한다. 정리되지 않은 Worker가 남아 있으면 세션을 끝내지 않는다.
 - Worker끼리 자유롭게 협의하게 둔다. [permissions.md](../../policies/permissions.md)의 승인 대상 변경 요청(`DECISION_REQUEST`)이 오면 결정하고 `decisions/ADR-NNNN-<제목>.md`에 남긴 뒤 영향받는 Worker 모두에 알린다. 프로젝트 간 영향이 있으면 Portfolio 결정 사항으로 사용자에게 올린다.
 - 응답 없는 Worker는 상태와 생존 증거를 먼저 확인한다. 한도 문구가 보이면 사용량 한도로 본다.
