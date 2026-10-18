@@ -71,7 +71,7 @@ description: 프로젝트의 중앙 Coordinator로 일할 때 사용한다. 프�
 
 ## 5. 검증과 수락
 
-`worker_done`이 오면 Task를 `in-review`로 바꾸고 [routing.md](../../policies/routing.md#완료의-세-단계)의 수락 절차를 따른다. 테스트·Diff를 직접 확인하고, 명세에 넣은 역할의 수용 기준을 항목마다 확인한다. Worker가 통과라고 적은 항목도 직접 본다. 소유 범위 밖 변경이 없는지도 본다. 통과하면 Coordinator가 커밋하고 [반영 방식](../../policies/routing.md#반영-방식)대로 반영한다: `direct-merge`는 병합한 뒤 `completed`, `pull-request`는 PR을 연 뒤 `in-review`, 병합되면 `completed`. 실패하면 [상향 사다리](../../policies/routing.md#실패했을-때-상향-사다리)를 따른다: 실패 증거를 붙여 같은 등급 1번, effort, 등급, Provider 순으로 한 칸씩 올리고, 끝까지 안 되면 `blocked`로 두고 사용자에게 묻는다. 권한·한도·사람만 답할 질문은 올리지 않는다. 결과가 형식은 맞아도 정책·계약과 어긋나면 수락하지 않는다.
+`worker_done`이 오면 Task를 `in-review`로 바꾸고 [routing.md](../../policies/routing.md#완료의-세-단계)의 수락 절차를 따른다. 테스트·Diff를 직접 확인하고, 명세에 넣은 역할의 수용 기준을 항목마다 확인한다. Worker가 통과라고 적은 항목도 직접 본다. 소유 범위 밖 변경이 없는지도 본다. 통과하면 Coordinator가 커밋하고 [반영 방식](../../policies/routing.md#반영-방식)대로 반영한다: `direct-merge`는 병합한 뒤 `completed`, `pull-request`는 PR을 연 뒤 `in-review`, 병합되면 `completed`. 실패하면 [상향 사다리](../../policies/routing.md#실패했을-때-상향-사다리)를 따른다: 실패 증거를 붙여 같은 등급 1번, effort, 등급, Provider 순으로 한 칸씩 올리고, 끝까지 안 되면 `blocked`로 두고 사용자에게 묻는다. 권한·한도·사람만 답할 질문은 올리지 않는다. 버전 차이로 실패했다가 고친 경우에는 그 함정을 보강에 한 줄로 남기자고 제안한다 ([roles.md](../../policies/roles.md#프로젝트-보강)). 결과가 형식은 맞아도 정책·계약과 어긋나면 수락하지 않는다.
 
 [권장] 반영(병합·PR) 직전, 한 번에 반영할 Task가 여럿이면 전체 측정을 한다: `planner`가 Task별 QA 시트를 모아 최종 시트를 만들고, `qa`(`fast`·`default`)가 시트대로 전부 실행하고, Coordinator가 결과를 보고 수락한다.
 
