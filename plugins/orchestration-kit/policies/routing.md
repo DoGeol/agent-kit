@@ -116,7 +116,7 @@ Worker 계획 승인([permissions.md](permissions.md#결정권))은 이 후보 �
 
 ### 읽는 방법
 
-셸에서 `scripts/kit.sh usage [claude|codex|antigravity ...]`로 읽는다 (생략하면 셋 다). 줄마다 `usage`, Provider, 상태, 5시간 %, 주간 %, 5시간 초기화까지 남은 분, 출처가 탭으로 나뉜다. 상태는 `ok`(정상)·`caution`(주의)·`danger`(위험)·`unknown`(못 읽음, 마지막 칸이 이유)이다. 모델을 호출하지 않으므로 비용이 없다.
+셸에서 `scripts/kit.sh usage [claude|codex|antigravity ...]`로 읽는다 (생략하면 셋 다). 줄마다 `usage`, Provider, 상태, 5시간 %, 주간 %, 5시간 초기화까지 남은 분, 출처가 탭으로 나뉜다. 상태는 `ok`(정상)·`caution`(주의)·`danger`(위험)·`unknown`(못 읽음, 마지막 칸이 이유)이다. 읽기가 sandbox에 막혔으면 이유 칸이 `sandbox: `로 시작한다. 모델을 호출하지 않으므로 비용이 없다.
 
 [검증됨] Provider마다 출처가 다르다:
 
@@ -129,7 +129,7 @@ Worker 계획 승인([permissions.md](permissions.md#결정권))은 이 후보 �
 - Orca가 보여 주는 Codex·AGY 값은 쓰지 않는다. [검증됨] 몇 시간 동안 갱신되지 않은 채 `status: ok`로 남은 적이 있다.
 - 값은 Provider별 활성 계정 기준이다. Claude Coordinator와 Claude Worker는 같은 계정 한도를 나눠 쓴다.
 - 판단할 때마다 새로 읽는다. 전에 읽은 값이나 `TASKS.md`에 적은 값으로 판단하지 않는다.
-- `unknown`이면 그 Provider를 주의로 본다.
+- `unknown`이고 이유가 `sandbox:`로 시작하면 sandbox 밖에서 다시 읽고 그 값을 쓴다. 다시 읽어도 `unknown`이면 주의로 본다.
 
 ### 확인 시점
 

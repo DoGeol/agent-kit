@@ -47,7 +47,7 @@ orchestration-kit/
 │  ├─ reports/                  완료 보고
 │  └─ design/                   프로젝트 디자인 원칙 문서 양식 (초기화 때 만들지 않음)
 ├─ docs/                        사용 예시
-├─ scripts/kit.sh               초기화(공유·개인 모드)·상태 위치·등록·미처리 보고 목록·현황판 데이터·처리 마커·사용량 읽기와 감시·보강 출처 확인 (POSIX sh, 덮어쓰기 없음)
+├─ scripts/kit.sh               초기화(공유·개인 모드)·상태 위치·등록·미처리 보고 목록·현황판 데이터·처리 마커·사용량 읽기와 감시·보강 출처 확인·저장소의 Coordinator 찾기(`coordinator`)·끝나지 않은 Run과 상태 어긋남 점검(`audit`) (POSIX sh, 덮어쓰기 없음)
 └─ tests/                       로컬 검사 (run.sh), 현황판 mod 테스트 (board.test.ts)
 ```
 

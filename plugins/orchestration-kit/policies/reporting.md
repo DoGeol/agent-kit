@@ -42,6 +42,8 @@ frontmatter 필수 필드:
 | 블로커 | 즉시 `blocked` 보고 | 다음 Pull에서 우선 검토 |
 | 마일스톤 완료 | `STATUS.md` 갱신 | Pull에서 진행도 갱신 |
 
+보고서 하나는 `projectTaskId` 하나를 다룬다. 여러 Task가 함께 끝나면 Task마다 보고서를 내고 같은 근거를 참조한다.
+
 ## Portfolio Pull
 
 트리거: 사용자 요청 또는 Portfolio 세션 시작. 자동 감시·알림은 MVP 범위 밖이다.
@@ -60,6 +62,7 @@ frontmatter 필수 필드:
 8. 각 프로젝트의 `.ai/TASKS.md`에서 위임 수락(`portfolioTaskId` 연결)을 확인하고, `.ai/STATUS.md`를 `DASHBOARD.md`에 요약한다. 관찰 시각을 같이 적는다.
 9. `PROJECTS.md`의 `lastPulled`를 갱신한다.
 10. `DASHBOARD.md`의 `Last pull`을 지금 시각과 처리·남긴 건수로 바꾼다.
+11. `scripts/kit.sh audit <hub>`의 `run`(끝나지 않은 Task, 즉 `completed`·`failed`가 아닌 Task가 남은 Run)·`drift`(체크포인트보다 새 `TASKS.md`, 보고서 없는 `completed`) 줄을 사용자에게 보인다. 정리는 Run 소유 Project Coordinator가 사용자 확인 뒤에 한다. `drift … checkpoint`는 그 Project가 체크포인트를 다시 쓰고, `drift … unreported`는 그 Task의 보고서를 발행한다 ([lifecycle.md](lifecycle.md#체크포인트)).
 
 Portfolio 체크포인트: Portfolio에는 `STATUS.md`가 없다. `DASHBOARD.md`의 `Last pull`과 `진행 중`·`블로커` 절이 체크포인트다. `portfolio/TASKS.md` 상태를 바꿀 때마다 같은 커밋에서 이 절들을 맞춘다 ([lifecycle.md](lifecycle.md#체크포인트)).
 

@@ -12,6 +12,8 @@
 #   kit.sh mark <hubDir> <projectId> <reportId> <applied|superseded|needs-review|invalid> [note]
 #   kit.sh usage [claude|codex|antigravity ...]
 #   kit.sh usage-watch [--interval sec] [--until caution|danger] [--for min] <provider>...
+#   kit.sh coordinator <projectDir>
+#   kit.sh audit <hubDir>
 #   kit.sh adopt-check <projectDir>
 set -eu
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -420,20 +422,32 @@ cmd_mark() {
 # Usage readers print "ok<TAB>session%<TAB>weekly%<TAB>5h reset epoch<TAB>limited 0|1<TAB>source" or "fail<TAB>reason".
 # None of them calls a model. Thresholds come from the environment so a project Override can change them.
 orca_home="$HOME/Library/Application Support/orca"
+# A failed read keeps what the tool said on stderr (and stdout for Orca) in a file; when it shows the sandbox refused
+# the call, the reason starts with "sandbox: " so a caller can tell "read it again outside" from "not readable".
+sandbox_traces='operation not permitted|EPERM|runtime_access_denied'
+fail_reason() { # reason traceFile...
+  r=$1; shift
+  if cat "$@" 2>/dev/null | grep -Eiq "$sandbox_traces"; then r="sandbox: $r"; fi
+  printf 'fail\t%s\n' "$r"
+}
 read_claude() {
+  err=$(mktemp "${TMPDIR:-/tmp}/kit-usage.XXXXXX")
   # Claude Code pushes rate_limits to Orca on every reply, so Orca's Claude value is live while a Claude session runs.
-  line=$(orca account list --json 2>/dev/null | jq -r --argjson now "$(date +%s)" --argjson st "${KIT_USAGE_STALE_MIN:-15}" '
+  raw=$(orca account list --json 2>>"$err") || true
+  printf '%s\n' "$raw" >> "$err"
+  line=$(printf '%s\n' "$raw" | jq -r --argjson now "$(date +%s)" --argjson st "${KIT_USAGE_STALE_MIN:-15}" '
     .result.rateLimits.claude // empty | select(.status == "ok" and ($now - .updatedAt / 1000) <= $st * 60)
     | ["ok", (.session.usedPercent // "-"), (.weekly.usedPercent // "-"), ((.session.resetsAt // 0) / 1000 | floor), 0, "orca"] | @tsv' 2>/dev/null) || true
   # Without the Orca pane variables the child session cannot report into (and spoil) the calling pane's status.
   [ -n "$line" ] || line=$(env -u ORCA_PANE_KEY -u ORCA_AGENT_HOOK_PORT -u ORCA_AGENT_HOOK_TOKEN -u ORCA_AGENT_HOOK_ENDPOINT \
     -u ORCA_AGENT_HOOK_ROOT -u ORCA_AGENT_HOOK_ENV -u ORCA_AGENT_HOOK_VERSION -u ORCA_AGENT_HOOK_TRANSPORT \
-    claude -p /usage --output-format stream-json --verbose 2>/dev/null | jq -r '
+    claude -p /usage --output-format stream-json --verbose 2>>"$err" | jq -r '
     def ep: if . == null then 0 else sub("\\.[0-9]+"; "") | sub("\\+00:00$"; "Z") | fromdateiso8601 end;
     select(.usage_report?) | .usage_report.rate_limits.limits as $l
     | ($l | map(select(.kind == "session"))[0]) as $s | ($l | map(select(.kind == "weekly_all"))[0]) as $w
     | ["ok", ($s.percent // "-"), ($w.percent // "-"), ($s.resets_at | ep), 0, "claude-cli"] | @tsv' 2>/dev/null) || true
-  [ -n "$line" ] && printf '%s\n' "$line" || printf 'fail\tOrca 값이 오래됐고 claude /usage도 실패\n'
+  if [ -n "$line" ]; then printf '%s\n' "$line"; else fail_reason 'Orca 값이 오래됐고 claude /usage도 실패' "$err"; fi
+  rm -f "$err"
 }
 codex_home() { # the account Orca launches Codex with; KIT_CODEX_HOME overrides
   [ -z "${KIT_CODEX_HOME:-}" ] || { printf '%s\n' "$KIT_CODEX_HOME"; return; }
@@ -444,12 +458,12 @@ codex_home() { # the account Orca launches Codex with; KIT_CODEX_HOME overrides
 }
 read_codex() {
   command -v codex >/dev/null || { printf 'fail\tcodex 없음\n'; return; }
-  h=$(codex_home) || h=; out=$(mktemp "${TMPDIR:-/tmp}/kit-usage.XXXXXX")
+  h=$(codex_home) || h=; out=$(mktemp "${TMPDIR:-/tmp}/kit-usage.XXXXXX"); err=$(mktemp "${TMPDIR:-/tmp}/kit-usage.XXXXXX")
   # app-server quits at stdin EOF without answering, so stdin stays open until the answer lands (at most 10 s).
   { printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"clientInfo":{"name":"orchestration-kit","title":"orchestration-kit","version":"1"}}}' \
       '{"jsonrpc":"2.0","id":2,"method":"account/rateLimits/read","params":{}}'
     i=0; while [ ! -s "$out" ] && [ $i -lt 40 ]; do sleep 0.25; i=$((i + 1)); done
-  } | { if [ -n "$h" ]; then CODEX_HOME=$h codex app-server; else codex app-server; fi; } 2>/dev/null |
+  } | { if [ -n "$h" ]; then CODEX_HOME=$h codex app-server; else codex app-server; fi; } 2>"$err" |
     awk -v f="$out" '/"id": *2[,}]/ { print > f; close(f); exit }' || true
   # Without an Orca account the default ~/.codex account is read: say so in the source column.
   src=codex-app-server; [ -n "$h" ] || src=codex-app-server:default-home
@@ -459,7 +473,8 @@ read_codex() {
     | ["ok", ($s.usedPercent // "-"), ($k.usedPercent // "-"), ($s.resetsAt // 0),
        (if .ordinaryUsageAllowed == false or $r.rateLimitReachedType != null then 1 else 0 end), $src] | @tsv' "$out" 2>/dev/null) || true
   rm -f "$out"
-  [ -n "$line" ] && printf '%s\n' "$line" || printf 'fail\tcodex app-server 응답 없음\n'
+  if [ -n "$line" ]; then printf '%s\n' "$line"; else fail_reason 'codex app-server 응답 없음' "$err"; fi
+  rm -f "$err"
 }
 read_agy() {
   command -v agy >/dev/null || { printf 'fail\tagy 없음\n'; return; }
@@ -467,12 +482,14 @@ read_agy() {
   # Before 1.1.11, agy treats /usage as a prompt and spends quota (Orca stops at the same version).
   printf '%s\n' "$v" | awk -F. '{ exit !($1 > 1 || ($1 == 1 && ($2 > 1 || ($2 == 1 && $3 >= 11)))) }' ||
     { printf 'fail\tagy %s: /usage를 읽지 않음 (1.1.11 이상 필요)\n' "${v:-?}"; return; }
-  line=$(agy -p /usage --output-format json --print-timeout 20s 2>/dev/null | jq -r '
+  err=$(mktemp "${TMPDIR:-/tmp}/kit-usage.XXXXXX")
+  line=$(agy -p /usage --output-format json --print-timeout 20s 2>"$err" | jq -r '
     select(.num_turns == 0 and .command.name == "usage") | [.command.data.groups[].buckets[]] as $b
     | def worst(w): $b | map(select(.window == w) | . + {used: ((1 - .remaining_fraction) * 100 | round)}) | max_by(.used);
       worst("5h") as $s | worst("weekly") as $k
     | ["ok", ($s.used // "-"), ($k.used // "-"), (if $s then $s.reset_time | sub("\\.[0-9]+"; "") | fromdateiso8601 else 0 end), 0, "agy"] | @tsv' 2>/dev/null) || true
-  [ -n "$line" ] && printf '%s\n' "$line" || printf 'fail\tagy /usage 실패\n'
+  if [ -n "$line" ]; then printf '%s\n' "$line"; else fail_reason 'agy /usage 실패' "$err"; fi
+  rm -f "$err"
 }
 state_of() { # session weekly limited
   awk -v s="$1" -v w="$2" -v l="$3" -v c="${KIT_USAGE_CAUTION:-70}" -v d="${KIT_USAGE_DANGER:-85}" -v wm="${KIT_USAGE_WEEKLY:-90}" 'BEGIN {
@@ -534,6 +551,116 @@ cmd_usage_watch() {
   done
 }
 
+# Prints the JSON of an Orca read when it answered ok, else fails. stdin is closed so a caller's loop is not read.
+orca_json() { # orca args without --json
+  j=$(orca "$@" --json 2>/dev/null </dev/null) && [ "$(printf '%s' "$j" | jq -r '.ok' 2>/dev/null)" = true ] && printf '%s\n' "$j"
+}
+orca_reason='orca 응답 없음 (sandbox 안이면 밖에서 실행)'
+
+# Agent terminals of one repository and of its worktrees; the terminal a Run names as coordinator_handle is `bound`.
+# Read-only. Output: coordinator<TAB>handle<TAB>runId|-<TAB>bound|agent<TAB>title (bound first) | coordinator<TAB>unknown<TAB>reason
+# `agent` only means a Claude/Codex/AGY session sits in that repo: whether it is a Coordinator is for a person to judge.
+cmd_coordinator() {
+  [ -d "${1:-}" ] || die "usage: kit.sh coordinator <projectDir>"
+  d=$(cd "$1" && pwd -P); top=$d
+  if is_git "$d" && c=$(common_dir "$d"); then top=$(dirname "$c"); fi
+  if ! command -v orca >/dev/null || ! command -v jq >/dev/null; then printf 'coordinator\tunknown\torca 또는 jq 없음\n'; return 0; fi
+  if ! t=$(orca_json terminal list) || ! r=$(orca_json orchestration run-list) || ! p=$(orca_json repo list); then
+    printf 'coordinator\tunknown\t%s\n' "$orca_reason"; return 0
+  fi
+  rid=$(printf '%s' "$p" | jq -r --arg top "$top" '[.result.repos[]? | select(.path == $top) | .id][0] // ""')
+  # run-list is newest first, so reverse it: the newest Run wins when one terminal is named twice.
+  runs=$(printf '%s' "$r" | jq -c '[.result.runs[]? | select(.coordinator_handle != null)] | reverse | map({key: .coordinator_handle, value: .id}) | from_entries')
+  printf '%s' "$t" | jq -r --arg rid "$rid" --arg top "$top" --arg d "$d" --argjson runs "$runs" '
+    [.result.terminals[]? | select(.agentIdentity != null)
+      | select(($rid != "" and ((.worktreeId // "") | startswith($rid + "::"))) or .worktreePath == $top or .worktreePath == $d)
+      | {h: .handle, run: $runs[.handle], title: ((.title // "-") | gsub("[\t\n\r]"; " "))}]
+    | (map(select(.run != null)) + map(select(.run == null)))[]
+    | ["coordinator", .h, (.run // "-"), (if .run then "bound" else "agent" end), .title] | @tsv'
+}
+
+# Task rows of a Kit project TASKS.md on stdin: "projectTaskId<TAB>status<TAB>report cell".
+task_rows() {
+  awk -F'|' '/^\|/ {
+    for (i = 2; i < NF; i++) { c[i - 1] = $i; gsub(/^[ \t]+|[ \t]+$/, "", c[i - 1]) }
+    if (c[1] !~ /^:?-+:?$/ && c[1] != "projectTaskId") print c[1] "\t" c[3] "\t" ((7 in c) ? c[7] : "-")
+    split("", c) }'
+}
+# Runs that still hold Tasks that are not completed. Project: the project whose TASKS.md names the Run in its Orca ref.
+audit_runs() { # hub
+  if ! command -v orca >/dev/null || ! command -v jq >/dev/null; then printf 'runs\tunknown\torca 또는 jq 없음\n'; return 0; fi
+  if ! j=$(orca_json orchestration run-list); then printf 'runs\tunknown\t%s\n' "$orca_reason"; return 0; fi
+  # A failed terminal list leaves the live/gone column at - instead of calling every Coordinator gone.
+  live=; have_live=
+  if tj=$(orca_json terminal list); then live=$(printf '%s' "$tj" | jq -r '.result.terminals[]?.handle'); have_live=1; fi
+  rmap=$(projects "$1" | while IFS="$tab" read -r id path _; do
+    f="$(project_root "$1" "$id" "$path")/.ai/TASKS.md"; [ -f "$f" ] || continue
+    grep -oE 'run_[a-z0-9]+' "$f" | sort -u | sed "s/^/$id$tab/" || true
+  done)
+  printf '%s' "$j" | jq -r '.result.runs[]? | [.id, (.coordinator_handle // "-"), (.created_at // "-")] | @tsv' |
+    while IFS="$tab" read -r run handle created; do
+      if t=$(orca_json orchestration task-list --run "$run" --brief); then
+        # failed is a finished state in Orca (a cancelled Task is failed too): a Run holding only completed and failed Tasks is not listed.
+        # The status column still names every state that is not completed, so a Run with blocked Tasks shows its failed ones too.
+        open=$(printf '%s' "$t" | jq -r '[.result.tasks[]? | select(.status != "completed")] as $n
+          | if ($n | map(select(.status != "failed")) | length) == 0 then "" else ($n | group_by(.status) | map("\(.[0].status)=\(length)") | join(",")) end')
+      else open=unknown; fi
+      [ -n "$open" ] || continue
+      state=-
+      if [ "$handle" != - ] && [ -n "$have_live" ]; then
+        if printf '%s\n' "$live" | grep -qxF -- "$handle"; then state=live; else state=gone; fi
+      fi
+      proj=$(printf '%s\n' "$rmap" | awk -F'\t' -v r="$run" '$2 == r { print $1; exit }')
+      printf 'run\t%s\t%s\t%s\t%s\t%s\n' "${proj:--}" "$run" "$created" "$state" "$open"
+    done
+}
+# Drift between a project's TASKS.md and its checkpoint, read from the committed state (reportsRef; the hub's HEAD in personal mode):
+#   checkpoint: a status changed after the last commit that touched STATUS.md (a commit that changed TASKS.md alone)
+#   unreported: a completed Task whose report cell is empty and that has no report file
+audit_drift() { # hub id path
+  p=$(project_root "$1" "$2" "$3")
+  [ -f "$p/.ai/ORCHESTRATION.md" ] || return 0
+  if [ "$p" = "$1/projects/$2" ]; then ref=HEAD; else ref=$(fm reportsRef < "$p/.ai/ORCHESTRATION.md"); fi
+  g=; is_git "$p" && git -C "$p" rev-parse --verify --quiet "$ref^{commit}" >/dev/null && g=1
+  if [ -n "$g" ]; then
+    rows=$(git -C "$p" show "$ref:./.ai/TASKS.md" 2>/dev/null | task_rows || true)
+    names=$(git -C "$p" ls-tree --name-only "$ref" -- .ai/reports/ 2>/dev/null || true)
+    s=$(git -C "$p" log -1 --format=%H "$ref" -- .ai/STATUS.md)
+    obs=$(git -C "$p" show "$ref:./.ai/STATUS.md" 2>/dev/null | awk '/^- observedAt:/ { sub(/^- observedAt:[ \t]*/, ""); print; exit }')
+    if [ -n "$s" ] && [ -n "$obs" ] && [ "$obs" != - ]; then
+      then_rows=$(git -C "$p" show "$s:./.ai/TASKS.md" 2>/dev/null | task_rows || true)
+      if [ "$(printf '%s\n' "$then_rows" | cut -f1,2)" != "$(printf '%s\n' "$rows" | cut -f1,2)" ]; then
+        printf 'drift\t%s\tcheckpoint\t%s\t%s\n' "$2" "$(git -C "$p" log -1 --format=%cI "$ref" -- .ai/TASKS.md)" "$obs"
+      fi
+    fi
+  else
+    rows=; [ ! -f "$p/.ai/TASKS.md" ] || rows=$(task_rows < "$p/.ai/TASKS.md")
+    names=$(ls "$p/.ai/reports" 2>/dev/null || true)
+  fi
+  printf '%s\n' "$rows" | while IFS="$tab" read -r tid st rep; do
+    { [ "$st" = completed ] && { [ -z "$rep" ] || [ "$rep" = - ]; }; } || continue
+    matches "$tid" '^[A-Z][A-Z0-9]*-[0-9]{4}$' || continue
+    printf '%s\n' "$names" | grep -Eq -- "-$tid-r[0-9]{2}\.md\$" && continue
+    printf 'drift\t%s\tunreported\t%s\n' "$2" "$tid"
+  done
+}
+# Read-only; changes nothing in Orca or the hub. Output:
+#   run<TAB>projectId|-<TAB>runId<TAB>createdAt<TAB>live|gone|-<TAB>status=count,... (only Runs with an unfinished Task: not completed or failed)
+#   runs<TAB>unknown<TAB>reason (Orca did not answer; drift lines still follow)
+#   drift<TAB>projectId<TAB>checkpoint<TAB>TASKS.md commit time<TAB>observedAt
+#   drift<TAB>projectId<TAB>unreported<TAB>projectTaskId
+cmd_audit() {
+  hub=${1:-}
+  [ -d "$hub" ] || die "usage: kit.sh audit <hubDir>"
+  require_role "$hub" portfolio
+  hub=$(cd "$hub" && pwd)
+  audit_runs "$hub"
+  projects "$hub" | while IFS="$tab" read -r id path status _; do
+    [ "$status" = active ] || continue
+    audit_drift "$hub" "$id" "$path"
+  done
+}
+
 # The adopt Skill map (.ai/ADOPT.md) and project overlays (.ai/roles/*.md) record their sources under "## 출처":
 #   - <path> @ <commit>          a repo file and the commit it was read at
 #   - skill <name> @ <where>     a skill: .agents/skills, .claude/skills or plugin (plugin is not checked)
@@ -592,6 +719,8 @@ case ${1:-} in
   mark) shift; cmd_mark "$@" ;;
   usage) shift; cmd_usage "$@" ;;
   usage-watch) shift; cmd_usage_watch "$@" ;;
+  coordinator) shift; cmd_coordinator "$@" ;;
+  audit) shift; cmd_audit "$@" ;;
   adopt-check) shift; cmd_adopt_check "$@" ;;
   *) awk 'NR > 2 { if (!/^#/) exit; sub(/^# ?/, ""); print }' "$0"; exit 1 ;;
 esac

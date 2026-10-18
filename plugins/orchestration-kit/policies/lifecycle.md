@@ -10,7 +10,7 @@
 |---|---|
 | 처음 여는 프로젝트 | Fresh. 프로젝트 문서로 시작 |
 | 정상 종료된 이전 세션 | Resume |
-| 이미 실행 중인 Coordinator | 그 세션으로 돌아간다. 두 번째 Coordinator를 만들지 않는다 |
+| 이미 실행 중인 Coordinator | 그 세션으로 돌아간다. 두 번째 Coordinator를 만들지 않는다. `scripts/kit.sh coordinator <저장소>`로 찾는다 |
 | 맥락이 길어짐 | 체크포인트 후 Compact |
 | 오래된 가정이 쌓임, 재개 실패 | 체크포인트 후 Fresh |
 
@@ -18,16 +18,16 @@
 
 ## 재진입 절차
 
-1. 상태 폴더를 찾는다 (`scripts/kit.sh where <저장소>`, 공유 모드는 저장소, 개인 모드는 hub의 `projects/<projectId>/`). 그 안의 `.ai/ORCHESTRATION.md`, `PROJECT.md`, `ARCHITECTURE.md`, `STATUS.md`, `TASKS.md`를 읽는다.
+1. 상태 폴더를 찾는다 (`scripts/kit.sh where <저장소>`, 공유 모드는 저장소, 개인 모드는 hub의 `projects/<projectId>/`). 그 안의 `.ai/ORCHESTRATION.md`, `PROJECT.md`, `ARCHITECTURE.md`, `STATUS.md`, `TASKS.md`를 읽는다. Orca를 쓰면 같은 저장소에 Run에 바인딩된 다른 Coordinator가 있는지 `scripts/kit.sh coordinator`로 먼저 본다. 있으면 새로 바인딩하지 않고 사용자에게 알린다.
 2. `STATUS.md`의 `## 체크포인트`를 읽는다.
 3. `in-review` Task에 PR 주소가 있으면 PR 상태를 확인한다. 병합됐으면 `completed`로 바꾸고 보고서를 반영한다 ([routing.md](routing.md#pr-흐름-pull-request)).
-4. Orca를 쓰는 경우 체크포인트의 Run에 다시 바인딩하고(`run-use`) 쌓인 메시지를 받은 뒤, Orca 상태를 조회해 진행 중 Task·Worker와 맞춘다. 다르면 Orca를 따른다. Orca에 연결할 수 없으면 그 사실을 기록하고, 실행 상태를 확정하지 않는다.
+4. Orca를 쓰는 경우 체크포인트의 Run에 다시 바인딩하고(`run-use`) 쌓인 메시지를 받은 뒤, Orca 상태를 조회해 진행 중 Task·Worker와 맞춘다. 다르면 Orca를 따른다. `scripts/kit.sh audit <hub>`로 끝나지 않은 Task가 남은 Run과 상태 어긋남을 보고, 정리·체크포인트 갱신은 제안만 한다. Orca에 연결할 수 없으면 그 사실을 기록하고, 실행 상태를 확정하지 않는다.
 5. 종료 증거가 없는 Worker를 다시 실행하지 않는다. 다만 Orca 런타임이 재시작된 뒤 Worker 터미널이 `consumer_fenced`로 메시지를 받지 못하면 그 Worker는 재사용하지 않는다. 진행 파일을 확인하고 같은 Task를 새 Worker로 `--retry-of` 시작한 뒤 이전 Worker를 정리한다 (Orca 이슈 #30013, 우회).
 6. 미해결 결정과 사용자 승인 대기 항목을 먼저 보여준다.
 
 ## 체크포인트
 
-`TASKS.md`의 상태 값을 바꿀 때마다, 같은 커밋에서 `STATUS.md`의 `## 체크포인트`를 덮어쓴다 (이 절만 교체). 직접 Compact·Fresh 하기 전과 세션을 끝낼 때도 쓴다. 자동 압축은 예고 없이 오므로 그 직전에 쓰는 것에 기대지 않는다. 상태가 바뀔 때마다 쓰면 압축 시점과 상관없이 체크포인트가 최신으로 남는다. Portfolio 체크포인트는 `DASHBOARD.md`다 ([reporting.md](reporting.md)). 체크포인트에 적는 항목:
+`TASKS.md`의 상태 값을 바꿀 때마다, 같은 커밋에서 `STATUS.md`의 `## 체크포인트`를 덮어쓴다 (이 절만 교체). 직접 Compact·Fresh 하기 전과 세션을 끝낼 때도 쓴다. 자동 압축은 예고 없이 오므로 그 직전에 쓰는 것에 기대지 않는다. 상태가 바뀔 때마다 쓰면 압축 시점과 상관없이 체크포인트가 최신으로 남는다. `scripts/kit.sh audit`의 `drift … checkpoint` 줄은 이 규칙을 어긴 커밋이 있다는 뜻이다. 체크포인트를 다시 쓴다. Portfolio 체크포인트는 `DASHBOARD.md`다 ([reporting.md](reporting.md)). 체크포인트에 적는 항목:
 
 - `observedAt`: 기록 시각 (ISO 8601)
 - 진행 중 Task와 Orca 참조 (Run·Task·Dispatch ID)
