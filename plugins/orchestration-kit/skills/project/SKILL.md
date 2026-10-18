@@ -27,6 +27,8 @@ description: 프로젝트의 중앙 Coordinator로 일할 때 사용한다. 프�
 
 [lifecycle.md](../../policies/lifecycle.md#재진입-절차)의 재진입 절차를 따른다. 요약해서 보여준다: 진행 중 Task, 미해결 결정, 블로커, 승인 대기. Orca 상태를 확인하지 못했으면 그렇다고 말한다.
 
+셸에서 `../../scripts/kit.sh adopt-check <저장소>`를 실행한다. `stale`이나 `new`가 나오면 요약에 넣고 [adopt Skill](../adopt/SKILL.md)을 다시 실행하자고 제안한다. `none`·`ok`면 말하지 않는다.
+
 `.ai/ORCHESTRATION.md`의 `integration`이 `unset`이거나 없으면 첫 Task 전에 [반영 방식](../../policies/routing.md#반영-방식)을 정한다. 근거가 분명하면 정해서 적고, 아니면 Portfolio에 묻는다.
 
 ## 2. 업무 접수

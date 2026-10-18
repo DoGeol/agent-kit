@@ -11,6 +11,7 @@
 #   kit.sh mark <hubDir> <projectId> <reportId> <applied|superseded|needs-review|invalid> [note]
 #   kit.sh usage [claude|codex|antigravity ...]
 #   kit.sh usage-watch [--interval sec] [--until caution|danger] [--for min] <provider>...
+#   kit.sh adopt-check <projectDir>
 set -eu
 root=$(cd "$(dirname "$0")/.." && pwd)
 tab=$(printf '\t')
@@ -499,6 +500,47 @@ cmd_usage_watch() {
   done
 }
 
+# The adopt Skill map (.ai/ADOPT.md) and project overlays (.ai/roles/*.md) record their sources under "## 출처":
+#   - <path> @ <commit>          a repo file and the commit it was read at
+#   - skill <name> @ <where>     a skill: .agents/skills, .claude/skills or plugin (plugin is not checked)
+# Prints "none" (no overlays), "ok", or one line per finding: stale<TAB>overlay<TAB>source<TAB>detail,
+# new<TAB>skill<TAB>name<TAB>where. Never fails on findings; only bad input dies.
+cmd_adopt_check() {
+  [ $# = 1 ] && [ -d "$1" ] || die "usage: kit.sh adopt-check <projectDir>"
+  repo=$(cd "$1" && pwd); is_git "$repo" || die "$repo: git 저장소가 아님"
+  loc=$(locate "$repo") || die "$repo: 초기화되지 않음 (setup Skill로 초기화)"
+  ai="${loc#*"$tab"}/.ai"; set --
+  for o in "$ai/ADOPT.md" "$ai"/roles/*.md; do [ -f "$o" ] && set -- "$@" "$o"; done
+  [ $# -gt 0 ] || { echo none; return 0; }
+  found=; known=
+  for o in "$@"; do
+    srcs=$(awk '/^## /{ on = ($0 == "## 출처"); next } on && /^- /{ sub(/^- /, ""); print }' "$o")
+    [ -n "$srcs" ] || continue
+    while IFS= read -r src; do
+      case $src in
+        "skill "*" @ "*)
+          name=${src#skill }; name=${name%% @ *}; where=${src##* @ }; known="$known $name "
+          case $where in plugin) ;; *) [ -d "$repo/$where/$name" ] ||
+            { found=1; printf 'stale\t%s\t%s\t%s\n' "${o##*/}" "skill $name" "없어짐: $where/$name"; } ;; esac ;;
+        *" @ "*)
+          path=${src% @ *}; at=${src##* @ }
+          if [ ! -e "$repo/$path" ]; then found=1; printf 'stale\t%s\t%s\t%s\n' "${o##*/}" "$path" "없어짐"; continue; fi
+          cur=$(git -C "$repo" log -1 --format=%H -- "$path")
+          case $cur in "$at"*) ;; *) found=1; printf 'stale\t%s\t%s\t%s\n' "${o##*/}" "$path" "$at -> $(printf %.7s "$cur")" ;; esac ;;
+      esac
+    done <<SRC
+$srcs
+SRC
+  done
+  for where in .agents/skills .claude/skills; do
+    for sk in "$repo/$where"/*/; do
+      [ -d "$sk" ] || continue; name=$(basename "$sk")
+      case $known in *" $name "*) ;; *) found=1; known="$known $name "; printf 'new\tskill\t%s\t%s\n' "$name" "$where" ;; esac
+    done
+  done
+  [ -n "$found" ] || echo ok
+}
+
 case ${1:-} in
   init) shift; cmd_init "$@" ;;
   where) [ -d "${2:-}" ] || die "usage: kit.sh where <projectDir>"; locate "$2" || die "$2: 초기화되지 않음 (setup Skill로 초기화)" ;;
@@ -508,5 +550,6 @@ case ${1:-} in
   mark) shift; cmd_mark "$@" ;;
   usage) shift; cmd_usage "$@" ;;
   usage-watch) shift; cmd_usage_watch "$@" ;;
-  *) sed -n '3,13p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
+  adopt-check) shift; cmd_adopt_check "$@" ;;
+  *) sed -n '3,14p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
 esac

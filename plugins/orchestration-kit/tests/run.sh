@@ -17,8 +17,8 @@ for s in "$root"/skills/*/SKILL.md; do
   [ "$keys" = "description name " ] || fail "$s frontmatter keys: $keys"
   grep -q "^name: $dir\$" "$s" || fail "$s name != $dir"
 done
-[ "$(ls -d "$root"/skills/*/ | wc -l | tr -d ' ')" = 4 ] || fail "expected 4 skills"
-ok "skill frontmatter (portfolio, project, setup, issue-review)"
+[ "$(ls -d "$root"/skills/*/ | wc -l | tr -d ' ')" = 5 ] || fail "expected 5 skills"
+ok "skill frontmatter (portfolio, project, setup, issue-review, adopt)"
 
 # Policy version follows the plugin version, so a policy change always reaches users with a bump
 grep -q "\"version\": \"$(cat "$root/policies/VERSION")\"" "$root/.claude-plugin/plugin.json" || fail "policies/VERSION != plugin.json version"
@@ -255,6 +255,27 @@ EOF
   rm "$hub/handoffs/outbox/sample-app/PORT-0006.md" "$hub/handoffs/outbox/sample-app/PORT-none.md"
   ok "board: blocked/review rows, delegation until accepted or closed, STATUS next action, personal row, workers mapped by exact Orca ref, unknown without it"
 fi
+
+# 8g. adopt-check: none without overlays, ok when sources match, stale on file change or removed skill, new skill listed
+ad="$tmp/adopt"; mkdir -p "$ad/.agents/skills/ui-build" "$ad/docs"
+git -C "$ad" init -q -b main
+printf 'rules\n' > "$ad/DESIGN.md"; printf 'x\n' > "$ad/.agents/skills/ui-build/SKILL.md"; printf 'a\n' > "$ad/docs/a.md"
+git_commit "$ad" base
+"$kit" init project "$ad" adopt-app > /dev/null
+[ "$("$kit" adopt-check "$ad")" = none ] || fail "adopt-check without overlays"
+c=$(git -C "$ad" log -1 --format=%h -- DESIGN.md)
+mkdir -p "$ad/.ai/roles"
+printf '# frontend 보강\n\n## 출처\n- DESIGN.md @ %s\n- skill ui-build @ .agents/skills\n- skill design-review @ plugin\n\n## 관점\n- 토큰만 쓴다\n' "$c" > "$ad/.ai/roles/frontend.md"
+printf '# 대응표\n\n## 출처\n- docs/a.md @ %s\n' "$(git -C "$ad" log -1 --format=%h -- docs/a.md)" > "$ad/.ai/ADOPT.md"
+[ "$("$kit" adopt-check "$ad")" = ok ] || fail "adopt-check fresh: $("$kit" adopt-check "$ad")"
+printf 'rules 2\n' > "$ad/DESIGN.md"; mkdir -p "$ad/.claude/skills/qa-sheet"; printf 'y\n' > "$ad/.claude/skills/qa-sheet/SKILL.md"
+rm -r "$ad/.agents/skills/ui-build"; git_commit "$ad" change
+out=$("$kit" adopt-check "$ad")
+printf '%s\n' "$out" | grep -q "^stale	frontend.md	DESIGN.md	$c -> " || fail "changed source not stale: $out"
+printf '%s\n' "$out" | grep -q '^stale	frontend.md	skill ui-build	없어짐' || fail "removed skill not stale: $out"
+printf '%s\n' "$out" | grep -q '^new	skill	qa-sheet	.claude/skills' || fail "new skill not listed: $out"
+if printf '%s\n' "$out" | grep -q 'design-review\|ADOPT.md'; then fail "plugin skill or unchanged source flagged: $out"; fi
+ok "adopt-check: none, ok, stale on changed file and removed skill, new skill; plugin skills not checked"
 
 # 8c. Usage readers against stub orca, claude, codex and agy (no real provider is called)
 if command -v jq > /dev/null; then
