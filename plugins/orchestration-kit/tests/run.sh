@@ -573,7 +573,7 @@ EOF
   chmod +x "$k8/bin/orca"
   kboard() { PATH="$k8/bin:$PATH" "$kit" board "$khub"; }
   # One worker-list row. Args: run state taskId dispatchId terminal verdict reason lastObservedAt activity attention terminalState retainedReason ("-" = absent)
-  krow() { jq -nc --arg ws "w1::$kr" '$ARGS.positional as $a | def v($i): if $a[$i] == "-" then null else $a[$i] end;
+  krow() { jq -nc --arg ws "w1::${kws:-$kr}" '$ARGS.positional as $a | def v($i): if $a[$i] == "-" then null else $a[$i] end;
     {runId: $a[0], workerState: $a[1], taskId: v(2), dispatchId: v(3), agentTerminalHandle: $a[4], terminalState: $a[10], resource: {retainedReason: v(11)},
        projection: {provider: {id: "claude", model: "haiku"}, workspace: {id: $ws}, liveness: {verdict: $a[5], reason: v(6)},
          evidence: {lastObservedAt: (v(7) | if . == null then null else tonumber end)}, stage: {activity: v(8)},
@@ -636,6 +636,17 @@ EOF
   printf '%s\n' "$out" | grep -q '^worker	.*	term_b	' || fail "B4 the readable Run's Worker is missing: $out"
   if printf '%s\n' "$out" | grep -q '^workers	unknown'; then fail "B4 a partial read was reported as unknown: $out"; fi
   ok "B4 partial read: a failed Run and a Run with more pages give workers partial lines, the rest stays, not unknown"
+  # B6 a Worker whose Worktree folder is gone: the project is still known through the task link; with no link it stays unknown
+  printf '{"ok":true,"result":{"runs":[{"id":"run_a","coordinator_handle":"term_ca"}]}}\n' > "$k8/runs.json"
+  kws="$k8/gone-worktree"
+  kwl run_a \
+    "$(krow run_a ready task_a ctx_a term_g1 live - 1790000000000 working - active -)" \
+    "$(krow run_a ready task_none ctx_none term_g2 live - 1790000000000 working - active -)"
+  out=$(kboard); unset kws
+  glink() { printf '%s\n' "$out" | awk -F'\t' -v t="$1" '$1 == "worker" && $7 == t { print $2 "|" $3 "|" $8 "|" $9 }'; }
+  [ "$(glink term_g1)" = "k8-app|K8-0001|P1|제목 하나" ] || fail "B6 missing Worktree path lost the project the task link names: $(glink term_g1)"
+  [ "$(glink term_g2)" = "-|-|-|-" ] || fail "B6 missing Worktree path and no link must stay unknown: $(glink term_g2)"
+  ok "B6 Worker with a Worktree folder gone: project from the task link, unknown only when there is no link"
 fi
 
 # 9. Marketplace keeps the existing plugin and registers this one

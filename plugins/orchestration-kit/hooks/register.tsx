@@ -404,7 +404,7 @@ export const register: Register = (on, options) => {
             <Box key="portfolio-checked" flexDirection="row">
               <Text color="error">확인 실패</Text>
               {b.okAt !== null && <Text dimColor> · 마지막 성공 </Text>}
-              {b.okAt !== null && ago(b.okAt, { prefix: '' }, 'portfolio-checked-ok')}
+              {b.okAt !== null && since(b.okAt, { prefix: '' }, 'portfolio-checked-ok')}
             </Box>
           ) : since(b.checkedAt, {}, 'portfolio-checked')}
         </Box>
@@ -436,7 +436,8 @@ export const register: Register = (on, options) => {
     const projects = mineFirst(b.projects, p => p.id, b.mine)
     const stale = !!b.failed
     const idOf = (it: WorkItem) => `${it.project}-${it.key || 'unlinked'}`
-    const anomalies = unknown ? 0 : stalled.length + (audit && !audit.error ? audit.gone.length + audit.drift.length : 0)
+    const anomalies = unknown ? 0 : stalled.length
+    const hasAudit = !unknown && !!audit && !audit.error
     return (
       <Box flexDirection="column">
         {b.failed ? (
@@ -491,6 +492,7 @@ export const register: Register = (on, options) => {
         {!unknown && stalled.map(it => (
           <Box key={`stalled-${idOf(it)}`}><Text color={DOT_COLOR[it.dot]} wrap="truncate-end">  {glyph(it.dot)} {it.label}  {detail(it, now)}</Text></Box>
         ))}
+        {hasAudit && <Box key="pane-audit"><Text bold>Run 점검 {audit.gone.length} · 상태 어긋남 {audit.drift.reduce((n, d) => n + d.count, 0)}</Text></Box>}
         {!unknown && audit?.gone.map(g => (
           <Text key={`gone-${g.run}`} dimColor wrap="truncate-end">  Coordinator 없는 Run: {g.run} ({g.status}, {g.createdAt.slice(0, 10)})</Text>
         ))}

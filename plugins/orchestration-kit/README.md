@@ -83,7 +83,7 @@ Claude Code 세션의 입력창 위, mods-hud 카드 아래에 한 줄이 붙는
 - 읽지 못한 값은 0이나 `없음`이 아니라 `?`로 보인다: Orca를 읽지 못하면 `진행 ?`, 일부 Run만 못 읽으면 `진행 3?`. `kit.sh board`가 실패하면 마지막 성공 데이터를 흐리게 두고 `확인 실패 · 마지막 성공 N분 전`이 뜬다.
 - `확인 N초 전`은 마지막 확인에서 지난 시간이고 1초마다 바뀐다(Claude Code 터미널·desktop). 30초가 넘으면 노란색. 이 기능이 없는 화면에서는 `확인 HH:MM:SS`로 보인다.
 - `포트폴리오`를 누르거나 `/portfolio-board`를 실행하면 pane이 열린다. 맨 위에 `확인 HH:MM:SS (N초 전) · 데이터 변경 HH:MM`(데이터 변경은 보이는 데이터가 마지막으로 바뀐 시각이고, Orca가 Worker를 다시 본 것은 변경이 아니다). 그 아래로 처리할 것(프로젝트별 한 줄씩), 진행 중(업무 단위: 프로젝트 / 업무, 활동 N분 전, Worker 수와 Provider), 멈춤·이상, 프로젝트 N (active)(진행 Task 수, 체크포인트·Pull 경과 시간, 다음 작업). Project 세션에서는 그 프로젝트가 각 구역 맨 위에 온다.
-- 멈춤·이상에는 멈춤 의심 업무와 사람 입력이 필요한 업무가 나오고, pane을 연 뒤에는 `kit.sh audit`(무거워서 5분마다)가 찾은 Coordinator 없는 Run과 상태 어긋남도 붙는다. pane을 열기 전에는 `audit`를 실행하지 않는다.
+- 멈춤·이상 N은 멈춤 의심 업무와 사람 입력이 필요한 업무만 센다(띠의 `멈춤 N`과 같은 수). pane을 연 뒤에는 `kit.sh audit`(무거워서 5분마다)가 찾은 Coordinator 없는 Run과 상태 어긋남이 그 아래 `Run 점검 N · 상태 어긋남 M` 소제목과 자기 건수로 따로 붙는다. pane을 열기 전에는 `audit`를 실행하지 않는다.
 - 10초마다 `kit.sh board <hub>`를 실행한다. 읽기만 하고 모델을 부르지 않는다. 읽을 Orca Run은 Coordinator 터미널이 살아 있는 Run과 열린 Task가 가리키는 Run뿐이라 확인 1회에 `orca` 호출이 2 + (그런 Run 수)번, 실제 hub 한 곳에서 1초 안팎. 읽기에 실패하면 pane에 이유가 나온다.
 - hub 위치: Portfolio 세션과 개인 모드 Project는 스스로 찾는다. 공유 모드 Project는 `register`가 Git 공통 폴더에 남긴 포인터(`orchestration-kit-hub`)로 찾는다(`kit.sh hub <폴더>`). 포인터가 없던 프로젝트는 hub에서 `register`를 다시 실행하면 생긴다. `/config`의 `hubPath`는 이 모두보다 우선한다. Kit와 무관한 저장소는 `hubPath`를 설정할 때만 줄이 뜬다.
 - 세션 도중 hub가 생기면(초기화 전에 시작한 세션) 다음 턴이 끝날 때나 pane을 열 때 다시 찾는다. 찾은 뒤에는 그 세션 동안 바꾸지 않는다.

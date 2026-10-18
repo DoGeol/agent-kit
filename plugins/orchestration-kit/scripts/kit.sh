@@ -357,9 +357,10 @@ board_workers() { # lines "projectId<TAB>repo root<TAB>projectTaskId<TAB>Orca re
     if [ "$run" = '!partial' ]; then printf 'workers\tpartial\t%s\n' "$state"; continue; fi
     c=$(common_dir "$ws") || c=; c=${c%/.git}
     # The task whose Orca ref names this Orca task (else this dispatch) exactly ("run_x / task_y / ctx_z"), else the repo's first project.
+    # With no repo (the Worktree folder is gone) only the exact link counts, across all projects; no link leaves the project unknown.
     m=$(printf '%s\n' "$1" | awk -F'\t' -v c="$c" -v t="$task" -v d="$disp" '
-      c == "" || $2 != c { next }
-      first == "" { first = $1 }
+      c != "" && $2 != c { next }
+      c != "" && first == "" { first = $1 }
       { n = split($4, a, /[\/, \t()·;]+/); for (i = 1; i <= n; i++) {
           if (t != "-" && a[i] == t && !tm) tm = $1 "\t" $3 "\t" $5 "\t" $7
           if (d != "-" && a[i] == d && !dm) dm = $1 "\t" $3 "\t" $5 "\t" $7 } }

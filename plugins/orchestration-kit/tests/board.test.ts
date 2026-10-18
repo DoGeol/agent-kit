@@ -400,6 +400,28 @@ for (const surface of ['terminal', 'desktop'] as const) {
     await band.unmount()
   })
 
+  test(`W4 ${surface}: a failed check on the band says how long ago the last good one was`, async ($, on) => {
+    const w: World = {}
+    const clock = await boot($, on, surface, boardOf(wrow({ port: 'P1' })), w)
+    w.exit = 1; w.stderr = 'kit.sh: 실패\n'; w.board = ''
+    await clock.advance(2 * MIN)
+    const band = await $.ui.mount({ plugin: 'orchestration-kit', surface, component: 'AbovePrompt', props: BAND })
+    expect((await band.find({ key: 'portfolio-checked' }))?.text).toContain('마지막 성공')
+    expect((await band.find({ type: 'Text', in: 'portfolio-checked-ok' }))?.text).toBe('2분 전')
+    await band.unmount()
+  })
+
+  test(`W8 ${surface}: audit lines do not count as stalled; they sit under their own Run 점검 heading with their own counts`, async ($, on) => {
+    const audit = [['run', 'app', 'run_q', '2026-10-02T00:00:00+09:00', 'gone', 'blocked=4'].join(T), ['run', 'app', 'run_r', '2026-10-03T00:00:00+09:00', 'gone', 'blocked=1'].join(T), ...Array.from({ length: 15 }, (_, i) => ['drift', 'app', 'unreported', `T${i}`].join(T))].join('\n')
+    const clock = await boot($, on, surface, boardOf(wrow({ port: 'P1' })), { audit })
+    await $.command.run({ command: 'portfolio-board', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 90 } } as never)
+    await clock.advance(10)
+    const pane = await $.ui.mount({ plugin: 'orchestration-kit', surface, component: 'Pane', requestId: 'portfolio-board', props: PANE } as never)
+    expect((await pane.find({ key: 'pane-stalled' }))?.text).toBe('멈춤·이상 0')
+    expect((await pane.find({ key: 'pane-audit' }))?.text).toBe('Run 점검 2 · 상태 어긋남 15')
+    await pane.unmount()
+  })
+
   test(`W5 ${surface}: the time since the last check counts up, restarts on a new check, turns late`, async ($, on) => {
     const clock = await boot($, on, surface, boardOf(wrow({ port: 'P1' })))
     const band = await $.ui.mount({ plugin: 'orchestration-kit', surface, component: 'AbovePrompt', props: BAND })
