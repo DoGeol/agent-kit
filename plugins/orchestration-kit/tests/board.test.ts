@@ -535,3 +535,39 @@ for (const surface of ['terminal', 'desktop'] as const) {
     })
   }
 }
+
+// User decision requests: kit.sh adds a `decision` line per open request; the line, the pane and the command it points at.
+const DECISIONS = [
+  ['decision', 'app', 'APP-0001-d01', 'waiting', '2026-10-18T09:00:00+09:00', 'Worker 계획 승인', '/r/app/.ai/user-decisions/APP-0001-d01.md', '/h/hub/handoffs/user-decisions/app'],
+  ['decision', 'api', 'API-0002-d01', 'answered', '2026-10-18T09:10:00+09:00', '범위 결정', '/r/api/.ai/user-decisions/API-0002-d01.md', '/h/hub/handoffs/user-decisions/api'],
+  ['decision', 'api', 'API-0003-d01', 'asking', '2026-10-18T09:20:00+09:00', '배포 승인', '/r/api/.ai/user-decisions/API-0003-d01.md', '/h/hub/handoffs/user-decisions/api'],
+  ['decision', 'api', 'API-0004-d01', 'bogus', '2026-10-18T09:30:00+09:00', '모르는 상태', '/r/api/.ai/user-decisions/API-0004-d01.md', '/h/hub/handoffs/user-decisions/api'],
+  ['decision', 'api', 'API-0005-d01', 'waiting'],
+].map(r => r.join(T)).join('\n')
+
+test('parseBoard reads decision lines with their state, time and paths; an unknown state or a short line is skipped', () => {
+  const b = parseBoard(DECISIONS)
+  expect(b.items.map(i => `${i.kind}:${i.project}:${i.id}:${i.state}`)).toEqual(['decision:app:APP-0001-d01:waiting', 'decision:api:API-0002-d01:answered', 'decision:api:API-0003-d01:asking'])
+  expect(b.items[0]).toEqual({
+    kind: 'decision', project: 'app', id: 'APP-0001-d01', text: '대기 · Worker 계획 승인', state: 'waiting', createdAt: '2026-10-18T09:00:00+09:00',
+    file: '/r/app/.ai/user-decisions/APP-0001-d01.md', answerDir: '/h/hub/handoffs/user-decisions/app',
+  })
+  expect(b.items.map(i => i.text)).toEqual(['대기 · Worker 계획 승인', '답 도착 · 범위 결정', '묻는 중 · 배포 승인'])
+})
+
+test('bandParts: waiting decisions are counted after the blockers and before the reports', () => {
+  const parts = bandParts(parseBoard(`${BOARD}\n${DECISIONS}`), NOW).map(p => `${p.label}/${p.tone}`)
+  expect(parts).toEqual(['블로커 1/error', '결정 대기 3/warning', '보고 대기 2/warning', '위임 미수락 1/warning', '검토 필요 1/warning', '진행 1/suggestion'])
+})
+
+for (const surface of ['terminal', 'desktop'] as const) {
+  test(`pane on ${surface}: decisions show their state and the first waiting one points at /decide`, async ($, on) => {
+    await boot($, on, surface, DECISIONS)
+    const pane = await $.ui.mount({ plugin: 'orchestration-kit', surface, component: 'Pane', requestId: 'portfolio-board', props: PANE } as never)
+    expect(await pane.find({ type: 'Text', text: /APP-0001-d01 · 대기 · Worker 계획 승인 {2}→ \/decide/ })).toBeDefined()
+    expect(await pane.find({ type: 'Text', text: /API-0002-d01 · 답 도착 · 범위 결정$/ })).toBeDefined()
+    expect(await pane.find({ type: 'Text', text: /API-0003-d01 · 묻는 중 · 배포 승인$/ })).toBeDefined()
+    expect(await pane.find({ type: 'Text', text: /결정 대기 1/ })).toBeDefined()
+    await pane.unmount()
+  })
+}

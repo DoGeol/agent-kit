@@ -28,7 +28,7 @@ description: 프로젝트의 중앙 Coordinator로 일할 때 사용한다. 프�
 
 먼저 셸에서 `../../scripts/kit.sh coordinator <저장소>`로 이 저장소의 다른 Coordinator를 확인한다. Run에 바인딩된 다른 세션(`bound`)이 있으면 새로 바인딩하지 않고 사용자에게 알린다. 목록에는 이 세션 자신도 나온다. `agent` 줄은 Coordinator인지 사용자에게 묻는다.
 
-[lifecycle.md](../../policies/lifecycle.md#재진입-절차)의 재진입 절차를 따른다. 요약해서 보여준다: 진행 중 Task, 미해결 결정, 블로커, 승인 대기. 셸에서 `../../scripts/kit.sh audit <hub>`(hub 경로는 `../../scripts/kit.sh hub <저장소>`. 찾지 못하면 그렇다고 말한다)를 실행해 끝나지 않은 Run과 상태 어긋남(`run`·`drift` 줄)도 요약에 넣는다. 정리와 체크포인트 갱신은 제안만 한다. Orca 상태를 확인하지 못했으면 그렇다고 말한다.
+[lifecycle.md](../../policies/lifecycle.md#재진입-절차)의 재진입 절차를 따른다. 요약해서 보여준다: 진행 중 Task, 미해결 결정, 블로커, 승인 대기. 셸에서 `../../scripts/kit.sh audit <hub>`(hub 경로는 `../../scripts/kit.sh hub <저장소>`. 찾지 못하면 그렇다고 말한다)를 실행해 끝나지 않은 Run과 상태 어긋남(`run`·`drift` 줄)도 요약에 넣는다. 정리와 체크포인트 갱신은 제안만 한다. Orca 상태를 확인하지 못했으면 그렇다고 말한다. 답이 온 사용자 결정 요청은 셸에서 `../../scripts/kit.sh decision-take <저장소> <decisionId>`로 받는다. exit 0일 때만 그 답으로 진행한다 (1은 받을 답이 없음, 3은 이미 받음, 4는 두 답이 다름, 5는 요청이 바뀜. 모두 진행하지 않는다).
 
 셸에서 `../../scripts/kit.sh adopt-check <저장소>`를 실행한다. `stale`이나 `new`가 나오면 요약에 넣고 [adopt Skill](../adopt/SKILL.md)을 다시 실행하자고 제안한다. `none`·`ok`면 말하지 않는다.
 
@@ -50,9 +50,9 @@ description: 프로젝트의 중앙 Coordinator로 일할 때 사용한다. 프�
 2. 하위 작업마다 [routing.md](../../policies/routing.md)로 실행 주체(Direct / Subagent / Independent Session)와 위치(현재 / 새 Worktree)를 따로 정한다.
 3. 하위 작업마다 [roles.md](../../policies/roles.md)로 역할과 조합 방식(Worker 1개에 주·보조 역할 / 설계 → 구현 여러 Worker)을 정한다. 역할 원본은 [../../roles/](../../roles/), 프로젝트 보강은 `.ai/roles/<id>.md`.
 4. 병렬 Worker는 파일 소유 범위를 정하고, 공유 파일 수정자를 한 명 지정한다. 기본 상한 3개.
-5. 셸에서 `../../scripts/kit.sh usage`로 사용량을 읽는다 (sandbox 밖에서 실행해도 되는 읽기 명령. 이유가 `sandbox:`로 시작하면 밖에서 다시 읽는다) ([routing.md](../../policies/routing.md#사용량)). Worker 계획(Worker 수, Provider, `strong` 등급, 실패 때 상향 상한)을 사용량과 함께 사용자에게 보여주고 승인받는다. 승인을 받으면 같은 턴에서 첫 Worker를 시작한다. 다른 확인을 기다리지 않는다. 승인한 범위 안에서는 Worker를 시작·재시작할 때 다시 묻지 않는다 ([permissions.md](../../policies/permissions.md#결정권)).
+5. 셸에서 `../../scripts/kit.sh usage`로 사용량을 읽는다 (sandbox 밖에서 실행해도 되는 읽기 명령. 이유가 `sandbox:`로 시작하면 밖에서 다시 읽는다) ([routing.md](../../policies/routing.md#사용량)). Worker 계획(Worker 수, Provider, `strong` 등급, 실패 때 상향 상한)을 사용량과 함께 사용자에게 보여주고 승인받는다. 이 세션에서 묻거나 사용자 결정 요청 파일([양식](../../templates/decisions/user-decision.md))로 쓴다. 답을 기다리는 동안 다른 Task를 진행한다. 승인을 받으면(이 세션의 답, 또는 `decision-take`가 받아들인 답) 같은 턴에서 첫 Worker를 시작한다. 다른 확인을 기다리지 않는다. 승인한 범위 안에서는 Worker를 시작·재시작할 때 다시 묻지 않는다 ([permissions.md](../../policies/permissions.md#결정권)).
 6. `TASKS.md`의 `실행 방식` 열에 선택을 적는다. 역할도 같이 적는다 (`role: frontend+designer`).
-7. [권장] 새 구성 요소·계약·저장 데이터가 생기는 등 구조를 정해야 하면 먼저 `architect` Worker(`strong`)로 설계 문서를 받는다. 사용자가 설계를 승인한 뒤 그 문서를 planner에 넘긴다. 요구가 모호하거나 하위 작업이 여럿이면 구현 전에 `planner` Worker(`strong`)로 계획을 받는다. 계획의 "사용자만 답할 수 있음" 질문은 [사용자에게 결정 묻기](../../policies/communication.md#사용자에게-결정-묻기) 형식으로 묻고, 답을 받은 뒤 구현을 배정한다.
+7. [권장] 새 구성 요소·계약·저장 데이터가 생기는 등 구조를 정해야 하면 먼저 `architect` Worker(`strong`)로 설계 문서를 받는다. 사용자가 설계를 승인한 뒤 그 문서를 planner에 넘긴다. 요구가 모호하거나 하위 작업이 여럿이면 구현 전에 `planner` Worker(`strong`)로 계획을 받는다. 계획의 "사용자만 답할 수 있음" 질문은 [사용자에게 결정 묻기](../../policies/communication.md#사용자에게-결정-묻기) 형식으로 이 세션에서 묻거나 사용자 결정 요청 파일로 쓰고, 답을 받은 뒤 구현을 배정한다.
 
 ## 4. 실행 감독
 
@@ -96,4 +96,5 @@ description: 프로젝트의 중앙 Coordinator로 일할 때 사용한다. 프�
 
 - Portfolio 저장소 파일 쓰기
 - 사용자 승인 없는 운영 배포, 데이터 삭제, 외부 비용, 권한 변경, Push·PR, 승인 범위 밖 Worker 시작
+- 사용자 결정 답 파일 쓰기·고치기, 한 번 표지(`.done.md`) 지우기
 - 근거 없는 진행률 표시

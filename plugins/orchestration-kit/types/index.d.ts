@@ -12,12 +12,20 @@ export type ProjectRow = {
 
 /** Something a person has to act on. */
 export type Item = {
-  kind: 'blocked' | 'pending' | 'handoff' | 'review'
+  kind: 'blocked' | 'pending' | 'handoff' | 'review' | 'decision'
   /** projectId, or portfolio for a Portfolio task */
   project: string
   /** task, report or PORT id */
   id: string
   text: string
+  /** decision only: waiting (nobody asked yet), asking (a dialog is open), answered (an accepted answer waits to be taken), conflict (two answers differ). */
+  state?: 'waiting' | 'asking' | 'answered' | 'conflict'
+  /** decision only: when the request was made, ISO. */
+  createdAt?: string
+  /** decision only: the request file. */
+  file?: string
+  /** decision only: the hub folder a Portfolio answer is written to. */
+  answerDir?: string
 }
 
 export type WorkerRow = {
@@ -115,6 +123,10 @@ declare module 'claude-code' {
       discovery: Discovery
       /** The latest audit, or null before the first one (it starts when the pane is first opened). */
       audit: Audit | null
+      /** The project /decide asked about last: its next request is asked next. */
+      decideLast: string
+      /** Answered requests (project/decisionId) this session was already told about. */
+      decideNotified: string[]
     }
   }
 }

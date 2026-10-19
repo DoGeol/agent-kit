@@ -53,6 +53,13 @@ done
 for h in Summary Changes 'Acceptance evidence' Decisions 'Risks / Blockers' Follow-ups References; do
   grep -q "^## $h\$" "$root/templates/reports/project-report.md" || fail "report template missing section $h"
 done
+for k in schema decisionId projectId projectTaskId createdAt irreversible; do
+  grep -q "^$k: " "$root/templates/decisions/user-decision.md" || fail "decision request template missing $k"
+  grep -q "^$k: " "$root/tests/fixtures/SAMPLE-0001-d01.md" || fail "decision request fixture missing $k"
+done
+for h in 배경 '질문 1' '실행 내용'; do
+  grep -q "^## $h" "$root/tests/fixtures/SAMPLE-0001-d01.md" || fail "decision request fixture missing section $h"
+done
 ok "templates match protocol fields"
 
 # 4a. Role profiles: listed in policies/roles.md, required sections, short enough to inline in a spec
@@ -648,6 +655,202 @@ EOF
   [ "$(glink term_g2)" = "-|-|-|-" ] || fail "B6 missing Worktree path and no link must stay unknown: $(glink term_g2)"
   ok "B6 Worker with a Worktree folder gone: project from the task link, unknown only when there is no link"
 fi
+
+# 8l. User decision requests: board lines and their order, invalid requests (hub with a shared and a personal project; a stub orca keeps board off the real one)
+T=$(printf '\t')
+dstub="$tmp/dec-bin"; mkdir "$dstub"; printf '#!/bin/sh\nexit 1\n' > "$dstub/orca"; chmod +x "$dstub/orca"
+dhub="$tmp/dec-hub"; mkdir "$dhub"; "$kit" init portfolio "$dhub" > /dev/null
+da="$tmp/dec-a"; mkdir "$da"; git -C "$da" init -q -b main; "$kit" init project "$da" dec-a DECA > /dev/null; "$kit" register "$dhub" "$da" > /dev/null
+db="$tmp/dec-b"; mkdir "$db"; git -C "$db" init -q -b main; printf x > "$db/x"; git_commit "$db" base
+"$kit" init project --personal "$dhub" "$db" dec-b DECB > /dev/null; "$kit" register "$dhub" "$db" > /dev/null
+dau="$da/.ai/user-decisions"; dbu="$dhub/projects/dec-b/.ai/user-decisions"; dans="$dhub/handoffs/user-decisions"
+# A request from the fixture, written the way a Project does: a temp file, then a rename. Args: dir projectId taskId nn createdAt
+mkreq() {
+  mkdir -p "$1"; rid="$3-d$4"
+  sed -e "s/^decisionId: .*/decisionId: $rid/" -e "s/^projectId: .*/projectId: $2/" -e "s/^projectTaskId: .*/projectTaskId: $3/" \
+    -e "s/^createdAt: .*/createdAt: $5/" "$root/tests/fixtures/SAMPLE-0001-d01.md" > "$1/.$rid.md.tmp" && mv "$1/.$rid.md.tmp" "$1/$rid.md"
+}
+dboard() { PATH="$dstub:$PATH" "$kit" board "$dhub" | grep "^decision${T}\|^invalid${T}" || true; }
+mkreq "$dau" dec-a DECA-0001 01 2026-10-18T10:00:00+09:00
+# 05:00 UTC is later than 10:00 +09:00 (01:00 UTC) though its text sorts first
+mkreq "$dbu" dec-b DECB-0001 01 2026-10-18T05:00:00+00:00
+out=$(dboard)
+[ "$(printf '%s\n' "$out" | cut -f1-4 | tr '\t\n' '  ')" = "decision dec-a DECA-0001-d01 waiting decision dec-b DECB-0001-d01 waiting " ] || fail "board decision lines or their time order: $out"
+[ "$(printf '%s\n' "$out" | head -1 | cut -f5-8)" = "2026-10-18T10:00:00+09:00${T}Worker 계획과 PR 생성 승인${T}$dau/DECA-0001-d01.md${T}$dans/dec-a" ] || fail "board decision columns 5-8: $out"
+[ "$(printf '%s\n' "$out" | sed -n 2p | cut -f7)" = "$dbu/DECB-0001-d01.md" ] || fail "personal request path: $out"
+# not requests: temp files, dot files, result files; a tab in the title must not split the line
+printf 'x\n' > "$dau/.DECA-0009-d01.md.tmp"; printf 'x\n' > "$dau/DECA-0009-d01.md.tmp"; printf 'x\n' > "$dau/DECA-0001-d01.result.md"
+mkreq "$dau" dec-a DECA-0003 01 2026-10-18T11:00:00+09:00
+sed -i.bak "s/^# .*/# 탭${T}제목/" "$dau/DECA-0003-d01.md"; rm "$dau/DECA-0003-d01.md.bak"
+out=$(dboard)
+[ "$(printf '%s\n' "$out" | grep -c "^decision${T}")" = 3 ] || fail "temp, dot or result files taken as requests, or a tab split a line: $out"
+[ "$(printf '%s\n' "$out" | grep "DECA-0003-d01" | awk -F'\t' '{ print NF ":" $6 }')" = "8:탭 제목" ] || fail "tab in a title: $out"
+# T6 a request that breaks the format is listed as invalid, not as a request
+mkreq "$dau" dec-a DECA-0004 01 2026-10-18T12:00:00+09:00; awk '/^## 실행 내용/ { exit } { print }' "$dau/DECA-0004-d01.md" > "$dau/x" && mv "$dau/x" "$dau/DECA-0004-d01.md"
+mkreq "$dau" dec-a DECA-0005 01 2026-10-18T12:00:00+09:00; sed -i.bak '/^2\. Worker 1개로/d' "$dau/DECA-0005-d01.md"; rm "$dau/DECA-0005-d01.md.bak"
+mkreq "$dau" dec-a DECA-0006 01 2026-10-18T12:00:00+09:00
+for n in 3 4 5; do printf '\n## 질문 %s: 추가\n한 줄\n\n1. 가 — 결과: a\n2. 나 — 결과: b\n' "$n" >> "$dau/DECA-0006-d01.md"; done
+mkreq "$dau" dec-a DECA-0007 01 2026-10-18T12:00:00+09:00; sed -i.bak 's/^createdAt: .*/createdAt: 어제/' "$dau/DECA-0007-d01.md"; rm "$dau/DECA-0007-d01.md.bak"
+out=$(dboard)
+for c in "DECA-0004-d01.md${T}irreversible" "DECA-0005-d01.md${T}질문 1 선택지가 1개" "DECA-0006-d01.md${T}질문이 4개를 넘음" "DECA-0007-d01.md${T}createdAt 형식 오류"; do
+  printf '%s\n' "$out" | grep -q "^invalid${T}dec-a${T}user-decisions/$c" || fail "invalid request not flagged ($c): $out"
+done
+if printf '%s\n' "$out" | grep -q "^decision${T}dec-a${T}DECA-000[4-7]"; then fail "invalid request also listed as a request: $out"; fi
+ok "8l-1 board: decision lines for a shared and a personal project in time order (also across UTC offsets), path columns, temp/dot/result files skipped, tab in title, invalid requests flagged"
+
+# 8l-2 T1: two Projects write a request in the same second, 20 times. None is lost or listed twice; the order is the order they were made.
+rm -f "$dau"/* "$dbu"/*
+i=1
+while [ "$i" -le 20 ]; do
+  nn=$(printf '%02d' "$i"); ts=$(printf '2026-10-18T09:%02d:00+09:00' "$i")
+  ( mkreq "$dau" dec-a DECA-2000 "$nn" "$ts" & mkreq "$dbu" dec-b DECB-2000 "$nn" "$ts" & wait )
+  out=$(dboard)
+  [ "$(printf '%s\n' "$out" | wc -l | tr -d ' ')" = $((i * 2)) ] || fail "T1 round $i: expected $((i * 2)) decision lines (a request was lost or listed twice): $out"
+  [ -z "$(printf '%s\n' "$out" | cut -f2,3 | sort | uniq -d)" ] || fail "T1 round $i: a request listed twice: $out"
+  [ "$(printf '%s\n' "$out" | LC_ALL=C sort -t "$T" -k5,5 -k2,2 -k3,3)" = "$out" ] || fail "T1 round $i: not in the order the requests were made: $out"
+  i=$((i + 1))
+done
+ok "8l-2 T1: 20 rounds of two Projects writing at the same second: no request lost or doubled, listed in the order made"
+
+# 8l-3 T3/T4: one accepted answer is taken exactly once, also when two takers race (20 rounds; the personal project from two checkouts)
+dig() { if command -v shasum > /dev/null; then shasum -a 256 "$1" | cut -d' ' -f1; else sha256sum "$1" | cut -d' ' -f1; fi; }
+# An answer file as /decide writes it. Args: file projectId decisionId where recordedBy digest answer1 answer2
+mkans() {
+  mkdir -p "$(dirname "$1")"
+  printf -- '---\nschema: user-decision-answer/v1\ndecisionId: %s\nprojectId: %s\nansweredAt: 2026-10-18T23:45:12+09:00\nrecordedBy: %s\norigin: composer\nwhere: %s\nsession: test-session\nrequestDigest: sha256:%s\n---\n\n- 질문 1: %s\n- 질문 2: %s\n' \
+    "$3" "$2" "$5" "$4" "$6" "$7" "$8" > "$1"
+}
+A1='계획대로 (추천)'; A2='지금 Push하고 PR 열기 (추천)'; B1='Worker 1개로 줄이기'
+git -C "$db" worktree add -q -b feat/dec-b "$tmp/dec-b-wt"
+rm -f "$dau"/* "$dbu"/*
+take_race() { # checkoutA checkoutB decisionId -> sets c1 c2 (exit codes) and leaves the outputs in $tmp/take1.out, take2.out
+  "$kit" decision-take "$1" "$3" > "$tmp/take1.out" 2> "$tmp/take1.err" & p1=$!
+  "$kit" decision-take "$2" "$3" > "$tmp/take2.out" 2> "$tmp/take2.err" & p2=$!
+  c1=0; c2=0; wait "$p1" || c1=$?; wait "$p2" || c2=$?
+}
+i=1
+while [ "$i" -le 20 ]; do
+  nn=$(printf '%02d' "$i")
+  mkreq "$dau" dec-a DECA-3000 "$nn" 2026-10-18T10:00:00+09:00
+  mkans "$dans/dec-a/DECA-3000-d$nn.answer.md" dec-a "DECA-3000-d$nn" portfolio dialog "$(dig "$dau/DECA-3000-d$nn.md")" "$A1" "$A2"
+  take_race "$da" "$da" "DECA-3000-d$nn"
+  [ "$c1$c2" = 03 ] || [ "$c1$c2" = 30 ] || fail "T3 round $i: exits $c1 and $c2 (expected one 0 and one 3): $(cat "$tmp/take1.err" "$tmp/take2.err")"
+  [ "$c1" = 0 ] && win="$tmp/take1.out" lose="$tmp/take2.out" || win="$tmp/take2.out" lose="$tmp/take1.out"
+  [ "$(cat "$win")" = "$(printf -- '- 질문 1: %s\n- 질문 2: %s' "$A1" "$A2")" ] || fail "T3 round $i: the taker got other lines: $(cat "$win")"
+  grep -q '^outcome: taken$' "$lose" || fail "T3 round $i: the second taker was not shown the closed marker: $(cat "$lose")"
+  mkreq "$dbu" dec-b DECB-3000 "$nn" 2026-10-18T10:00:00+09:00
+  mkans "$dans/dec-b/DECB-3000-d$nn.answer.md" dec-b "DECB-3000-d$nn" portfolio dialog "$(dig "$dbu/DECB-3000-d$nn.md")" "$A1" "$A2"
+  take_race "$db" "$tmp/dec-b-wt" "DECB-3000-d$nn"
+  [ "$c1$c2" = 03 ] || [ "$c1$c2" = 30 ] || fail "T4 round $i: exits $c1 and $c2 from two checkouts (expected one 0 and one 3): $(cat "$tmp/take1.err" "$tmp/take2.err")"
+  [ "$(ls "$dbu" | grep -c "^DECB-3000-d$nn\.done\.md\$")" = 1 ] || fail "T4 round $i: not exactly one done marker"
+  i=$((i + 1))
+done
+# reuse: taken once, a new answer (even a different one) closes nothing and starts nothing
+before=$(cksum < "$dau/DECA-3000-d01.done.md")
+mkans "$dau/DECA-3000-d01.answer.md" dec-a DECA-3000-d01 project dialog "$(dig "$dau/DECA-3000-d01.md")" "$B1" "$A2"
+out=$("$kit" decision-take "$da" DECA-3000-d01) && fail "T3 reuse: a closed request was taken again: $out" || c=$?
+[ "$c" = 3 ] && [ "$before" = "$(cksum < "$dau/DECA-3000-d01.done.md")" ] || fail "T3 reuse: exit $c, or the marker changed"
+printf '%s\n' "$out" | grep -q '^outcome: taken$' || fail "T3 reuse: the closed marker was not shown: $out"
+# the board no longer lists a closed request
+if dboard | grep -q "DECA-3000-d01"; then fail "T3: a closed request is still on the board"; fi
+ok "8l-3 T3/T4: 20 races (and 20 from two checkouts): exactly one exit 0, one exit 3, one done marker; a new answer after it changes nothing"
+
+# 8l-4 T7: answers from both places. Alike: taken. Different: nothing runs, the marker says conflict. The board shows the state before the take.
+rm -f "$dau"/* "$dbu"/*; rm -rf "$dans"
+mkreq "$dau" dec-a DECA-4000 01 2026-10-18T10:00:00+09:00; d=$(dig "$dau/DECA-4000-d01.md")
+mkans "$dans/dec-a/DECA-4000-d01.answer.md" dec-a DECA-4000-d01 portfolio dialog "$d" "$A1" "$A2"
+mkans "$dau/DECA-4000-d01.answer.md" dec-a DECA-4000-d01 project dialog "$d" "$B1" "$A2"
+[ "$(dboard | cut -f3,4)" = "DECA-4000-d01${T}conflict" ] || fail "T7 board state before the take: $(dboard)"
+out=$("$kit" decision-take "$da" DECA-4000-d01 2> /dev/null) && fail "T7 two different answers were taken: $out" || c=$?
+[ "$c" = 4 ] || fail "T7 exit $c (expected 4): $out"
+printf '%s\n' "$out" | head -1 | grep -qx conflict || fail "T7 stdout: $out"
+printf '%s\n' "$out" | grep -q "$B1" && printf '%s\n' "$out" | grep -q "$A1" || fail "T7 both answers should be shown: $out"
+grep -q '^outcome: conflict$' "$dau/DECA-4000-d01.done.md" || fail "T7 marker: $(cat "$dau/DECA-4000-d01.done.md")"
+mkreq "$dau" dec-a DECA-4000 02 2026-10-18T10:01:00+09:00; d=$(dig "$dau/DECA-4000-d02.md")
+mkans "$dans/dec-a/DECA-4000-d02.answer.md" dec-a DECA-4000-d02 portfolio dialog "$d" "$A1" "$A2"
+mkdir -p "$dans/dec-a/DECA-4000-d02.asking"
+[ "$(dboard | cut -f3,4)" = "DECA-4000-d02${T}answered" ] || fail "an answer must outrank a leftover asking marker: $(dboard)"
+mkans "$dau/DECA-4000-d02.answer.md" dec-a DECA-4000-d02 project dialog "$d" "$A1" "$A2"
+out=$("$kit" decision-take "$da" DECA-4000-d02) || fail "T7 two equal answers were not taken: $out"
+grep -q '^answerSource: both$' "$dau/DECA-4000-d02.done.md" && grep -q '^outcome: taken$' "$dau/DECA-4000-d02.done.md" || fail "T7 equal answers marker: $(cat "$dau/DECA-4000-d02.done.md")"
+# no answer: exit 1 and "none"; an asking marker alone is state asking
+mkreq "$dau" dec-a DECA-4000 03 2026-10-18T10:02:00+09:00
+out=$("$kit" decision-take "$da" DECA-4000-d03 2> /dev/null) && fail "T7 a request without an answer was taken" || c=$?
+[ "$c" = 1 ] && [ "$out" = none ] || fail "no answer: exit $c, out '$out'"
+mkdir "$dau/DECA-4000-d03.asking"
+[ "$(dboard | cut -f3,4)" = "DECA-4000-d03${T}asking" ] || fail "asking marker not shown as state asking: $(dboard)"
+ok "8l-4 T7: both places: equal answers taken, different answers exit 4 with conflict marker and both shown; board states conflict/answered/asking; no answer exit 1"
+
+# 8l-5 T8: answers that must not be taken (forged, misplaced, cut short, for another request); bad input is exit 2
+rm -rf "${dau:?}"/* "${dbu:?}"/* "${dans:?}"
+mkreq "$dau" dec-a DECA-5000 01 2026-10-18T10:00:00+09:00; d=$(dig "$dau/DECA-5000-d01.md")
+refused() { # name, expected exit, expected words in stderr; stdin is not used
+  out=$("$kit" decision-take "$da" "$id" 2> "$tmp/take.err") && c=0 || c=$?
+  [ "$c" = "$2" ] || fail "T8 $1: exit $c (expected $2): out '$out' err '$(cat "$tmp/take.err")'"
+  grep -q -- "$3" "$tmp/take.err" || [ "$3" = - ] || fail "T8 $1: stderr lacks '$3': $(cat "$tmp/take.err")"
+  [ ! -e "$dau/$id.done.md" ] || [ "$2" = 5 ] || fail "T8 $1: a refused answer closed the request"
+}
+id=DECA-5000-d01
+# (a) a valid-looking answer in a place nobody reads, and a project-folder answer that says it is from the Portfolio
+mkans "$dhub/handoffs/outbox/dec-a/$id.answer.md" dec-a "$id" portfolio dialog "$d" "$A1" "$A2"
+refused "a misplaced file" 1 위치
+rm "$dhub/handoffs/outbox/dec-a/$id.answer.md"
+mkans "$dau/$id.answer.md" dec-a "$id" portfolio dialog "$d" "$A1" "$A2"
+refused "where says portfolio in the project folder" 1 위치
+# (b) not written by the dialog
+mkans "$dau/$id.answer.md" dec-a "$id" project model "$d" "$A1" "$A2"
+refused "recordedBy model" 1 recordedBy
+# (d) another project's answer folder, and the right folder with another projectId inside
+mkans "$dans/dec-b/$id.answer.md" dec-a "$id" portfolio dialog "$d" "$A1" "$A2"
+rm "$dau/$id.answer.md"
+refused "another project's folder" 1 위치
+rm "$dans/dec-b/$id.answer.md"
+mkans "$dans/dec-a/$id.answer.md" dec-b "$id" portfolio dialog "$d" "$A1" "$A2"
+refused "another projectId inside" 1 projectId
+# cut short (a write cut off by the end of the session)
+mkans "$dans/dec-a/$id.answer.md" dec-a "$id" portfolio dialog "$d" "$A1" "$A2"; head -n 13 "$dans/dec-a/$id.answer.md" > "$tmp/cut" && mv "$tmp/cut" "$dans/dec-a/$id.answer.md"
+refused "a cut-off answer" 1 '답 줄이'
+# another request's digest (a different question)
+mkans "$dans/dec-a/$id.answer.md" dec-a "$id" portfolio dialog "0000" "$A1" "$A2"
+refused "another request's digest" 5 -
+grep -q '^outcome: stale-request$' "$dau/$id.done.md" || fail "T8 digest: marker: $(cat "$dau/$id.done.md")"
+# (c) the request changed after it was answered: refused with exit 5, and a board that does not count the answer
+mkreq "$dau" dec-a DECA-5000 02 2026-10-18T10:00:00+09:00; d=$(dig "$dau/DECA-5000-d02.md"); id=DECA-5000-d02
+mkans "$dans/dec-a/$id.answer.md" dec-a "$id" portfolio dialog "$d" "$A1" "$A2"
+[ "$(dboard | grep "$id" | cut -f4)" = answered ] || fail "T8c board before the edit: $(dboard)"
+sed -i.bak 's/^상태 화면 Task가/상태 화면 Task 수정본이/' "$dau/$id.md"; rm "$dau/$id.md.bak"
+[ "$(dboard | grep "$id" | cut -f4)" = waiting ] || fail "T8c a stale answer counted as answered on the board: $(dboard)"
+refused "a request edited after the answer" 5 '요청 해시'
+# a closed request stays closed
+out=$("$kit" decision-take "$da" "$id" 2> /dev/null) && fail "T8 a stale request was taken later" || c=$?
+[ "$c" = 3 ] || fail "T8 second take of a stale request: exit $c"
+# bad input is exit 2
+if "$kit" decision-take "$da" 'not-an-id' > /dev/null 2>&1; then fail "T8 a bad decisionId was accepted"; fi
+"$kit" decision-take "$da" not-an-id > /dev/null 2>&1 && c=0 || c=$?; [ "$c" = 2 ] || fail "T8 bad decisionId: exit $c (expected 2)"
+"$kit" decision-take "$da" DECA-5000-d09 > /dev/null 2>&1 && c=0 || c=$?; [ "$c" = 2 ] || fail "T8 missing request: exit $c (expected 2)"
+"$kit" decision-take "$tmp/bad" DECA-5000-d01 > /dev/null 2>&1 && c=0 || c=$?; [ "$c" = 2 ] || fail "T8 uninitialized folder: exit $c (expected 2)"
+"$kit" decision-take "$da" > /dev/null 2>&1 && c=0 || c=$?; [ "$c" = 2 ] || fail "T8 missing argument: exit $c (expected 2)"
+ok "8l-5 T8: misplaced, model-written, other-project, cut-off answers exit 1 with the reason; edited request or other digest exit 5; bad input exit 2; none of them is taken"
+
+# 8l-6 T2: two askers make the same marker at once; one wins (20 rounds)
+i=1
+while [ "$i" -le 20 ]; do
+  m="$dans/dec-a/ASK-$i.asking"; mkdir -p "$dans/dec-a"
+  mkdir "$m" 2> /dev/null & p1=$!; mkdir "$m" 2> /dev/null & p2=$!
+  c1=0; c2=0; wait "$p1" || c1=$?; wait "$p2" || c2=$?
+  [ "$c1$c2" = 01 ] || [ "$c1$c2" = 10 ] || fail "T2 round $i: marker exits $c1 and $c2 (expected one 0 and one 1)"
+  i=$((i + 1))
+done
+ok "8l-6 T2: 20 rounds of two markers made at once: exactly one wins"
+
+# 8l-7 the policy and Skill text this route stands on
+for f in communication permissions lifecycle reporting; do grep -q 'decision-take\|user-decisions\|/decide\|사용자 결정' "$po/$f.md" || fail "8l-7 policies/$f.md lacks the user decision route"; done
+grep -q '^| 사용자 결정 요청 |' "$po/README.md" || fail "8l-7 policies/README.md lacks the user decision request term"
+grep -q 'Kit 결정 명령이 쓰고 `kit.sh decision-take`가 받아들인 답 기록뿐이다' "$po/permissions.md" || fail "8l-7 permissions lacks the rule that only an accepted answer is the user's"
+grep -q '^- \[확정\] 에이전트에 선택지 질문 기능이 있으면 그것으로 묻는다. 사용자가 고르거나 직접 방향을 적을 수 있어야 한다. 없으면 같은 형식을 번호 목록으로 쓴다.$' "$po/communication.md" || fail "8l-7 the [확정] question line was changed"
+grep -q '/decide' "$sk/portfolio/SKILL.md" && grep -q 'decision-take' "$sk/project/SKILL.md" && grep -q '/decide' "$root/README.md" || fail "8l-7 Skills or README lack /decide or decision-take"
+grep -q '답 파일 쓰기·고치기' "$sk/project/SKILL.md" || fail "8l-7 project Skill lacks the answer-file prohibition"
+ok "8l-7 docs: policies, Skills and README carry the user decision route; the [확정] question line is as it was"
 
 # 9. Marketplace keeps the existing plugin and registers this one
 mp="$root/../../.claude-plugin/marketplace.json"

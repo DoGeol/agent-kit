@@ -22,6 +22,7 @@ Portfolio 저장소에서 일한다. `.ai/ORCHESTRATION.md`가 없거나 `role: 
 
 1. `portfolio/PROJECTS.md`, `TASKS.md`, `DASHBOARD.md`, `PRIORITIES.md`를 읽는다.
 2. 사용자에게 Pull을 먼저 할지 묻는다 (마지막 Pull 시각을 함께 보여준다).
+3. `kit.sh board`의 결정 대기 건수와 맨 앞 요청을 보여 주고, 고를 때 `/decide`를 치라고 안내한다. 답을 대신 쓰거나 Project 세션에 키 입력을 보내지 않는다 (아래 "결정 받기").
 
 ## 2. 프로젝트 등록·목록
 
@@ -94,6 +95,19 @@ Project Coordinator가 사용량 때문에 등급·Provider·일정을 바꿔도
 7. 상위 업무는 위임한 모든 프로젝트의 `completed` 보고가 처리된 뒤에만 `completed`로 바꾼다.
 
 같은 Pull을 다시 실행해도 마커가 있는 보고는 목록에 나오지 않는다.
+
+### 결정 받기
+
+사용자 결정 요청([communication.md](../../policies/communication.md#사용자에게-결정-묻기))은 Project가 자기 상태 폴더의 `.ai/user-decisions/`에 쓴다. 셸에서 `../../scripts/kit.sh board <hubDir>`를 실행하면 요청마다 줄이 하나 나온다 (도착순):
+
+```text
+decision<TAB>projectId<TAB>decisionId<TAB>state<TAB>createdAt<TAB>title<TAB>요청 파일<TAB>hub 답 폴더
+```
+
+- `state`: `waiting`(아직 안 물음), `asking`(어느 세션에서 묻는 중), `answered`(답이 왔고 Project가 받을 차례), `conflict`(두 곳의 답이 다름). 형식이 틀린 요청은 `invalid` 줄로 나온다.
+- 사용자가 `/decide`를 치면 맨 앞 `waiting` 요청을 선택지 대화상자로 묻고, 같은 프로젝트의 다음 요청은 이어서 묻는다. 묻는 동안 온 요청은 줄에 남는다. 답 파일은 이 명령이 `handoffs/user-decisions/<projectId>/`에 쓴다. 답을 대신 쓰거나 요청을 고치지 않고, Project 세션에 키 입력을 보내 답하지 않는다.
+- 답 파일과 묻는 중 표지는 지우지 않는다. 5단계에서 Portfolio 체크포인트를 커밋할 때 `handoffs/user-decisions/`도 같은 커밋에 넣는다.
+- 답을 받아 진행하는 쪽은 Project다 (`kit.sh decision-take`). `conflict`는 Project가 두 답을 보여 다시 묻는다.
 
 ## 6. 전체 요약
 

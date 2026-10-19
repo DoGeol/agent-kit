@@ -22,6 +22,9 @@ const auditAtom = atom({ plugin: 'orchestration-kit', key: 'audit' } as const, n
 type Raw = Pick<Board, 'projects' | 'items' | 'workers' | 'workersUnknown' | 'workersPartial' | 'errors'>
 type Tone = 'error' | 'warning' | 'suggestion'
 type Part = { label: string; tone?: Tone; kind: 'item' | 'progress' | 'stalled' }
+type DecisionState = NonNullable<Item['state']>
+const STATES: readonly DecisionState[] = ['waiting', 'asking', 'answered', 'conflict']
+const STATE_LABEL: Record<DecisionState, string> = { waiting: '대기', asking: '묻는 중', answered: '답 도착', conflict: '답 충돌' }
 
 /** `kit.sh board` lines as a board. Unknown kinds are skipped, so a newer kit.sh does not break this mod. */
 export const parseBoard = (tsv: string): Raw => {
@@ -35,6 +38,9 @@ export const parseBoard = (tsv: string): Raw => {
       out.items.push({ kind: k, project: a[1]!, id: a[2]!, text: a[3]! })
     } else if (k === 'review' && a.length >= 4) {
       out.items.push({ kind: 'review', project: a[1]!, id: a[2]!, text: a[4] && a[4] !== '-' ? `${a[3]} · ${a[4]}` : a[3]! })
+    } else if (k === 'decision' && a.length >= 8 && STATES.includes(a[3] as DecisionState)) {
+      const state = a[3] as DecisionState
+      out.items.push({ kind: 'decision', project: a[1]!, id: a[2]!, text: `${STATE_LABEL[state]} · ${a[5]}`, state, createdAt: a[4]!, file: a[6]!, answerDir: a[7]! })
     } else if (k === 'pending' && a.length >= 4) {
       out.items.push({ kind: 'pending', project: a[1]!, id: a[2]!, text: a[3]! })
     } else if (k === 'invalid' && a.length >= 4) {
@@ -123,6 +129,7 @@ export const workItems = (workers: readonly WorkerRow[], now: number): WorkItem[
 
 const KINDS: readonly (readonly [Item['kind'], string, Tone])[] = [
   ['blocked', '블로커', 'error'],
+  ['decision', '결정 대기', 'warning'],
   ['pending', '보고 대기', 'warning'],
   ['handoff', '위임 미수락', 'warning'],
   ['review', '검토 필요', 'warning'],
@@ -431,6 +438,8 @@ export const register: Register = (on, options) => {
     const unknown = b.workersUnknown ?? (isNeverRead ? (b.failed ?? '아직 읽지 못함') : undefined)
     const label = (p: string) => (p === b.mine ? `${p} (내 프로젝트)` : p)
     const groups = groupBy(mineFirst(b.items, i => i.project, b.mine), i => i.project)
+    // The request /decide asks first points at the command.
+    const decideHead = b.items.find(i => i.kind === 'decision' && i.state === 'waiting' && (!b.mine || i.project === b.mine))
     const items = mineFirst(workItems(b.workers, now), i => i.project, b.mine)
     const stalled = items.filter(isStalled)
     const projects = mineFirst(b.projects, p => p.id, b.mine)
@@ -467,7 +476,7 @@ export const register: Register = (on, options) => {
               ))}
             </Text>
             {rows.slice(0, 5).map(r => (
-              <Text key={`${project}-${r.kind}-${r.id}`} dimColor wrap="truncate-end">    ⎿ {r.id} · {r.text}</Text>
+              <Text key={`${project}-${r.kind}-${r.id}`} dimColor wrap="truncate-end">    ⎿ {r.id} · {r.text}{r === decideHead ? '  → /decide' : ''}</Text>
             ))}
             {rows.length > 5 && <Text dimColor>    ⎿ … 외 {rows.length - 5}</Text>}
           </Box>
