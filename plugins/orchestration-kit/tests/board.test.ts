@@ -2,9 +2,11 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { TestBody } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-import { ago, bandParts, hubFrom, mineFirst, parseBoard } from '../hooks/register'
+import { ago, bandParts, dotOf, hubFrom, mineFirst, parseBoard, workItems } from '../hooks/register'
 
 const T = '\t'
+const NOW = Date.parse('2026-10-18T12:00:00+09:00')
+const MIN = 60_000
 const BOARD = [
   ['blocked', 'portfolio', 'PORT-0003', 'API 계약 결정'],
   ['project', 'app', 'shared', '2', '2026-10-18T05:00:00+09:00', '2026-10-18T09:00:00+09:00', 'README 실행 절'],
@@ -31,10 +33,10 @@ test('parseBoard reads every kind and skips unknown ones', () => {
   expect(parseBoard(`workers${T}unknown${T}orca 응답 없음`).workersUnknown).toBe('orca 응답 없음')
 })
 
-test('bandParts: blocker first, zero counts hidden, nothing when all clear', () => {
+test('bandParts: blocker first, zero counts hidden, progress last, nothing to handle when all clear', () => {
   const b = parseBoard(BOARD)
-  expect(bandParts(b).map(p => `${p.label}/${p.tone}`)).toEqual(['블로커 1/error', '보고 대기 2/warning', '위임 미수락 1/warning', '검토 필요 1/warning', 'Worker 1 진행/suggestion'])
-  expect(bandParts({ items: [], workers: [] })).toEqual([])
+  expect(bandParts(b, NOW).map(p => `${p.label}/${p.tone}`)).toEqual(['블로커 1/error', '보고 대기 2/warning', '위임 미수락 1/warning', '검토 필요 1/warning', '진행 1/suggestion'])
+  expect(bandParts({ items: [], workers: [] }, NOW).map(p => `${p.kind}:${p.label}`)).toEqual(['progress:진행 0'])
 })
 
 test('hubFrom: option, then Portfolio session, then personal project; shared project without option has none', () => {
@@ -68,6 +70,13 @@ type World = {
   hub?: string
   /** the board answer waits for this */
   gate?: Promise<void>
+  /** replaces the board answer while set */
+  board?: string
+  /** what `kit.sh audit` prints; its exit code */
+  audit?: string
+  auditExit?: number
+  /** what `git rev-parse` prints; it fails when absent */
+  git?: string
 }
 
 const world = (on: On, board: string, w: World = {}) => {
@@ -76,14 +85,16 @@ const world = (on: On, board: string, w: World = {}) => {
   on('env.get', (_, e) => ({ value: e.name === 'HOME' ? '/h' : e.name === 'ORCA_TERMINAL_HANDLE' ? w.terminal : undefined }))
   on('turn.complete', (_, e) => ({ text: e.answer }))
   on('process.run', async (_, e) => {
-    const kind = e.argv.includes('where') ? 'where' : e.argv.includes('hub') ? 'hub' : e.argv[0] === 'git' ? 'git' : 'board'
+    const kind = e.argv.includes('where') ? 'where' : e.argv.includes('hub') ? 'hub' : e.argv.includes('audit') ? 'audit' : e.argv[0] === 'git' ? 'git' : 'board'
     w.calls?.push(kind)
     const out = (exitCode: number, stdout = '', stderr = '') => ({ value: { exitCode, stdout, stderr, isStdoutTruncated: false, isStderrTruncated: false } })
     if (kind === 'board') {
       w.boards?.push(e.argv.join(' '))
       await w.gate
-      return out(w.exit ?? 0, board, w.stderr ?? '')
+      return out(w.exit ?? 0, w.board ?? board, w.stderr ?? '')
     }
+    if (kind === 'audit') return out(w.auditExit ?? 0, w.audit ?? '', w.auditExit ? 'audit 실패' : '')
+    if (kind === 'git' && w.git !== undefined) return out(0, w.git)
     if (kind === 'git' || (kind === 'where' && w.whereFails?.())) return out(1, '', 'kit.sh: 초기화되지 않음')
     if (kind === 'hub') return w.hub === undefined ? out(1, '', 'kit.sh: hub 포인터 없음') : out(0, w.hub)
     return out(0, w.where ?? 'shared\t/h/hub\n')
@@ -120,7 +131,9 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(opened).toContain('portfolio-board')
     await band.unmount()
     const pane = await $.ui.mount({ plugin: 'orchestration-kit', surface, component: 'Pane', requestId: 'portfolio-board', props: PANE } as never)
-    for (const text of ['처리할 것 5', '진행 중 Worker 1', '전체 프로젝트 2']) expect(await pane.find({ type: 'Text', text })).toBeDefined()
+    expect(await pane.find({ type: 'Text', text: '처리할 것 5' })).toBeDefined()
+    expect((await pane.find({ key: 'pane-progress' }))?.text).toBe('진행 중 1')
+    expect((await pane.find({ key: 'pane-projects' }))?.text).toBe('프로젝트 2 (active)')
     expect(await pane.find({ type: 'Text', text: '  api (내 프로젝트)  ' })).toBeDefined()
     await pane.unmount()
   })
@@ -167,18 +180,6 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await band.find({ key: 'portfolio-clear' })).toBeDefined()
     expect(await band.find({ key: 'portfolio-projects' })).toBeUndefined()
     await band.unmount()
-  })
-
-  test(`pane on ${surface}: an unchanged board keeps its time`, async ($, on) => {
-    const boards: string[] = []
-    const clock = await boot($, on, surface, BOARD, { boards })
-    const pane = await $.ui.mount({ plugin: 'orchestration-kit', surface, component: 'Pane', requestId: 'portfolio-board', props: PANE } as never)
-    const head = (await pane.find({ type: 'Text', text: /변경 · / }))?.text
-    expect(head).toContain('~/hub')
-    await clock.advance(61_000)
-    expect(boards.length).toBeGreaterThan(1)
-    expect((await pane.find({ type: 'Text', text: /변경 · / }))?.text).toBe(head)
-    await pane.unmount()
   })
 
   test(`pane on ${surface}: a failed read shows why`, async ($, on) => {
@@ -313,4 +314,224 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await pane.find({ key: 'pane-empty-not-kit' })).toBeDefined()
     await pane.unmount()
   })
+}
+
+// A 13-column worker line; `age` is how long ago Orca last saw the Worker (default 1 minute, null: never).
+const wrow = (o: { project?: string; task?: string; term?: string; port?: string; title?: string; model?: string; live?: string; age?: number | null; act?: string; att?: string } = {}) =>
+  ['worker', o.project ?? 'app', o.task ?? '-', 'run_x', 'ready', o.model ?? 'claude/haiku', o.term ?? 'term_w', o.port ?? '-', o.title ?? '-', o.live ?? 'live',
+    o.age === null ? '-' : String(NOW - (o.age ?? MIN)), o.act ?? 'working', o.att ?? '-'].join(T)
+const PROJ = ['project', 'app', 'shared', '1', '-', '-', '-'].join(T)
+const boardOf = (...rows: string[]) => [PROJ, ...rows].join('\n')
+const wk = (o: Parameters<typeof wrow>[0] = {}) => parseBoard(wrow(o)).workers[0]!
+
+test('W1 parseBoard: 13 columns, 7 columns, partial reads', () => {
+  const b = parseBoard([wrow({ port: 'P1', title: '제목', age: 2 * MIN, att: 'input,failure' }), BOARD.split('\n').find(l => l.startsWith('worker'))!,
+    `workers${T}partial${T}run_x: 응답 없음`, `workers${T}partial${T}run_y: 한 쪽을 넘는 Worker가 있음`].join('\n'))
+  expect(b.workers[0]).toMatchObject({ project: 'app', port: 'P1', title: '제목', liveness: 'live', observedAt: NOW - 2 * MIN, activity: 'working', attention: ['input', 'failure'] })
+  expect(b.workers[1]!.terminal).toBe('term_w')
+  expect(b.workers[1]!.liveness).toBeUndefined()
+  expect(b.workers[1]!.observedAt).toBeUndefined()
+  expect(b.workersPartial).toBe('run_x: 응답 없음; run_y: 한 쪽을 넘는 Worker가 있음')
+  expect(b.workersUnknown).toBeUndefined()
+  const bare = wk({ age: null, act: '-', live: 'unverifiable:missing_status' })
+  expect(bare.observedAt).toBeUndefined()
+  expect(bare.activity).toBeUndefined()
+  expect(bare.attention).toEqual([])
+})
+
+test('W2 workItems: one item per task, projects and links told apart', () => {
+  const items = workItems([
+    wk({ port: 'P1', title: '제목', model: 'claude/haiku', term: 'a' }), wk({ port: 'P1', title: '제목', model: 'codex/gpt', term: 'b' }), wk({ port: 'P1', model: 'claude/opus', term: 'c' }),
+    wk({ task: 'APP-9', term: 'd' }), wk({ term: 'e' }), wk({ project: '-', term: 'f' }),
+  ], NOW)
+  expect(items.map(i => `${i.label}|${i.workers}|${i.providers.join(',')}`)).toEqual([
+    'app / P1|3|claude,codex', 'app / APP-9|1|claude', 'app / 업무 연결 모름|1|claude', '프로젝트 모름 / 업무 연결 모름|1|claude',
+  ])
+  expect(items[0]!.title).toBe('제목')
+})
+
+test('W3 dotOf: the 5 and 15 minute lines, stale, unknown, waiting for an answer, waiting for a person', () => {
+  const dot = (o: Parameters<typeof wrow>[0]) => dotOf(wk(o), NOW)
+  expect([4 * MIN + 59_000, 5 * MIN, 5 * MIN + 1000, 15 * MIN, 15 * MIN + 1000].map(age => dot({ age }))).toEqual(['green', 'green', 'yellow', 'yellow', 'red'])
+  expect(dot({ live: 'unverifiable:stale_status', age: 31 * MIN })).toBe('red')
+  expect(dot({ live: 'unverifiable:missing_status', age: null })).toBe('unknown')
+  expect(dot({ age: null })).toBe('unknown')
+  expect(dot({ att: 'input', age: 20 * MIN })).toBe('gray')
+  expect(dot({ act: 'blocked', age: 20 * MIN })).toBe('input')
+  expect(dot({ att: 'approval', age: MIN })).toBe('input')
+  const old = parseBoard(BOARD.split('\n').find(l => l.startsWith('worker'))!).workers[0]!
+  expect(dotOf(old, NOW)).toBe('unknown')
+})
+
+for (const surface of ['terminal', 'desktop'] as const) {
+  test(`W4 ${surface}: a read that failed is shown as ?, never as 0 or none`, async ($, on) => {
+    await boot($, on, surface, boardOf(['blocked', 'app', 'APP-1', '결정'].join(T), `workers${T}unknown${T}orca 응답 없음`))
+    const band = await $.ui.mount({ plugin: 'orchestration-kit', surface, component: 'AbovePrompt', props: BAND })
+    const progress = (await band.find({ key: 'portfolio-progress' }))?.text ?? ''
+    expect(progress).toContain('?')
+    expect(progress).not.toContain('0')
+    await band.unmount()
+    const pane = await $.ui.mount({ plugin: 'orchestration-kit', surface, component: 'Pane', requestId: 'portfolio-board', props: PANE } as never)
+    expect((await pane.find({ key: 'pane-progress' }))?.text).toContain('?')
+    expect(await pane.find({ type: 'Text', text: /읽지 못함: orca 응답 없음/ })).toBeDefined()
+    expect(await pane.find({ type: 'Text', text: '  없음' })).toBeUndefined()
+    await pane.unmount()
+  })
+
+  test(`W4 ${surface}: a partial read keeps what was read and marks it with ?`, async ($, on) => {
+    await boot($, on, surface, boardOf(wrow({ port: 'P1' }), `workers${T}partial${T}run_y: 응답 없음`))
+    const band = await $.ui.mount({ plugin: 'orchestration-kit', surface, component: 'AbovePrompt', props: BAND })
+    expect((await band.find({ key: 'portfolio-progress' }))?.text).toContain('1?')
+    await band.unmount()
+    const pane = await $.ui.mount({ plugin: 'orchestration-kit', surface, component: 'Pane', requestId: 'portfolio-board', props: PANE } as never)
+    expect(await pane.find({ type: 'Text', text: /일부 읽지 못함: run_y: 응답 없음/ })).toBeDefined()
+    expect(await pane.find({ key: 'work-app-P1-green' })).toBeDefined()
+    await pane.unmount()
+  })
+
+  test(`W4 ${surface}: a board command that failed says so, and keeps the last good data`, async ($, on) => {
+    const w: World = {}
+    const clock = await boot($, on, surface, boardOf(wrow({ port: 'P1' })), w)
+    w.exit = 1; w.stderr = 'kit.sh: 실패\n'; w.board = ''
+    await clock.advance(10_000)
+    const band = await $.ui.mount({ plugin: 'orchestration-kit', surface, component: 'AbovePrompt', props: BAND })
+    expect((await band.find({ key: 'portfolio-checked' }))?.text).toContain('확인 실패')
+    expect((await band.find({ key: 'portfolio-progress' }))?.text).toContain('1')
+    await band.unmount()
+  })
+
+  test(`W4 ${surface}: a failed check on the band says how long ago the last good one was`, async ($, on) => {
+    const w: World = {}
+    const clock = await boot($, on, surface, boardOf(wrow({ port: 'P1' })), w)
+    w.exit = 1; w.stderr = 'kit.sh: 실패\n'; w.board = ''
+    await clock.advance(2 * MIN)
+    const band = await $.ui.mount({ plugin: 'orchestration-kit', surface, component: 'AbovePrompt', props: BAND })
+    expect((await band.find({ key: 'portfolio-checked' }))?.text).toContain('마지막 성공')
+    expect((await band.find({ type: 'Text', in: 'portfolio-checked-ok' }))?.text).toBe('2분 전')
+    await band.unmount()
+  })
+
+  test(`W8 ${surface}: audit lines do not count as stalled; they sit under their own Run 점검 heading with their own counts`, async ($, on) => {
+    const audit = [['run', 'app', 'run_q', '2026-10-02T00:00:00+09:00', 'gone', 'blocked=4'].join(T), ['run', 'app', 'run_r', '2026-10-03T00:00:00+09:00', 'gone', 'blocked=1'].join(T), ...Array.from({ length: 15 }, (_, i) => ['drift', 'app', 'unreported', `T${i}`].join(T))].join('\n')
+    const clock = await boot($, on, surface, boardOf(wrow({ port: 'P1' })), { audit })
+    await $.command.run({ command: 'portfolio-board', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 90 } } as never)
+    await clock.advance(10)
+    const pane = await $.ui.mount({ plugin: 'orchestration-kit', surface, component: 'Pane', requestId: 'portfolio-board', props: PANE } as never)
+    expect((await pane.find({ key: 'pane-stalled' }))?.text).toBe('멈춤·이상 0')
+    expect((await pane.find({ key: 'pane-audit' }))?.text).toBe('Run 점검 2 · 상태 어긋남 15')
+    await pane.unmount()
+  })
+
+  test(`W5 ${surface}: the time since the last check counts up, restarts on a new check, turns late`, async ($, on) => {
+    const clock = await boot($, on, surface, boardOf(wrow({ port: 'P1' })))
+    const band = await $.ui.mount({ plugin: 'orchestration-kit', surface, component: 'AbovePrompt', props: BAND })
+    const ago = async () => band.find({ type: 'Text', in: 'portfolio-checked' })
+    expect((await ago())?.text).toBe('확인 0초 전')
+    expect((await ago())?.props.color).toBeUndefined()
+    await band.advance(3000)
+    expect((await ago())?.text).toBe('확인 3초 전')
+    await band.advance(60_000)
+    expect((await ago())?.text).toBe('확인 1분 전')
+    expect((await ago())?.props.color).toBe('warning')
+    await clock.advance(10_000)
+    expect((await ago())?.text).toBe('확인 0초 전')
+    expect((await ago())?.props.color).toBeUndefined()
+    await band.unmount()
+  })
+
+  test(`W6 ${surface}: a Worker silent for 16 minutes is stalled; a task with one live Worker is not; waiting for an answer is not`, async ($, on) => {
+    await boot($, on, surface, boardOf(wrow({ port: 'P1', age: 16 * MIN })))
+    const band = await $.ui.mount({ plugin: 'orchestration-kit', surface, component: 'AbovePrompt', props: BAND })
+    expect((await band.find({ key: 'portfolio-stalled' }))?.text).toBe('멈춤 1')
+    await band.unmount()
+    const pane = await $.ui.mount({ plugin: 'orchestration-kit', surface, component: 'Pane', requestId: 'portfolio-board', props: PANE } as never)
+    expect((await pane.find({ key: 'pane-stalled' }))?.text).toBe('멈춤·이상 1')
+    expect(await pane.find({ key: 'stalled-app-P1' })).toBeDefined()
+    await pane.unmount()
+  })
+
+  test(`W6 ${surface}: only one of two Workers stalled leaves the task running, with a line under it`, async ($, on) => {
+    await boot($, on, surface, boardOf(wrow({ port: 'P1', age: 16 * MIN, term: 'a' }), wrow({ port: 'P1', age: MIN, term: 'b' }), wrow({ port: 'P2', age: 20 * MIN, att: 'input', term: 'c' })))
+    const band = await $.ui.mount({ plugin: 'orchestration-kit', surface, component: 'AbovePrompt', props: BAND })
+    expect(await band.find({ key: 'portfolio-stalled' })).toBeUndefined()
+    expect((await band.find({ key: 'portfolio-progress' }))?.text).toContain('2')
+    await band.unmount()
+    const pane = await $.ui.mount({ plugin: 'orchestration-kit', surface, component: 'Pane', requestId: 'portfolio-board', props: PANE } as never)
+    expect(await pane.find({ key: 'work-app-P1-green' })).toBeDefined()
+    expect(await pane.find({ type: 'Text', text: /멈춤 의심 Worker 1/ })).toBeDefined()
+    expect(await pane.find({ key: 'work-app-P2-gray' })).toBeDefined()
+    expect(await pane.find({ type: 'Text', text: /답 기다림/ })).toBeDefined()
+    expect((await pane.find({ key: 'pane-stalled' }))?.text).toBe('멈춤·이상 0')
+    await pane.unmount()
+  })
+
+  test(`W6 ${surface}: a Worker that waits for a person counts as stalled and says what it needs`, async ($, on) => {
+    await boot($, on, surface, boardOf(wrow({ port: 'P1', act: 'blocked' })))
+    const band = await $.ui.mount({ plugin: 'orchestration-kit', surface, component: 'AbovePrompt', props: BAND })
+    expect((await band.find({ key: 'portfolio-stalled' }))?.text).toBe('멈춤 1')
+    await band.unmount()
+    const pane = await $.ui.mount({ plugin: 'orchestration-kit', surface, component: 'Pane', requestId: 'portfolio-board', props: PANE } as never)
+    expect(await pane.find({ type: 'Text', text: /사람 입력 필요/ })).toBeDefined()
+    await pane.unmount()
+  })
+
+  test(`W7 ${surface}: the check time moves on every check, the data change time only when the data changes`, async ($, on) => {
+    const w: World = {}
+    const clock = await boot($, on, surface, boardOf(wrow({ port: 'P1' })), w)
+    const pane = await $.ui.mount({ plugin: 'orchestration-kit', surface, component: 'Pane', requestId: 'portfolio-board', props: PANE } as never)
+    const read = async () => [(await pane.find({ key: 'pane-checked-at' }))?.text, (await pane.find({ key: 'pane-changed' }))?.text]
+    const [checked, changed] = await read()
+    expect(changed).toMatch(/데이터 변경 \d\d:\d\d/)
+    await clock.advance(61_000)
+    const [checked2, changed2] = await read()
+    expect(checked2).not.toBe(checked)
+    expect(changed2).toBe(changed)
+    // Orca seeing the Worker again moves lastObservedAt every time: that is not a change
+    w.board = boardOf(wrow({ port: 'P1', age: 10_000 }))
+    await clock.advance(61_000)
+    expect((await read())[1]).toBe(changed)
+    w.board = boardOf(wrow({ port: 'P1' }), wrow({ port: 'P2', term: 'b' }))
+    await clock.advance(61_000)
+    expect((await read())[1]).not.toBe(changed)
+    await pane.unmount()
+  })
+
+  test(`W8 ${surface}: audit runs only once the pane is opened, then every 5 minutes; its findings and failure show in the pane`, async ($, on) => {
+    const calls: string[] = []
+    const w: World = { calls, audit: [['run', 'app', 'run_q', '2026-10-02T00:00:00+09:00', 'gone', 'blocked=4'].join(T), ['drift', 'app', 'unreported', 'APP-0001'].join(T)].join('\n') }
+    const clock = await boot($, on, surface, BOARD, w)
+    const audits = () => calls.filter(c => c === 'audit').length
+    await clock.advance(120_000)
+    expect(audits()).toBe(0)
+    await $.command.run({ command: 'portfolio-board', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 90 } } as never)
+    await clock.advance(10)
+    expect(audits()).toBe(1)
+    await clock.advance(299_000)
+    expect(audits()).toBe(1)
+    await clock.advance(2_000)
+    expect(audits()).toBe(2)
+    const pane = await $.ui.mount({ plugin: 'orchestration-kit', surface, component: 'Pane', requestId: 'portfolio-board', props: PANE } as never)
+    expect(await pane.find({ type: 'Text', text: /Coordinator 없는 Run: run_q/ })).toBeDefined()
+    expect(await pane.find({ type: 'Text', text: /상태 어긋남: app/ })).toBeDefined()
+    await pane.unmount()
+    w.auditExit = 1
+    await clock.advance(300_000)
+    const failed = await $.ui.mount({ plugin: 'orchestration-kit', surface, component: 'Pane', requestId: 'portfolio-board', props: PANE } as never)
+    expect(await failed.find({ type: 'Text', text: /Run 점검 못 함/ })).toBeDefined()
+    await failed.unmount()
+  })
+
+  for (const [name, git, expected] of [['a Kit-less repository top', '/h/x\n\n', 1], ['a Kit-less repository subfolder', '/h/x\nsub/\n', 2]] as const) {
+    test(`W9 ${surface}: ${name}: kit.sh where runs ${expected} time(s) per turn`, async ($, on) => {
+      const calls: string[] = []
+      const clock = mock.clock(on, { now: NOW })
+      world(on, BOARD, { calls, whereFails: () => true, git })
+      await $.session.start({ cwd: '/h/x', surface, isInteractive: true })
+      await clock.advance(10)
+      const before = calls.filter(c => c === 'where').length
+      await $.turn.complete({ answer: 'x', durationMs: 5, isAborted: false, turnId: 'm1', reason: 'answer' })
+      await clock.advance(10)
+      expect(calls.filter(c => c === 'where').length - before).toBe(expected)
+    })
+  }
 }

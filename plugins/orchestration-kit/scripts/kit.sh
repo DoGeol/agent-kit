@@ -294,8 +294,8 @@ cmd_pending() {
   done
 }
 
-# Board lines from a Kit task table: blocked rows, rows waiting for review, "row<TAB>id<TAB>status<TAB>cell 4<TAB>cell 6"
-# for every task (the board's own use), then "open<TAB>id<TAB>n" (work not done yet).
+# Board lines from a Kit task table: blocked rows, rows waiting for review, "row<TAB>id<TAB>status<TAB>cell 4<TAB>cell 6<TAB>cell 2"
+# for every task (the board's own use; cell 2, the title, comes last), then "open<TAB>id<TAB>n" (work not done yet).
 # Project cells: 1 id, 2 title, 3 status, 4 portfolioTaskId, 6 Orca ref; review is in-review.
 # Portfolio cells: 4 priority, 6 report; review is needs-review (a person decides).
 task_lines() { # file projectId
@@ -311,7 +311,7 @@ task_lines() { # file projectId
       if (s ~ /^(assigned|accepted|in-progress|in-review|needs-review|blocked)$/) open++
       if (s == "blocked") print "blocked\t" id "\t" c[1] "\t" c[2]
       if (s == rv) print "review\t" id "\t" c[1] "\t" c[2] "\t" c6
-      print "row\t" c[1] "\t" s "\t" c4 "\t" c6
+      print "row\t" c[1] "\t" s "\t" c4 "\t" c6 "\t" c[2]
       split("", c) }
     END { print "open\t" id "\t" open + 0 }' "$1"
 }
@@ -327,35 +327,52 @@ status_line() { # STATUS.md
     /^- 다음 안전한 행동:/ { safe = $0; sub(/^- 다음 안전한 행동:[ \t]*/, "", safe) }
     END { if (nxt == "") nxt = safe; if (obs == "") obs = "-"; if (nxt == "") nxt = "-"; gsub(/\t/, " ", nxt); print obs "\t" nxt }' "$1"
 }
-# Live Orca workers: "worker<TAB>projectId<TAB>projectTaskId<TAB>runId<TAB>state<TAB>provider/model<TAB>terminal".
-# worker-list without --run sees only the caller's bound Run, so each Run that still has a coordinator is read.
-board_workers() { # lines "projectId<TAB>repo root<TAB>projectTaskId<TAB>Orca ref"
+# Live Orca workers. A Worker is live while its workerState is not a final one and its liveness is not `exited`:
+# terminalState is process accounting (a person taking the terminal over makes it `retained`), so it is not read.
+#   worker<TAB>projectId<TAB>projectTaskId<TAB>runId<TAB>state<TAB>provider/model<TAB>terminal<TAB>portfolioTaskId<TAB>title<TAB>liveness<TAB>lastObservedAt (epoch ms)<TAB>activity<TAB>attention
+# `-` stands for a value that is not there. Columns 1-7 are the original line; the rest were appended after them.
+#   workers<TAB>unknown<TAB>reason (nothing could be read) | workers<TAB>partial<TAB>reason (a Run failed or has more rows than one page)
+# worker-list without --run sees only the caller's bound Run, so Runs are read one by one: those whose coordinator terminal is
+# live, plus those an open Kit task names (every Run with a coordinator when the terminal list cannot be read).
+board_workers() { # lines "projectId<TAB>repo root<TAB>projectTaskId<TAB>Orca ref<TAB>portfolioTaskId<TAB>open 1|0<TAB>title"
   if ! command -v orca > /dev/null || ! command -v jq > /dev/null; then printf 'workers\tunknown\torca 또는 jq 없음\n'; return 0; fi
   # jq reads empty input as success, so the answer is taken first and must say ok.
-  if ! j=$(orca orchestration run-list --json 2>/dev/null) || [ "$(printf '%s' "$j" | jq -r '.ok' 2>/dev/null)" != true ]; then
-    printf 'workers\tunknown\torca 응답 없음 (sandbox 안이면 밖에서 실행)\n'; return 0
-  fi
-  runs=$(printf '%s' "$j" | jq -r '.result.runs[]? | select(.coordinator_handle != null) | .id')
+  if ! j=$(orca_json orchestration run-list); then printf 'workers\tunknown\t%s\n' "$orca_reason"; return 0; fi
+  if tl=$(orca_json terminal list); then live=$(printf '%s' "$tl" | jq -c '[.result.terminals[]?.handle]'); else live=null; fi
+  named=$(printf '%s\n' "$1" | awk -F'\t' '$6 == 1 { print $4 }' | grep -oE 'run_[a-z0-9]+' | sort -u | jq -R . | jq -sc .)
+  runs=$(printf '%s' "$j" | jq -r --argjson live "$live" --argjson named "$named" '.result.runs[]? | select(.coordinator_handle != null)
+    | select($live == null or (.coordinator_handle as $h | $live | any(. == $h)) or (.id as $i | $named | any(. == $i))) | .id')
   for r in $runs; do
-    orca orchestration worker-list --run "$r" --terminal-state active --json 2>/dev/null | jq -r '.result.workers[]?
+    if ! wl=$(orca_json orchestration worker-list --run "$r"); then printf '!partial\t%s: 응답 없음\n' "$r"; continue; fi
+    [ "$(printf '%s' "$wl" | jq -r '.result.page.hasMore // false')" != true ] || printf '!partial\t%s: 한 쪽을 넘는 Worker가 있음\n' "$r"
+    printf '%s' "$wl" | jq -r '.result.workers[]?
       | select(.workerState | test("^(succeeded|failed|cancelled|abandoned|stopped)$") | not)
-      | [.runId, .workerState, (.taskId // "-"), ((.projection.provider.id // "-") + "/" + (.projection.provider.model // "-")),
-         ((.projection.workspace.id // "") | split("::") | .[1] // "-"), (.agentTerminalHandle // "-")] | @tsv' 2>/dev/null || true
-  done | while IFS="$tab" read -r run state task model ws term; do
+      | select(.projection.liveness.verdict != "exited")
+      | [.runId, .workerState, (.taskId // "-"), (.dispatchId // "-"), ((.projection.provider.id // "-") + "/" + (.projection.provider.model // "-")),
+         ((.projection.workspace.id // "") | split("::") | .[1] // "-"), (.agentTerminalHandle // "-"),
+         ((.projection.liveness.verdict // "-") + (if .projection.liveness.reason then ":" + .projection.liveness.reason else "" end)),
+         ((.projection.evidence.lastObservedAt // "-") | tostring), (.projection.stage.activity // "-"),
+         ((.projection.attention.categories // []) | join(",") | if . == "" then "-" else . end)] | @tsv' 2>/dev/null || true
+  done | while IFS="$tab" read -r run state task disp model ws term live at act att; do
+    if [ "$run" = '!partial' ]; then printf 'workers\tpartial\t%s\n' "$state"; continue; fi
     c=$(common_dir "$ws") || c=; c=${c%/.git}
-    # The task whose Orca ref names this Orca task exactly ("run_x / task_y / ctx_z"), else the repo's first project.
-    m=$(printf '%s\n' "$1" | awk -F'\t' -v c="$c" -v t="$task" '
-      c == "" || $2 != c { next }
-      first == "" { first = $1 }
-      t != "-" { n = split($4, a, /[\/, \t]+/); for (i = 1; i <= n; i++) if (a[i] == t) { print $1 "\t" $3; hit = 1; exit } }
-      END { if (!hit) print (first == "" ? "-" : first) "\t-" }')
-    printf 'worker\t%s\t%s\t%s\t%s\t%s\t%s\n' "${m%%"$tab"*}" "${m#*"$tab"}" "$run" "$state" "$model" "$term"
+    # The task whose Orca ref names this Orca task (else this dispatch) exactly ("run_x / task_y / ctx_z"), else the repo's first project.
+    # With no repo (the Worktree folder is gone) only the exact link counts, across all projects; no link leaves the project unknown.
+    m=$(printf '%s\n' "$1" | awk -F'\t' -v c="$c" -v t="$task" -v d="$disp" '
+      c != "" && $2 != c { next }
+      c != "" && first == "" { first = $1 }
+      { n = split($4, a, /[\/, \t()·;]+/); for (i = 1; i <= n; i++) {
+          if (t != "-" && a[i] == t && !tm) tm = $1 "\t" $3 "\t" $5 "\t" $7
+          if (d != "-" && a[i] == d && !dm) dm = $1 "\t" $3 "\t" $5 "\t" $7 } }
+      END { print (tm ? tm : dm ? dm : (first == "" ? "-" : first) "\t-\t-\t-") }')
+    pid=${m%%"$tab"*}; rest=${m#*"$tab"}; ptask=${rest%%"$tab"*}; rest=${rest#*"$tab"}; port=${rest%%"$tab"*}; title=${rest#*"$tab"}
+    printf 'worker\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$pid" "$ptask" "$run" "$state" "$model" "$term" "$port" "$title" "$live" "$at" "$act" "$att"
   done
 }
 # One snapshot for a status view: what needs someone, and every active project. Read-only.
 #   project <id> <shared|personal|-> <open tasks> <lastPulled> <observedAt> <next work>
 #   blocked <id|portfolio> <taskId> <title> / review <id|portfolio> <taskId> <title> <Orca ref|report> / handoff <id> <PORT> <title>
-#   pending|invalid|error (as kit.sh pending) / worker ... / workers unknown <reason>
+#   pending|invalid|error (as kit.sh pending) / worker (13 columns, see board_workers) / workers unknown|partial <reason>
 cmd_board() {
   hub=${1:-}
   [ -d "$hub" ] || die "usage: kit.sh board <hubDir>"
@@ -371,14 +388,14 @@ cmd_board() {
     [ -n "$id" ] && [ "$status" = active ] || continue
     p=$(project_root "$hub" "$id" "$path")
     c=$(common_dir "$(expand_path "$path")") || c=; c=${c%/.git}
-    [ -z "$c" ] || refs="$refs$id$tab$c$tab-$tab-$nl"
+    [ -z "$c" ] || refs="$refs$id$tab$c$tab-$tab-$tab-$tab-$tab-$tab-$nl"
     if [ ! -f "$p/.ai/ORCHESTRATION.md" ]; then printf 'project\t%s\t-\t0\t%s\t-\t-\n' "$id" "$pulled"; continue; fi
     if [ "$p" = "$hub/projects/$id" ]; then mode=personal; else mode=shared; fi
     t=$(task_lines "$p/.ai/TASKS.md" "$id")
     open=$(printf '%s\n' "$t" | awk -F'\t' '$1 == "open" { print $3 }')
     printf 'project\t%s\t%s\t%s\t%s\t%s\n' "$id" "$mode" "$open" "$pulled" "$(status_line "$p/.ai/STATUS.md")"
     printf '%s\n' "$t" | grep -Ev '^(open|row)	' || true
-    [ -z "$c" ] || refs="$refs$(printf '%s\n' "$t" | awk -F'\t' -v id="$id" -v c="$c" '$1 == "row" { print id "\t" c "\t" $2 "\t" $5 }')$nl"
+    [ -z "$c" ] || refs="$refs$(printf '%s\n' "$t" | awk -F'\t' -v id="$id" -v c="$c" '$1 == "row" { print id "\t" c "\t" $2 "\t" $5 "\t" $4 "\t" ($3 ~ /^(assigned|accepted|in-progress|in-review|needs-review|blocked)$/ ? 1 : 0) "\t" $6 }')$nl"
     # A delegation is accepted once a project task names its portfolioTaskId (the outbox file keeps status: assigned).
     for f in "$hub/handoffs/outbox/$id"/*.md; do
       [ -f "$f" ] || continue
