@@ -11,9 +11,9 @@
       "description": "Claude Code HUD: session summary, subagents, orchestration, usage limits"
     },
     {
-      "name": "orchestration-kit",
-      "source": "./plugins/orchestration-kit",
-      "description": "Portfolio / Project / Setup skills for multi-AI orchestration on Orca + Claude Code"
+      "name": "ok",
+      "source": "./plugins/ok",
+      "description": "ok (orchestration kit): /ok:start, /ok:plan, /ok:quick on Orca with Claude, Codex and Antigravity Workers"
     }
   ]
 }
