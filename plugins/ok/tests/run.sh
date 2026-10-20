@@ -95,7 +95,12 @@ if command -v jq > /dev/null; then
   [ "$(jq -r '.projects[0].base' "$hub/hub.json")" = main ] || fail "base branch"
   if "$okc" add "$hub" "$app" other 2>/dev/null; then fail "same repo under a second id accepted"; fi
   if "$okc" add "$hub" "$app" Bad_Id 2>/dev/null; then fail "bad id accepted"; fi
-  ok "init/add: missing files only, idempotent, repo files and status untouched, pointer and one exclude line"
+  fb="$tmp/feature-checked-out"; new_repo "$fb"; git -C "$fb" switch -q -c feature-x
+  "$okc" add "$hub" "$fb" fb > /dev/null 2>&1
+  [ "$(jq -r '.projects[] | select(.id == "fb") | .base' "$hub/hub.json")" = main ] || fail "base fell back to the checked-out feature branch"
+  nb="$tmp/no-main"; mkdir -p "$nb"; git -C "$nb" init -q -b trunk; git_commit "$nb" init 2>/dev/null || { printf 'x\n' > "$nb/a"; git_commit "$nb" init; }
+  "$okc" add "$hub" "$nb" nb 2>&1 >/dev/null | grep -q '^주의: .*trunk' || fail "fallback to the current branch not warned"
+  ok "init/add: missing files only, idempotent, repo files and status untouched, pointer and one exclude line; base prefers main over a checked-out branch"
 
   # 5. where: repo, an outside worktree, the hub itself; OK_HUB without a pointer
   git -C "$app" worktree add -q "$tmp/app-wt" -b feat

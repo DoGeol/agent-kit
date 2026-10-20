@@ -66,6 +66,22 @@ add_exclude() { # git common dir
   echo '.ok/' >> "$ex"
 }
 
+# Base branch of a repo: origin's default, else main or master (remote, then local), else the checked-out
+# branch with a warning on stderr (it may be a feature branch).
+default_base() {
+  b=$(git -C "$1" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true); b=${b#origin/}
+  if [ -z "$b" ]; then
+    for c in refs/remotes/origin/main refs/remotes/origin/master refs/heads/main refs/heads/master; do
+      git -C "$1" show-ref --verify --quiet "$c" && { b=${c##*/}; break; }
+    done
+  fi
+  if [ -z "$b" ]; then
+    b=$(git -C "$1" branch --show-current)
+    echo "주의: $1 의 기본 브랜치를 찾지 못해 지금 브랜치($b)를 기준으로 둔다. 다르면 --base로 다시 준다" >&2
+  fi
+  printf '%s\n' "$b"
+}
+
 cmd_add() {
   [ $# -ge 3 ] || die "usage: ok.sh add <hubDir> <repoDir> <projectId> [--base <branch>] [--title <text>]"
   need_jq; require_hub "$1"; hub=$(cd "$1" && pwd -P); dir=$2; id=$3; shift 3; base=; title=
@@ -75,10 +91,7 @@ cmd_add() {
   matches "$id" '^[a-z0-9][a-z0-9-]*$' || die "projectId는 소문자 kebab-case: '$id'"
   [ -d "$dir" ] && is_git "$dir" || die "$dir: git 저장소가 아님"
   repo=$(main_repo "$dir") || die "$dir: git 공통 폴더를 찾지 못함"
-  if [ -z "$base" ]; then
-    base=$(git -C "$repo" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true); base=${base#origin/}
-    [ -n "$base" ] || base=$(git -C "$repo" branch --show-current)
-  fi
+  [ -n "$base" ] || base=$(default_base "$repo")
   matches "$base" '^[A-Za-z0-9._/-]+$' || die "기준 브랜치를 찾지 못함. --base로 준다"
   short=$(short_path "$repo")
   old=$(jq -r --arg id "$id" '.projects[] | select(.id == $id) | .repo' "$hub/hub.json")
@@ -353,7 +366,8 @@ cmd_migrate() {
     else ai="$repo/.ai"; mode=shared; fi
     base=$(fm reportsRef < "$ai/ORCHESTRATION.md" 2>/dev/null || true); base=${base#origin/}
     [ -n "$base" ] && [ "$base" != - ] || base=
-    echo "project $id ($mode, $pstatus) $path${base:+ 기준 $base}"
+    shown=$base; [ -n "$shown" ] || { [ -d "$repo" ] && is_git "$repo" && shown=$(default_base "$(main_repo "$repo")"); } || true
+    echo "project $id ($mode, $pstatus) $path 기준 ${shown:-?}"
     if [ -n "$apply" ]; then
       if [ -d "$repo" ]; then cmd_add "$hub" "$repo" "$id" ${base:+--base "$base"} | sed 's/^/  /'
       else echo "  주의: 레포 없음, 등록 건너뜀: $path"; continue; fi
