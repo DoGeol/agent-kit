@@ -65,7 +65,7 @@ Orca: Run / Task / Dispatch / Worker / Worktree 실행 상태
 | `review-*.md`, `debate*.md`, `qa-sheet.md` | 그 리뷰어·critic·qa |
 | `roles/`, `ADOPT.md` | adopt Skill |
 
-접수 세션은 `projects/`를 읽기만 한다. 한 프로젝트에 Coordinator가 여럿이면(작업이 여럿) 각자 자기 작업 파일만 고치고, `status.md`는 자기 줄만 고친다.
+접수 세션은 `projects/`를 읽기만 한다(예외: `/ok:issue-review`가 사용자 동의를 받아 `ISSUES.md`와 `planned` 작업 파일을 만든다). 한 프로젝트에 Coordinator가 여럿이면(작업이 여럿) 각자 자기 작업 파일만 고치고, `status.md`는 자기 줄만 고친다.
 
 ## 파일 형식
 

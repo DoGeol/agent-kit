@@ -100,7 +100,6 @@ claude plugin install ok@dg-agent-kit
 ```bash
 plugins/ok/tests/run.sh
 claude plugin validate plugins/ok
-claude plugin test plugins/ok
 ```
 
 ## 없는 것

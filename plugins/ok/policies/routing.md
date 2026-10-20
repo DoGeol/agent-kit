@@ -113,7 +113,7 @@ Claude 기준 `모델/effort`. 다른 Provider로 바꾼 단계는 같은 칸의
 | 설계 리뷰 designer | sonnet/medium | sonnet/medium | sonnet/medium |
 | QA 시트 (qa) | 부르지 않음 (Coordinator가 spec의 검사 목록) | `strong` opus/medium | `strong` opus/high |
 | critic | opus/medium | opus/medium | opus/medium |
-| 기능 세션 (build) | `default` sonnet | `default` sonnet | `default` sonnet/high |
+| 기능 세션 (build) | `default` (모델 넘기지 않음) | `default` | `default`, effort high |
 | 코드 리뷰 reviewer | opus/medium | opus/medium | opus/high, `risk: high`면 fable/high |
 | 마무리 (finish) | 없음 | 없음 (Coordinator 워크트리에서 리뷰 ∥ 보안) | opus/high |
 | qa-run | `fast` haiku | `fast` haiku | `fast` haiku |

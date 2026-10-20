@@ -1,6 +1,6 @@
 {
   "name": "ok",
-  "version": "0.17.0",
+  "version": "0.17.1",
   "description": "ok (orchestration kit): hub intake, one Coordinator session per task, plan/quick tracks with spec review and critic debate, feature Workers on Orca with Claude, Codex or Antigravity. Every skill runs only when invoked by name.",
   "author": { "name": "DoGeol" },
   "license": "MIT",

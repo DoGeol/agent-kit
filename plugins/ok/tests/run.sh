@@ -162,6 +162,15 @@ if command -v jq > /dev/null; then
   "$okc" migrate "$old" 2>/dev/null && fail "second migrate ran on a new hub" || true
   ok "migrate: preview is read-only; apply keeps repos, archives old files, moves open tasks and overlays"
 
+  # 7b. a project that cannot be registered stops migrate before anything is archived, so it can be rerun
+  bad="$tmp/badhub"; mkdir -p "$bad/portfolio" "$tmp/not-git"
+  printf '| projectId | path | status | lastPulled |\n|---|---|---|---|\n| nogit | %s | active | - |\n' "$tmp/not-git" > "$bad/portfolio/PROJECTS.md"
+  printf '| portfolioTaskId | 제목 | 상태 | 우선순위 | 프로젝트 | 보고서 | 메모 |\n|---|---|---|---|---|---|---|\n| PORT-0001 | 빈 프로젝트 | backlog | - |  | - | - |\n' > "$bad/portfolio/TASKS.md"
+  "$okc" migrate "$bad" --apply > /dev/null 2>&1 && fail "migrate went on after a failed registration" || true
+  [ -d "$bad/portfolio" ] && [ ! -e "$bad/archive" ] || fail "failed migrate archived files"
+  [ ! -e "$bad/projects/tasks" ] && [ ! -e "$bad/projects//tasks" ] || fail "empty project cell made a task folder"
+  ok "migrate: failed registration stops before archiving"
+
   # 8. adopt-check: none, ok, stale on change or removed skill, new skill; hub: sources resolve in the hub
   ad="$tmp/adopt"; mkdir -p "$ad/.agents/skills/ui-build"; git -C "$ad" init -q -b main
   printf 'rules\n' > "$ad/DESIGN.md"; printf 'x\n' > "$ad/.agents/skills/ui-build/SKILL.md"; git_commit "$ad" base

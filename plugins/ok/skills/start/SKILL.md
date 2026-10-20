@@ -51,7 +51,7 @@ disable-model-invocation: true
 ## 4. 첫 지시
 
 ```
-/ok:<plan|quick> <--with 값이 있으면 그대로> <요청>
+/ok:<plan|quick> <plan이고 --with 값이 있으면 그대로. quick에는 넣지 않는다> <요청>
 hub: <HUB>, 프로젝트: <id>, 기준 브랜치: <기준 ref>, 작업 공간: <새 워크트리|현재 폴더>, slug: <slug>.
 이 세션은 접수 세션의 /ok:start로 열렸다. 끝나면 마지막 보고 한 줄을 접수 세션 카드 메모로 남긴다(Coordinator 규칙 11절). 답·질문·보고는 한국어.
 ```

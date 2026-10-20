@@ -101,6 +101,7 @@ ok-brief: <projectId>/<slug>
 
 ## 권한
 - 쓰기는 이 워크트리와 임시 폴더만. 이 워크트리의 브랜치에만 커밋하고 push하지 않는다.
+- 읽기 전용 Worker(리뷰·critic·qa-run 대신 띄운 것)면 커밋하지 않고 `.ok/`에만 쓴다.
 - 프로세스 종료는 자기가 띄운 PID만. pkill·killall 금지.
 - sandbox 밖에서 실행해도 되는 명령: orca orchestration …, <레포 테스트 명령>. 그 밖의 명령이 sandbox에 막히면 우회하지 말고 ask로 묻는다.
 - 보고·메시지 명령의 --body·--subject는 작은따옴표로 감싸고 백틱·$를 쓰지 않는다.
@@ -154,7 +155,7 @@ Subagent는 hub의 산출 경로에 직접 쓴다. 완료 알림을 **모두** �
 마무리 방식은 작업 파일 `finish`다(계획 트랙은 승인 카드의 답, 간단 트랙은 `project.md`의 `finish`, 없으면 원격이 있을 때 `pr`, 없을 때 `branch`). 다시 묻지 않는다.
 
 - `branch`: 머지하지 않고 둔다. Coordinator 워크트리와 작업 브랜치가 남는다.
-- `pr`: ① `git status --porcelain`이 비었는지 본다. 남은 변경이 있으면 만들지 않고 알린다. ② `git push -u origin <작업 브랜치>` ③ `gh pr create --base <기준 브랜치(origin/ 없이)> --head <작업 브랜치> --title "<작업 제목>" --body "<3줄 요약>"`. 실패하면 오류 원문과 "브랜치는 올렸습니다. PR은 직접 만들어 주세요" 한 줄. ④ PR URL을 작업 파일 `## 마무리`에 적는다.
+- `pr`: ① `git status --porcelain`이 비었는지 본다. 남은 변경이 있으면 만들지 않고 알린다. ② origin 소유자(`gh repo view --json owner -q .owner.login`)가 `gh api user -q .login`이나 `project.md`에 적힌 조직이 아니면 push하지 않고 사용자에게 묻는다(permissions.md "다른 사람 저장소로 push"). `git push -u origin <작업 브랜치>` ③ `gh pr create --base <기준 브랜치(origin/ 없이)> --head <작업 브랜치> --title "<작업 제목>" --body "<3줄 요약>"`. 실패하면 오류 원문과 "브랜치는 올렸습니다. PR은 직접 만들어 주세요" 한 줄. ④ PR URL을 작업 파일 `## 마무리`에 적는다.
 - `pr-merge`: `pr` 뒤, 레포에 CI가 있으면 통과를 기다리고(`gh pr checks --watch`) 프로젝트 규칙의 병합 방식(없으면 squash)으로 `gh pr merge`. CI 실패·충돌이면 병합하지 않고 블로커로 적는다.
 - 레포 규칙이 더 엄격하면(병합은 사람만, 커밋 형식, 커밋 전 검사) 레포 규칙을 따른다. 기준 브랜치에 직접 커밋·머지하지 않는다.
 - PR 제목·본문·커밋 메시지·브랜치 이름에는 ok·hub 언급과 hub 경로를 넣지 않는다. 레포 관례만 따른다.

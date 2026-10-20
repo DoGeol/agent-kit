@@ -369,7 +369,9 @@ cmd_migrate() {
     shown=$base; [ -n "$shown" ] || { [ -d "$repo" ] && is_git "$repo" && shown=$(default_base "$(main_repo "$repo")"); } || true
     echo "project $id ($mode, $pstatus) $path 기준 ${shown:-?}"
     if [ -n "$apply" ]; then
-      if [ -d "$repo" ]; then cmd_add "$hub" "$repo" "$id" ${base:+--base "$base"} | sed 's/^/  /'
+      if [ -d "$repo" ]; then
+        out=$(cmd_add "$hub" "$repo" "$id" ${base:+--base "$base"}) || die "등록 실패: $id ($path). 위 오류를 고치고 다시 실행한다"
+        printf '%s\n' "$out" | sed 's/^/  /'
       else echo "  주의: 레포 없음, 등록 건너뜀: $path"; continue; fi
     fi
     p="$hub/projects/$id"
@@ -377,6 +379,7 @@ cmd_migrate() {
       for (i = 2; i <= 5; i++) gsub(/^[ \t]+|[ \t]+$/, "", $i)
       if ($2 == "projectTaskId" || $2 ~ /^-+$/ || $2 == "") next
       if ($4 == "completed" || $4 == "cancelled") next
+      for (i = 2; i <= 5; i++) if ($i == "") $i = "-"
       print $2 "\t" $3 "\t" $4 "\t" $5 }' "$ai/TASKS.md" | while IFS="$tab" read -r tid ttitle tst port; do
       write_task "$p" "$tid" "$ttitle" "$tst" "kit에서 옮김: $tid${port:+ / $port}. 옛 기록: $( [ $mode = personal ] && echo archive/kit-ai/TASKS.md || echo "$path/.ai/TASKS.md")"
     done
@@ -389,25 +392,29 @@ cmd_migrate() {
     done
     if [ $mode = personal ]; then
       echo "  move    projects/$id/.ai -> projects/$id/archive/kit-ai"
-      [ -z "$apply" ] || { mkdir -p "$p/archive"; mv "$ai" "$p/archive/kit-ai"; }
+      [ -z "$apply" ] || { [ ! -e "$p/archive/kit-ai" ] || die "$p/archive/kit-ai 이미 있음"; mkdir -p "$p/archive"; mv "$ai" "$p/archive/kit-ai"; }
     else
       echo "  그대로  $path/.ai/ (팀 저장소 파일이라 지울지는 사용자가 정한다)"
     fi
-  done
+  done || exit 1
   # Portfolio items no project picked up yet become planned tasks of their project.
   awk -F'|' '/^\|/ {
     for (i = 2; i <= 8; i++) gsub(/^[ \t]+|[ \t]+$/, "", $i)
     if ($2 !~ /^PORT-[0-9]+$/ || ($4 != "backlog" && $4 != "assigned") || index($6, "(")) next
+    for (i = 2; i <= 8; i++) if ($i == "") $i = "-"
     print $2 "\t" $3 "\t" $6 "\t" $8 }' "$hub/portfolio/TASKS.md" | while IFS="$tab" read -r pid ptitle proj memo; do
-    if [ -n "$apply" ] && [ ! -d "$hub/projects/$proj" ]; then echo "주의: $pid 의 프로젝트 $proj 가 없음. 건너뜀"; continue; fi
+    if [ "$proj" = - ] || { [ -n "$apply" ] && ! jq -e --arg id "$proj" 'any(.projects[]; .id == $id)' "$hub/hub.json" >/dev/null; }; then
+      echo "주의: $pid 의 프로젝트 $proj 가 등록되지 않음. 건너뜀"; continue
+    fi
     write_task "$hub/projects/$proj" "$pid" "$ptitle" planned "Portfolio에서 옮김: $pid. 메모: $memo"
   done
-  for old in portfolio handoffs .ai; do
+  # portfolio/ moves last: while it is still here a failed run can be repeated.
+  for old in handoffs .ai portfolio; do
     [ -e "$hub/$old" ] || continue
     echo "move    $old -> archive/kit/$old"
-    [ -z "$apply" ] || { mkdir -p "$hub/archive/kit"; mv "$hub/$old" "$hub/archive/kit/$old"; }
+    [ -z "$apply" ] || { [ ! -e "$hub/archive/kit/$old" ] || die "archive/kit/$old 이미 있음"; mkdir -p "$hub/archive/kit"; mv "$hub/$old" "$hub/archive/kit/$old"; }
   done
-  [ -z "$apply" ] || echo "끝. hub가 git 저장소면 변경을 확인하고 커밋한다."
+  [ -z "$apply" ] || echo "끝. 옛 결정·보고는 archive/ 안에만 있어 status에 보이지 않는다. hub가 git 저장소면 변경을 확인하고 커밋한다."
 }
 
 write_task() { # projectDir oldId title oldStatus note

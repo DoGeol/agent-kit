@@ -14,6 +14,8 @@ disable-model-invocation: true
 - 요청이 비었으면 "요청을 한 줄로 적어 주세요" 한 줄로 멈춘다.
 - `--with 단계=값,...`이 있으면 떼어 작업 파일 `providers:`에 적는다([덮어쓰기](../../policies/routing.md#덮어쓰기)). 요청 문장 안의 "리뷰는 codex로" 같은 말도 같다.
 - hub·프로젝트는 coordinator.md 0절대로 찾는다. 못 찾으면 한 줄 알리고 멈춘다.
+- 첫 지시에 `작업 공간:`이 없고 이 폴더가 레포 본 폴더(`git worktree list` 첫 줄)면 아무것도 만들지 않고 멈춘다: "새 워크트리에서 다시 시작해 주세요: 접수 세션에서 `/ok:start <id> plan <요청>`".
+- 이 Skill의 모든 Subagent 브리핑과 Worker 명세는 첫 줄 `ok-brief: <id>/<slug>`, `읽을 것: <P>/tasks/<slug>.md`, 다음 `읽을 것:`에 `<P>/tasks/<slug>.md`를 넣는다(coordinator.md 1절). 아래에 "같은 브리핑"·"리뷰 파일"처럼 줄여 쓴 곳도 같다. 빠지면 ok Subagent가 일하지 않는다.
 
 ## 1단계 — 작업 파일
 
@@ -43,7 +45,7 @@ disable-model-invocation: true
   등급: M (약 150줄, reviewers 최대 3명 qa 포함) | L (분량 제한 없음, 필요한 리뷰어만)
   ```
   구조를 새로 정해야 하면(새 저장 데이터, 프로젝트 간 계약) architect에게 설계 문서(`<P>/tasks/<slug>/design.md`)를 먼저 받고 planner 브리핑에 넣는다.
-- 작업 파일 `status: in-review`, `agents`에 id, 체크포인트 갱신.
+- 작업 파일 `agents`에 id, 체크포인트 갱신(`status`는 `planned` 그대로).
 
 ## 3단계 — 설계 리뷰와 토론
 
@@ -71,7 +73,7 @@ ok-brief: <id>/<slug>
 
 부르는 조건(하나라도): 리뷰어가 2명 이상(qa 포함), 또는 high 지적이 하나라도 있음. 둘 다 아니면 4단계로 간다. 라운드 상한 S 1회, M·L 2회.
 
-1. **1차**: `critic` 단계 실행 주체(기본 `ok:critic` 포그라운드). 브리핑: 첫 줄 `ok-brief: <id>/<slug>`, `역할: <KIT>/roles/critic.md`, `단계: 1차, 설계 리뷰`, 작업·brief·spec·`review-*.md` 경로, 산출 `<P>/tasks/<slug>/debate.md`. `critic=cross`면 spec을 쓴 Provider가 아닌 Provider의 읽기 전용 Worker로.
+1. **1차**: `critic` 단계 실행 주체(기본 `ok:critic` 포그라운드). 브리핑: 첫 줄 `ok-brief: <id>/<slug>`, `읽을 것: <P>/tasks/<slug>.md`, `역할: <KIT>/roles/critic.md`, `단계: 1차, 설계 리뷰`, 작업·brief·spec·`review-*.md` 경로, 산출 `<P>/tasks/<slug>/debate.md`. `critic=cross`면 spec을 쓴 Provider가 아닌 Provider의 읽기 전용 Worker로.
 2. 반박·보완·새 지적(C…)이 있으면 **그 지적을 낸 리뷰어만** 다시 부른다(Subagent면 같은 에이전트에 `SendMessage`로 이어서, 못 이으면 새로). 브리핑 `토론 답`, debate 경로, 답 파일 `<P>/tasks/<slug>/debate-reply-<역할>.md`. 동시에 보낸다.
 3. **마무리**: critic에 `단계: 마무리`, debate·답 파일 경로. 첫 줄 `CONSENSUS: done|disputed`.
 4. `disputed`이고 라운드가 남았으면 이견 줄만 2~3을 한 번 더.
@@ -100,7 +102,7 @@ Coordinator가 직접 `<P>/tasks/<slug>/review-summary.md`를 쓴다: 첫 줄 `V
 
 1. 작업 브랜치 확인(coordinator.md 0절). Coordinator 워크트리가 레포 본 폴더(`git worktree list` 첫 줄)면 사용자 체크아웃을 건드리지 않도록 멈추고 "새 워크트리에서 다시 시작해 주세요: 접수 세션에서 `/ok:start <id> plan <요청>`" 한 줄. 기준 브랜치가 다른 진행 중 작업의 작업 브랜치면 `depends`에 그 slug.
 2. 기능은 서로 기대지 않으므로 **모두 동시에** 연다. 기대는 기능이 남아 있으면 열기 전에 한 기능으로 합쳐 spec을 고친다.
-3. coordinator.md 0절 4번(Orca 세션 확인) → 작업당 한 번 `run-create`. 기능마다 `<P>/tasks/<slug>/worker-<fid>.md`를 coordinator.md 7절 형식으로 쓴다(`<fid>`는 소문자 `f1`). 역할은 기능의 주 역할([roles.md 고르기](../../policies/roles.md#고르기)). `## 작업` 본문:
+3. coordinator.md 0절 4번(Orca 세션 확인) → 이 작업의 Run이 없으면 `run-create`(작업당 하나, 3.1에서 Worker로 만든 Run이 있으면 그것). 기능마다 `<P>/tasks/<slug>/worker-<fid>.md`를 coordinator.md 7절 형식으로 쓴다(`<fid>`는 spec의 기능 id `F1`). 역할은 기능의 주 역할([roles.md 고르기](../../policies/roles.md#고르기)). `## 작업` 본문:
 
    ```
    작업 <slug>의 기능 <fid> <기능 이름> 구현. 대상: <레포>. 이 기능의 서브태스크(spec `## 기능`의 <fid>-1, <fid>-2 …)만 한다. 다른 기능은 고치지 않는다. 층(화면·API·저장·설정)은 가리지 않는다.
@@ -130,8 +132,8 @@ Coordinator가 직접 `<P>/tasks/<slug>/review-summary.md`를 쓴다: 첫 줄 `V
 
 ## 8단계 — 기능별 코드 리뷰·머지
 
-1. **reviewer**: `code-review` 실행 주체(기본 `ok:reviewer` 백그라운드). 브리핑: 첫 줄 `ok-brief: <id>/<slug>`, `역할: <KIT>/roles/reviewer.md`, `형식: <KIT>/roles/review-format.md`, 레포 <Coordinator 워크트리>, 기능 브랜치(보고의 실제 이름), 비교 기준 <작업 브랜치>, 기능 id, spec·qa-sheet·review-summary·기능 보고 경로, 산출 `<P>/reports/<slug>-review-<fid>.md`. Worker로 바뀌었으면 Coordinator 워크트리의 읽기 전용 Worker(같은 `.git`이라 `git diff <작업 브랜치>...<기능 브랜치>`가 된다). `code-review=cross`면 그 기능을 만든 Provider가 아닌 Provider.
-2. **critic 1회**: reviewer가 `issues`면 critic `단계: 1차, <fid> 코드`, 같은 레포·브랜치·기준, 리뷰 파일, 산출 `<P>/reports/<slug>-debate-<fid>.md`. 반박·새 지적이 있으면 reviewer `토론 답`(답 파일 `<P>/reports/<slug>-debate-reply-<fid>.md`) → critic `마무리`. 남은 이견은 Coordinator가 정한다(사용자 의도가 걸리면 결정 파일). `pass`면 critic을 부르지 않는다.
+1. **reviewer**: `code-review` 실행 주체(기본 `ok:reviewer` 백그라운드). 브리핑: 첫 줄 `ok-brief: <id>/<slug>`, `읽을 것: <P>/tasks/<slug>.md`, `역할: <KIT>/roles/reviewer.md`, `형식: <KIT>/roles/review-format.md`, 레포 <Coordinator 워크트리>, 기능 브랜치(보고의 실제 이름), 비교 기준 <작업 브랜치>, 기능 id, spec·qa-sheet·review-summary·기능 보고 경로, 산출 `<P>/reports/<slug>-review-<fid>.md`. Worker로 바뀌었으면 Coordinator 워크트리의 읽기 전용 Worker(같은 `.git`이라 `git diff <작업 브랜치>...<기능 브랜치>`가 된다). `code-review=cross`면 그 기능을 만든 Provider가 아닌 Provider.
+2. **critic 1회**: reviewer가 `issues`면 critic(같은 첫 두 줄) `단계: 1차, <fid> 코드`, 같은 레포·브랜치·기준, 리뷰 파일, 산출 `<P>/reports/<slug>-debate-<fid>.md`. 반박·새 지적이 있으면 reviewer `토론 답`(답 파일 `<P>/reports/<slug>-debate-reply-<fid>.md`) → critic `마무리`. 남은 이견은 Coordinator가 정한다(사용자 의도가 걸리면 결정 파일). `pass`면 critic을 부르지 않는다.
 3. **반영**: 합의-반영이 있으면 `<P>/tasks/<slug>/fix-<fid>-<n>.md`에 "토론 파일 <경로>의 `## 반영 목록` 반영(테스트 먼저), 같은 결과 파일 갱신, worker_done"을 쓰고 `task-create` → `worker-start --task <새 task> --terminal <그 세션 handle>`(같은 세션 재사용) → 7단계 대기. 반영 보고가 오면 reviewer만 한 번 더 본다(토론 없이). 3회 상한, 넘으면 결정 파일.
 4. **머지**: Coordinator 워크트리에서 `git merge --no-ff refs/heads/<기능 실제 브랜치>`. 충돌은 풀지 않고 그 기능 세션에 맡긴다. 머지한 기능 세션은 retain 상태로 둔다.
 
@@ -142,7 +144,7 @@ Coordinator가 직접 `<P>/tasks/<slug>/review-summary.md`를 쓴다: 첫 줄 `V
 | 등급 | 할 것 |
 |---|---|
 | S | 하지 않는다 |
-| M | Worker 없이: reviewer(`단계: 전체 리뷰`, 비교 `<기준 브랜치>...<작업 브랜치>`, 산출 `<P>/reports/<slug>-finish-review.md`) ∥ security 코드 모드(`security: true`일 때, 산출 `<P>/reports/<slug>-security.md`)를 동시에. 결과를 `<P>/reports/<slug>-finish.md`에 표(도구 \| 지적 수 \| 고칠 것 \| 넘긴 것(이유))로. 고칠 것은 그 코드가 속한 기능 세션에 8단계 3번처럼 보낸 뒤 다시 머지 |
+| M | Worker 없이(브리핑 첫 두 줄은 위와 같다): reviewer(`단계: 전체 리뷰`, 비교 `<기준 브랜치>...<작업 브랜치>`, 산출 `<P>/reports/<slug>-finish-review.md`) ∥ security 코드 모드(`security: true`일 때, 산출 `<P>/reports/<slug>-security.md`)를 동시에. 결과를 `<P>/reports/<slug>-finish.md`에 표(도구 \| 지적 수 \| 고칠 것 \| 넘긴 것(이유))로. 고칠 것은 그 코드가 속한 기능 세션에 8단계 3번처럼 보낸 뒤 다시 머지 |
 | L | 마무리 Worker(`finish` 실행 주체) 하나: 아래 지시 |
 
 L 마무리 Worker: `--name <slug>-finish`, 기준 `<작업 브랜치>`, 역할 reviewer + 기능의 주 구현 역할. `## 작업`:
@@ -161,7 +163,7 @@ L 마무리 Worker: `--name <slug>-finish`, 기준 `<작업 브랜치>`, 역할 
 
 ## 10단계 — 확인·정리·마무리
 
-1. `qa-run`(기본 `ok:qa-run`): 브리핑 첫 줄 `ok-brief: <id>/<slug>`, `역할: <KIT>/roles/qa-run.md`, Coordinator 워크트리 경로, 테스트·타입체크 명령(`project.md`의 `test`, 없으면 레포 문서), 산출 `<P>/reports/<slug>-qa.md`. 실패면 그 기능 세션에 반영을 보내고 다시 머지한 뒤 qa-run을 한 번 더.
+1. `qa-run`(기본 `ok:qa-run`): 브리핑 첫 줄 `ok-brief: <id>/<slug>`, `읽을 것: <P>/tasks/<slug>.md`, `역할: <KIT>/roles/qa-run.md`, Coordinator 워크트리 경로, 테스트·타입체크 명령(`project.md`의 `test`, 없으면 레포 문서), 산출 `<P>/reports/<slug>-qa.md`. 실패면 그 기능 세션에 반영을 보내고 다시 머지한 뒤 qa-run을 한 번 더.
 2. 정리: coordinator.md 10절.
 3. `status.md` 체크포인트·최근 변경, `learnings.md` 한 줄, 반영한 보고 `applied: true`, 작업 파일 `status: completed`. hub가 git이면 자기 경로 커밋(permissions.md).
 4. 마무리와 보고: coordinator.md 11절(작업 파일 `finish`대로, 다시 묻지 않는다). 보고 줄: `<id> · <slug> 완료 — 기능 <n>개, 리뷰 <pass/issues>, 마무리 <지적 n·고침 m>, qa <통과/실패>, 작업 브랜치 <브랜치> (기준 <기준>, 브랜치만 남김|PR <URL>|병합 <커밋>), 보고: <P>/reports/<slug>-*.md`.
