@@ -61,7 +61,7 @@ git clone https://github.com/DoGeol/agent-kit.git ~/agent-kit
 | `/debug <증상>` | 이 버그에만 켜지는 신호(실패 테스트, 요청 스크립트)부터 만들고 원인 조사 → 가설 하나씩 → 고침 → 회귀 테스트 |
 | `/setup` | caveman·ponytail·im-not-ai 설치 확인과 설치 명령 |
 
-스택 팩 `stacks/react`·`animation`·`design`·`python`·`java`·`node`는 `/dev`·`/check`·`crew`·`/debug` 등이 레포 파일로 판단해 읽는다. 팀 규칙은 `stacks/<스택>/team.md`에 적는다(지금은 틀만 있다).
+스택 팩 `stacks/react`·`animation`·`design`·`python`·`java`·`node`는 `/dev`·`/check`·`crew`·`/debug` 등이 레포 파일로 판단해 읽는다. 팀 규칙은 `stacks/<스택>/team.md`에 있다(범용 기본값. 팀에 맞게 바꾼다).
 
 선택 훅(Claude·Codex): `~/.config/agent-kit/hooks`에 `plain=on`을 적으면 `/dev`가 아닌 턴에 "일반 문장으로" 한 줄을 넣어 짧은 말투 잔류를 막는다. 기본은 꺼짐.
 
