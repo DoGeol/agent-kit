@@ -84,7 +84,7 @@ agent-kit/
 |---|---|---|
 | `/dev <요청>` | caveman, ponytail, karpathy-guidelines | 코드 + 테스트 |
 | `/plan <요청>` | superpowers `brainstorming`·`writing-plans`, mattpocock `grill-me` | spec 한 장 |
-| `/write <요청>` | Vercel `writing-guidelines`, `avoid-ai-writing`, internal-comms | 일반 문장 문서·메시지 |
+| `/write <요청>` | `rules/write.md`(한국어 AI 티 규칙), 초안 뒤 `/humanize` 권함 | 한국어 일반 문장 문서·메시지. 영어 요청이면 blader humanizer 규칙 |
 | `/review [대상]` | reviewer 역할, `ponytail-review`, 프론트면 `review-animations` | 지적 목록 |
 
 - **본문 형식**: `요청: $ARGUMENTS` → "`caveman`·`ponytail` Skill이 있으면 읽고 따른다(이름으로 부르거나 그 SKILL.md를 연다). 없으면 `rules/dev.md`의 축약 규칙으로" → 처리 → "이 턴에만. 커밋 메시지·PR 본문은 일반 문장".
@@ -94,6 +94,18 @@ agent-kit/
 - **외부 Skill의 자체 훅은 끔**: ponytail `PONYTAIL_DEFAULT_MODE=off`, caveman `caveman off`. 안 끄면 `/dev` 없이도 켜진다.
 - **세션 밖으로 나가는 글은 항상 일반 문장**: 커밋 메시지, PR 본문, 슬랙 초안. `rules/dev.md`에 박는다.
 - 여러 턴 동안 계속 켜 두고 싶어지면 그때 `/dev on`(폴더 모드 파일 + 훅)을 더한다. 지금은 만들지 않는다.
+
+**글쓰기는 한국어가 기본이다.** `/write`·`/plan`의 산출물과 `/review`의 지적은 한국어로 쓴다(역할 파일도 이미 한국어). 한국어 AI 티는 영어와 다르다(번역투 "~에 대하여"·"~를 통해", 이중 피동 "~되어진다", "가지고 있다", 접속사 남발, 문장 길이 균일). 그래서:
+
+- `rules/write.md`는 im-not-ai의 진단 규칙 10개 분류(73개)에서 자주 걸리는 것을 추려 담는다. 외부 설치 없이도 초안 단계에서 피하게 한다.
+- 다듬기는 im-not-ai를 **원본 설치**해서 `/humanize`(light·standard·heavy 자동 선택)·`/humanize-scan`(진단만)으로 한다. Python 스크립트와 작업 폴더가 필요해 SKILL.md 복사로는 안 돈다.
+- `/write`는 초안까지만 하고 "`/humanize`로 다듬으세요" 한 줄로 끝낸다. 한 턴에 둘 다 돌리면 길어지고, 초안을 사람이 먼저 보는 게 낫다.
+- 영어 글은 blader humanizer(vendor)의 패턴을 쓴다. Vercel `writing-guidelines`는 영어 문장 규칙이라 구조(제목·단락·목록) 부분만 참고한다.
+- 커밋 메시지가 한국어면 im-not-ai의 `commit-ko` 규칙을 `rules/dev.md`에서 가리킨다.
+
+### 1-1. `/plan`에서 ponytail은 끝에만
+
+`/plan`은 넓히고(질문·대안) → 적고 → 깎는다. ponytail의 세 질문(꼭 있어야 하나 → 레포에 이미 있나 → 표준 라이브러리로 되나)은 **깎는 단계에서만** 기능마다 적용해 `안 하는 것`·`나중에`를 채운다. 앞 단계에서 켜면 "모호한 요청은 최소 버전으로"라는 ponytail 규칙이 물어봐야 할 것을 잘라 버린다. caveman은 `/plan` 어디에도 넣지 않는다(spec은 사람이 읽는 문서).
 
 ### 2. 직군 × 스택 (`roles/`, `stacks/`, `skills/crew`)
 
@@ -116,9 +128,26 @@ crew build backend <요청>        ← 스택 생략: 레포 파일로 판단
 
 | 방식 | 대상 | 이유 |
 |---|---|---|
-| 원본 설치기로 그대로 | caveman, ponytail | 훅·CLI가 딸려 있고 자주 바뀐다. 우리는 모드에서 켜고 끄기만 |
-| `vendor/`에 복사 | 작은 텍스트 Skill: superpowers 일부, mattpocock `grill-me`·`to-spec`, addyosmani `code-reviewer`, Vercel `react-best-practices`·`writing-guidelines`, Emil `animate`·`review-animations`, `karpathy-guidelines` | 고정 커밋에서 받아 재현된다. 폴더마다 LICENSE |
+| 원본 설치기로 그대로 | caveman, ponytail, im-not-ai | 훅·CLI·스크립트가 딸려 있고 자주 바뀐다. 우리는 트리거에서 켜고 끄기만 |
+| `vendor/`에 복사 | 작은 텍스트 Skill (아래 표) | 고정 커밋에서 받아 재현된다. 폴더마다 LICENSE |
 | 응용 | 우리 Skill이 "vendor의 X를 읽고 따른 뒤 아래 다른 점만" | 원본을 안 고치니 갱신이 쉽다 |
+
+vendor 목록(확인한 라이선스 기준, 쓰는 폴더만 가져온다):
+
+| 폴더 | 가져올 것 | 라이선스 | 쓰는 곳 |
+|---|---|---|---|
+| `epoko77-im-not-ai/` | `references/diagnosis-rules.md`만 (한국어 AI 티 73개) | MIT | `rules/write.md` 재료. 본체는 원본 설치 |
+| `blader-humanizer/` | `SKILL.md` (영어 패턴 26개) | MIT | `/write` 영어 글 |
+| `obra-superpowers/` | `brainstorming`, `writing-plans`, `test-driven-development`, `systematic-debugging`, `verification-before-completion`, `subagent-driven-development` | MIT | `/plan`, `/dev`, `crew` |
+| `mattpocock-skills/` | `grill-me`, `to-spec`, `diagnosing-bugs` | MIT | `/plan` |
+| `addyosmani-agent-skills/` | `agents/code-reviewer.md`, `agents/security-auditor.md`, `code-simplification` | MIT | `/review`, `crew review security` |
+| `vercel-labs-agent-skills/` | `react-best-practices`(rules 72개), `composition-patterns`, `react-view-transitions`, `web-design-guidelines` | MIT | `stacks/react`, `/review frontend` |
+| `emilkowalski-skills/` | `animate`, `review-animations`, `animation-performance`, `emil-design-eng` | MIT | `stacks/animation`, `roles/designer.md` |
+| `forrestchang-karpathy/` | `karpathy-guidelines` | MIT | `/dev`, `rules/dev.md` |
+| `anthropics-skills/` | `skill-creator`, `frontend-design`, `webapp-testing` | Apache-2.0 | 새 Skill, `roles/designer.md`, `crew review qa` |
+| `wshobson-agents/` | `avoid-ai-writing`, `python-development/skills/*` 중 고른 것, `nodejs-backend-patterns`, `typescript-advanced-types` | MIT | `/write` 영어, `stacks/python`·`node` |
+
+넣지 않는 것: anthropics `docx`·`pdf`·`pptx`·`xlsx`(오픈 라이선스 아님), VoltAgent 언어별 페르소나(280줄 "You are a senior…", 체크리스트만 뽑아 `stacks/`에 직접 씀), superpowers·wshobson의 나머지(필요해지면 추가).
 
 - 오픈 라이선스가 아닌 것은 복사하지 않는다(anthropics/skills의 `docx`·`pdf`·`pptx`·`xlsx`).
 - VoltAgent 류 페르소나 정의(280줄 "You are a senior…")는 복사하지 않고 체크리스트만 뽑아 `roles/`·`stacks/`에 넣는다.
@@ -134,7 +163,7 @@ crew build backend <요청>        ← 스택 생략: 레포 파일로 판단
 |---|---|---|
 | 기능 하나 구현 | `/dev 주문 취소 API 추가` | `skills/dev`가 설치된 `caveman`·`ponytail`을 읽고 따른다 → 레포 파일로 스택 판단(`pyproject.toml`→`stacks/python`) → 테스트 먼저 → 최소 변경. 커밋 메시지는 일반 문장. 다음 턴은 다시 보통 말투 |
 | 요구 구체화 | `/plan 주문 취소를 만들 건데 구체화하고 싶어` | `vendor/`의 superpowers `brainstorming`과 mattpocock `grill-me`를 따라 질문을 몰아서 묻고 → `spec.md` 한 장. caveman 안 켜짐 |
-| 기획서·슬랙 메시지 | `/write 취소 정책 변경 공지 초안` | 일반 문장. `writing-guidelines`·`avoid-ai-writing` 따름 |
+| 기획서·슬랙 메시지 | `/write 취소 정책 변경 공지 초안` → `/humanize` | 한국어 초안(`rules/write.md`의 번역투·피동·접속사 규칙 피함) → im-not-ai가 다듬음 |
 | 프론트 리뷰 | `/review frontend:react` | `roles/reviewer.md` + `stacks/react` 규칙 + `stacks/animation`(애니메이션 코드가 있으면 `review-animations`) → 지적마다 위치·실패 상황·확신도 |
 | 백엔드 직군에 스택 지정해 맡기기 | `crew build backend:java 결제 재시도 큐` | 받는 쪽에 `역할: roles/backend.md`, `스택: stacks/java/SKILL.md` 두 줄. Claude는 생성된 `agents/backend.md` 서브에이전트, Codex·AGY는 서브에이전트가 있으면 그것, 없으면 같은 세션에서 순서대로. 단계가 끝날 때마다 결과를 보여 준다 |
 | 리뷰를 다른 직군에 | `crew review security` | 읽기 전용. `roles/security.md`로 지적 목록만 |
