@@ -15,7 +15,7 @@ argument-hint: "[reviewer|security|qa|designer|frontend|backend][:<스택>] [브
 | `_roles/review-format.md` | 산출 형식 |
 | `_vendor/code-reviewer.md` | 2단계: 5관점 순서(정확성·가독성·구조·보안·성능)로 훑기 |
 | `_vendor/security-auditor.md` | 보안 관점일 때 한 번 더 |
-| `_stacks/<스택>.md` | 파일이 있으면 스택 규칙과 대조 |
+| `_stacks/<스택>/STACK.md` | 파일이 있으면 스택 규칙과 대조. `design`이면 `_stacks/design/`의 break-ui로 최악 데이터도 |
 | `_rules/ask.md` | 대상이 비었을 때 묻기 |
 | ponytail-review (설치돼 있으면) | "줄일 것" 관점 추가 |
 

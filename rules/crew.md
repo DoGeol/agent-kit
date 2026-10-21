@@ -18,7 +18,7 @@ kit-brief: <직군>[:<스택>]
 읽을 것: <spec 절대 경로>, <contract.md 절대 경로 (있으면)>, <레포 AGENTS.md·CLAUDE.md (있으면)>
 역할: <KIT>/_roles/<직군>.md
 형식: <KIT>/_roles/review-format.md            ← check일 때
-스택: <KIT>/_stacks/<스택>.md                  ← 파일이 있을 때
+스택: <KIT>/_stacks/<스택>/STACK.md            ← 파일이 있을 때
 참고: <KIT>/_roles/<직군>/reference.md         ← 해당 상황일 때
 범위: <기능 ID와 서브태스크>, <고쳐도 되는 경로>
 산출: <레포>/.kit/<slug>/<종류>-<직군>.md       ← report-backend.md, review-security.md

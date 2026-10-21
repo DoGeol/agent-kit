@@ -342,7 +342,9 @@ caveman·ponytail·im-not-ai는 kit에 넣지 않고 사용자가 설치한다. 
 | 3 ✅ | `skills/check` + `skills/crew` + `rules/check.md`·`crew.md`. vendor: addyosmani `code-reviewer`·`security-auditor`, superpowers `dispatching-parallel-agents`. kit 0.3.0 | 리뷰와 직군 호출. 역할·참고 파일은 각 Skill 폴더 `_roles/`에 사본 | `check.sh`·`validate .` 통과. **실제 서브에이전트 호출 확인은 아직** |
 
 3단계에서 바뀐 것: superpowers `subagent-driven-development`(32KB)·`writing-plans`(10KB)는 예산을 넘어 빼고, 핵심(작업마다 새 에이전트, 보고를 믿지 않고 산출 확인, 2회 실패면 멈춤)을 `rules/crew.md`에 직접 씀. 병렬 원칙은 `dispatching-parallel-agents`(6KB)로. `crew plan`은 작업 쪼개기 표만. 브리핑 경로는 Skill 폴더의 절대 경로 아래 `_roles/`·`_stacks/`를 쓰고, 산출은 레포의 `.kit/<slug>/`(`info/exclude`로 커밋 제외). `_roles/`·`_stacks/`는 선택적으로 읽는 파일이라 예산 합계에 넣지 않는다.
-| 4 | `stacks/react`·`animation`·`design` + `roles/frontend.md`·`designer.md` 다듬기 (vendor: Vercel, Emil) | 첫 스택 팩. 형식 확정 | `/check frontend:react`로 실제 diff |
+| 4 ✅ | `stacks/react`·`animation`·`design` (`STACK.md` + `team.md` + `vendor/`). vendor: Vercel react-best-practices 17개 규칙·composition-patterns, Emil animate·recipes·animation-performance·review-animations·pick-ui-library·break-ui, anthropics frontend-design. kit 0.4.0 | 스택 팩 형식 확정. `team.md`는 틀만(팀이 채움) | `check.sh`·`validate .` 통과. **실제 diff 리뷰는 아직** |
+
+4단계에서 바뀐 것: 스택 진입 파일은 `STACK.md`(SKILL.md로 두면 도구가 Skill로 등록). 스택의 외부 규칙은 `stacks/<스택>/vendor/`에 사본, 스택 폴더 전체를 `skills/dev`·`check`·`crew`의 `_stacks/<스택>/`에 다시 사본(vendor-map에 폴더 행 지원). Vercel 규칙 72개 중 17개만(치명·높음·중간 위주), Emil `emil-design-eng`(27KB)와 `prototype`은 5단계로. Vercel `web-design-guidelines`는 원격 URL이라 `design/STACK.md`에 "읽을 수 있으면" 한 줄로만.
 | 5 | `skills/design`·`mock` (vendor: frontend-design, prototype, break-ui, pick-ui-library) | 화면 설계 흐름 | `/mock`으로 시안 3개 실제 생성 |
 | 6 | `stacks/python`·`java`·`node` (vendor: wshobson 일부) | 4번 형식 그대로 | |
 | 7 | `hooks/`(선택), `/debug` | | |

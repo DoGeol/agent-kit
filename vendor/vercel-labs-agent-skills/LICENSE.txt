@@ -1,0 +1,5 @@
+MIT License (as stated in the repository README "## License — MIT"; the repository ships no
+LICENSE file at the pinned commit. The react-best-practices SKILL.md frontmatter also says `license: MIT`).
+
+Source: https://github.com/vercel-labs/agent-skills
+Copyright (c) Vercel, Inc.

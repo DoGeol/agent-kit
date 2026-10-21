@@ -6,7 +6,7 @@
 
 - 직군이 없으면 `reviewer`. `security`·`qa`·`designer`·`frontend`·`backend`를 적으면 그 역할 파일의 "리뷰에서 보는 것"으로 본다. `design`은 `designer`로.
 - 대상이 없으면 현재 변경: 작업 트리·스테이지 diff. 비어 있으면 기준 브랜치와 비교(`git diff <기준>...HEAD`, 기준은 `main`·`master`·`develop` 중 있는 것). 그래도 비어 있으면 무엇을 볼지 묻는다. 대상이 브랜치·커밋·경로·PR 번호면 그것.
-- 스택이 없으면 레포 파일로 판단한다. 맞는 `_stacks/<스택>.md`가 있으면 그 규칙과도 대조한다.
+- 스택이 없으면 레포 파일로 판단한다. 맞는 `_stacks/<스택>/STACK.md`가 있으면 그 규칙과도 대조한다. `design`은 `_stacks/design/STACK.md`와 `vendor/break-ui.md`(최악 데이터).
 - 첫 줄에 적는다: `재료: reviewer · 5관점 · 스택 react · 대상 git diff main...HEAD (12 files)`.
 
 ## 2. 읽기

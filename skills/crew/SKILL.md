@@ -14,7 +14,7 @@ argument-hint: "build|check|plan <직군>[:<스택>][,<직군>[:<스택>]] <요�
 | `_rules/ask.md` | 직군·병렬 여부·막혔을 때 묻기 |
 | `_vendor/dispatching-parallel-agents.md` | 병렬일 때: 독립인 일만, 파일 안 겹치게, 결과는 진행자가 합침 |
 | `_roles/*.md`, `_roles/review-format.md`, `_roles/<직군>/reference.md` | 브리핑에 **절대 경로**로 넘긴다. 본 세션은 읽지 않는다(서브에이전트가 없어 직접 할 때만 읽는다) |
-| `_stacks/<스택>.md` | 파일이 있으면 브리핑 `스택:`에 경로로 |
+| `_stacks/<스택>/STACK.md` | 파일이 있으면 브리핑 `스택:`에 경로로 |
 
 ## 절차
 

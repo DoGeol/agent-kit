@@ -1,6 +1,7 @@
 #!/bin/sh
-# 1. Copy rules/ and vendor/ files into each skill folder (skills/<skill>/_rules, _vendor) per scripts/vendor-map.tsv,
-#    so every skill folder is self-contained when installed or linked on its own.
+# 1. Copy files per scripts/vendor-map.tsv (target folder, source, dest). A source may be a file or a folder
+#    (folders copy every file beneath). Targets are skills/<skill> (its _rules/_vendor/_roles/_stacks copies)
+#    and stacks/<stack> (its vendor/ copies), so each skill folder is self-contained when installed or linked alone.
 # 2. Generate agents/<role>.md (Claude Code subagents) from roles/<role>.md: frontmatter from the role's
 #    name/description/kind/model, a guard that refuses briefings without a `kit-brief:` first line, then the role body.
 # Outputs are byte-deterministic; check.sh verifies they match.
@@ -8,12 +9,23 @@ set -eu
 root=$(cd "$(dirname "$0")/.." && pwd)
 out_agents=${KIT_AGENTS_DIR:-$root/agents}
 
-# --- 1. skill copies
-grep -v '^#' "$root/scripts/vendor-map.tsv" | grep -v '^[[:space:]]*$' | while IFS="$(printf '\t')" read -r skill src dest; do
-  [ -f "$root/$src" ] || { echo "missing source: $src" >&2; exit 1; }
-  out="$root/skills/$skill/$dest"
-  mkdir -p "$(dirname "$out")"
-  if [ ! -f "$out" ] || ! cmp -s "$root/$src" "$out"; then cp "$root/$src" "$out"; echo "copy  $skill/$dest"; fi
+copy_file() { # src dest label
+  mkdir -p "$(dirname "$2")"
+  if [ ! -f "$2" ] || ! cmp -s "$1" "$2"; then cp "$1" "$2"; echo "copy  $3"; fi
+}
+
+# --- 1. copies
+grep -v '^#' "$root/scripts/vendor-map.tsv" | grep -v '^[[:space:]]*$' | while IFS="$(printf '\t')" read -r target src dest; do
+  if [ -d "$root/$src" ]; then
+    find "$root/$src" -type f | sort | while read -r f; do
+      rel=${f#"$root/$src/"}
+      copy_file "$f" "$root/$target/$dest/$rel" "$target/$dest/$rel"
+    done
+  elif [ -f "$root/$src" ]; then
+    copy_file "$root/$src" "$root/$target/$dest" "$target/$dest"
+  else
+    echo "missing source: $src" >&2; exit 1
+  fi
 done
 
 # --- 2. agents from roles

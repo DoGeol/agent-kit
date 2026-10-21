@@ -58,7 +58,9 @@ git clone https://github.com/DoGeol/agent-kit.git ~/agent-kit
 | `crew build\|check\|plan <직군>[:<스택>] <요청>` | 직군(frontend backend qa designer reviewer security)에 맡긴다. 서브에이전트가 있으면 그것으로, 없으면 같은 세션에서. 직군이 둘이면 계약을 먼저 뽑고 병렬·순차를 묻는다 |
 | `/setup` | caveman·ponytail·im-not-ai 설치 확인과 설치 명령 |
 
-예정: `/design`·`/mock`(화면 설계와 시안), `stacks/`(react·animation·design·python·java·node). 순서는 [docs/restructure.md](docs/restructure.md#진행-순서).
+스택 팩 `stacks/react`·`animation`·`design`은 `/dev`·`/check`·`crew`가 레포 파일로 판단해 읽는다. 팀 규칙은 `stacks/<스택>/team.md`에 적는다.
+
+예정: `/design`·`/mock`(화면 설계와 시안), `stacks/python`·`java`·`node`. 순서는 [docs/restructure.md](docs/restructure.md#진행-순서).
 
 ## 플러그인 (Claude Code 전용)
 
@@ -74,8 +76,9 @@ agent-kit/
 ├─ .codex-plugin/    plugin.json (kit)
 ├─ .agents/plugins/  marketplace.json (Codex)
 ├─ gemini-extension.json                 (AGY)
-├─ skills/<name>/    SKILL.md + _rules/ _vendor/ _roles/ (build.sh가 만든 사본)
-├─ rules/            dev · spec · write · ask
+├─ skills/<name>/    SKILL.md + _rules/ _vendor/ _roles/ _stacks/ (build.sh가 만든 사본)
+├─ rules/            dev · spec · write · check · crew · ask
+├─ stacks/<name>/    STACK.md + team.md(팀 규칙) + vendor/(사본). react · animation · design
 ├─ vendor/           manifest.tsv + 외부 Skill 원본 (커밋 고정, LICENSE 포함)
 ├─ roles/            직군 원본 6개 (frontend backend qa designer reviewer security) + review-format.md
 ├─ agents/           roles/에서 build.sh가 만든 Claude 서브에이전트 (kit-brief 가드)
