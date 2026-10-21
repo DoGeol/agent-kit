@@ -155,6 +155,79 @@ vendor 목록(확인한 라이선스 기준, 쓰는 폴더만 가져온다):
 
 불편 1번(오케스트레이션이 오래 걸리고 중간에 볼 게 없음)은 ok를 지우면서 사라진다. `crew`가 한 세션 안에서 가볍게 맡기는 쪽을 맡고, 단계가 끝날 때마다 결과를 보여 준다. 더 큰 흐름이 필요해지면 그때 `crew` 위에 얹는다(superpowers `subagent-driven-development`를 참고하되 중간 확인 지점을 둔다).
 
+## Skill 이름 (초안, 확인 뒤 확정)
+
+Claude는 플러그인 Skill에 접두어가 붙어(`/kit:dev`) 내장 명령과 안 겹친다. Codex(`$이름`)와 AGY(`/이름`), 그리고 `link.sh`로 맨 이름을 링크한 Claude는 접두어가 없어 겹칠 수 있다. 내장 명령 목록을 확인한 결과:
+
+| 후보 | Claude 내장 | Codex 내장 | Gemini CLI 내장 (AGY 전신) | 판단 |
+|---|---|---|---|---|
+| `dev` | 없음 | 없음 | 없음 | **그대로** |
+| `plan` | **있음** (plan mode) | **있음** | **있음** | 바꾼다 → `spec` (산출물 이름이라 직관적) |
+| `write` | tool 이름으로만 보임, 명령은 미확인 | 없음 | 없음 | 그대로, 확인 필요 |
+| `review` | 없음 (`ultrareview`·`security-review`는 있음) | **있음** | 없음 | 바꾼다 → `check` (확정 전) |
+| `design` | 없음 (`design-consent` 등 접두 유사) | 없음 | 없음 | 그대로 |
+| `mock`, `crew`, `kit` | 없음 | 없음 | 없음 | 그대로 |
+| `debug` (나중) | 없음 | `debug-config`만 | 없음 | 그대로 |
+
+피할 이름: `plan`, `review`, `init`, `goal`, `brief`, `status`, `config`, `memory`, `skills`, `agents`.
+
+확인 출처: Claude Code 바이너리(2.1.306)의 명령 정의, `openai/codex` `codex-rs/tui/src/slash_command.rs`, `google-gemini/gemini-cli` `packages/cli/src/ui/commands/`. 모두 2026-10-21 main.
+
+## 후속 확인 목록
+
+다음 작업을 시작할 때 먼저 본다. 이 세션에서는 공식 문서 사이트(openai.com, antigravity.google)가 네트워크 정책에 막혀 못 읽었다.
+
+- [ ] **AGY 내장 명령**: `agy`에서 `/help`를 쳐서 실제 목록 확인. 위 표는 Gemini CLI 소스 기준이라 AGY에서 더해진 것(`/goal`, `/effort`, `/codesearch` 등 2차 자료)이 빠져 있다. `/design`·`/mock`·`/check`·`/spec`·`/dev`·`/crew`·`/kit`가 없는지.
+- [ ] **Codex에서 Skill 호출 형태**: `$dev`만인지, `/dev`로도 되는지. `/`로도 되면 `review`뿐 아니라 모든 충돌이 문제. `codex`에서 `/skills` 확인.
+- [ ] **Codex·AGY 서브에이전트 정의 파일 형식**: 공식 문서. `crew` 4단계 전에 필요.
+- [ ] **Codex 마켓플레이스에 플러그인 여러 개**: 루트 `kit` 하나만 올리면 되는지.
+- [ ] **AGY 규칙 상한 12,000자**: 공식 문서에서 확인. `stacks/` 목록 길이에 영향.
+- [ ] **`link.sh` 경로에서 Claude 맨 이름 충돌**: `~/.claude/skills/spec`이 플러그인 없이 `/spec`으로 뜨는지, 내장과 겹치면 어느 쪽이 이기는지.
+- [ ] **`/write`**: Claude 바이너리의 `write`가 명령인지 tool인지. `/help`로 확인.
+- [ ] **Emil `prototype`의 실행 환경**: 피커가 프로젝트 dev 서버를 요구하는지, 단독 HTML로도 되는지. `/mock` 설계에 영향.
+- [ ] **옛 ok `templates/design/DESIGN-PRINCIPLES.md`**: git 기록(`e393647`)에서 꺼내 `stacks/design/team.md` 출발점으로 쓸지.
+
+## 디자인 (초안)
+
+| 트리거 | 뼈대 (vendor) | 덮어쓰기 |
+|---|---|---|
+| `/design <화면>` | mattpocock `grill-me` + anthropics `frontend-design` 방향 질문 | 질문 순서: 목적 → 독자 → 내용 우선순위 → 제약(기존 토큰·컴포넌트) → 분위기. 2단계에서 구성 2~3개 비교표(라이브러리는 Emil `pick-ui-library`). 산출 `design-brief.md` |
+| `/mock <UI 조각>` | Emil `prototype` | 시안 3개, 축(레이아웃·밀도·성격·모션)에 이름. 프로젝트 토큰 재사용, 한국어 더미 문구, 고른 것만 코드 반영 |
+| `/check design` | Vercel `web-design-guidelines` + Emil `break-ui`(최악 데이터) + `review-animations` | 지적 형식은 `review-format.md` |
+
+`stacks/design/`: `SKILL.md`(규칙 상위 목록) + `rules/`(간격 스케일, 타이포 단계, 색 토큰, 빈·로딩·오류 상태, 반응형 기준, 터치 크기) + `team.md`(팀 원칙). `/dev frontend`·`/check design`·`designer` 역할이 같이 읽는다. 나중에: `mobile`(Vercel `react-native-skills`, Emil `mobile-native`), `sql`, `infra`.
+
+## vendor를 트리거에 녹이는 규칙
+
+| 규칙 | 뜻 |
+|---|---|
+| 트리거 하나에 방법론 하나 | 뼈대는 vendor 하나. 나머지는 특정 단계의 참고 |
+| "따른다"보다 "이 단계에서만 참고" | 절차는 우리 Skill이 갖고, vendor는 단계 하나에 규칙을 공급 |
+| 재료 표를 본문 맨 위에 | `vendor 파일 · 쓰는 절 · 어느 단계 · 덮어쓰는 점` |
+| 충돌은 명시 | 두 vendor가 반대 말을 하면 어느 게 이기는지 적는다 |
+| 예산 | 트리거가 읽는 vendor 텍스트 합계 상한(3,000토큰). `check.sh`가 잰다 |
+| 하나로 시작 | 부족한 사례가 나올 때만 하나 더 |
+| 보이게 | 트리거 시작 줄 `재료: grill-me(질문) · ponytail 세 질문(깎기)` |
+| 테스트 | 트리거마다 고정 프롬프트 2~3개 + 기대 성질 체크리스트. vendor 올릴 때 돌린다 |
+
+트리거별 재료(초안):
+
+| 트리거 | 뼈대 | 단계별 참고 | 설치형(있으면) |
+|---|---|---|---|
+| `/dev` | `rules/dev.md` | karpathy(시작 전), superpowers `verification-before-completion`(끝) | ponytail(구현), caveman(말투) |
+| `/spec` | mattpocock `grill-me` | `to-spec`(형식) | ponytail 세 질문(깎기) |
+| `/write` | `rules/write.md`(한국어) | blader humanizer(영어일 때), Vercel `writing-guidelines`(구조만) | im-not-ai(초안 뒤 `/humanize` 권함) |
+| `/check` | `roles/reviewer.md` + `review-format.md` | addyosmani `code-reviewer`(5관점 순서), 스택 규칙, Emil `review-animations` | ponytail-review |
+| `crew` | superpowers `subagent-driven-development` (단, 단계마다 멈춰 보여 줌) | `writing-plans`(`crew plan`만) | |
+| `/design` | `grill-me` | `frontend-design`, `pick-ui-library` | |
+| `/mock` | Emil `prototype` | | |
+
+뺀 것과 이유: superpowers `brainstorming`·`test-driven-development`(grill-me·`rules/dev.md`와 겹침), wshobson `avoid-ai-writing`(humanizer와 겹침).
+
+## 설치 안내 (`/kit setup`)
+
+caveman·ponytail·im-not-ai는 kit에 넣지 않고 사용자가 설치한다. `/kit setup`이 각 도구의 Skill 폴더와 플러그인 폴더를 보고 있는 것·없는 것을 표로 보이고, 없는 것은 그 도구의 설치 명령을 출력한다. 설치는 사용자가 한다. 없어도 트리거는 돌고 그 부분만 빠진다. README 설치 절: 필수 kit / 권장 caveman·ponytail(개발), im-not-ai(한국어 글).
+
 ## 다 반영하면 이렇게 쓴다
 
 처음 말한 불편 다섯 가지와 뒤에 물은 네 가지가 어디서 풀리는지, 실제 호출로 본다. 세 도구에서 같은 파일이 돈다(Claude `/dev`, Codex `$dev`, AGY `/dev`).
@@ -162,9 +235,9 @@ vendor 목록(확인한 라이선스 기준, 쓰는 폴더만 가져온다):
 | 상황 | 호출 | 뒤에서 일어나는 일 |
 |---|---|---|
 | 기능 하나 구현 | `/dev 주문 취소 API 추가` | `skills/dev`가 설치된 `caveman`·`ponytail`을 읽고 따른다 → 레포 파일로 스택 판단(`pyproject.toml`→`stacks/python`) → 테스트 먼저 → 최소 변경. 커밋 메시지는 일반 문장. 다음 턴은 다시 보통 말투 |
-| 요구 구체화 | `/plan 주문 취소를 만들 건데 구체화하고 싶어` | `vendor/`의 superpowers `brainstorming`과 mattpocock `grill-me`를 따라 질문을 몰아서 묻고 → `spec.md` 한 장. caveman 안 켜짐 |
+| 요구 구체화 | `/spec 주문 취소를 만들 건데 구체화하고 싶어` | `vendor/`의 superpowers `brainstorming`과 mattpocock `grill-me`를 따라 질문을 몰아서 묻고 → `spec.md` 한 장. caveman 안 켜짐 |
 | 기획서·슬랙 메시지 | `/write 취소 정책 변경 공지 초안` → `/humanize` | 한국어 초안(`rules/write.md`의 번역투·피동·접속사 규칙 피함) → im-not-ai가 다듬음 |
-| 프론트 리뷰 | `/review frontend:react` | `roles/reviewer.md` + `stacks/react` 규칙 + `stacks/animation`(애니메이션 코드가 있으면 `review-animations`) → 지적마다 위치·실패 상황·확신도 |
+| 프론트 리뷰 | `/check frontend:react` | `roles/reviewer.md` + `stacks/react` 규칙 + `stacks/animation`(애니메이션 코드가 있으면 `review-animations`) → 지적마다 위치·실패 상황·확신도 |
 | 백엔드 직군에 스택 지정해 맡기기 | `crew build backend:java 결제 재시도 큐` | 받는 쪽에 `역할: roles/backend.md`, `스택: stacks/java/SKILL.md` 두 줄. Claude는 생성된 `agents/backend.md` 서브에이전트, Codex·AGY는 서브에이전트가 있으면 그것, 없으면 같은 세션에서 순서대로. 단계가 끝날 때마다 결과를 보여 준다 |
 | 리뷰를 다른 직군에 | `crew review security` | 읽기 전용. `roles/security.md`로 지적 목록만 |
 | 유명 스킬 그대로 | (별도 호출 없음) | caveman·ponytail은 원본 설치(기본 끔), 작은 텍스트 Skill은 `vendor/`에 고정 커밋. 트리거가 경로로 가리킨다 |
