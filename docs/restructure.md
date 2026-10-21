@@ -30,14 +30,15 @@ agent-kit/
 ├─ gemini-extension.json     루트 = 플러그인 "kit" (AGY, contextFileName 없음)
 │
 ├─ skills/                   공통 Skill (세 도구). 지금은 비어 있음
-│   ├─ mode/                 작업 모드: dev · write · plan · off
-│   ├─ crew/                 직군×스택으로 일 맡기기 (서브에이전트 없으면 같은 세션에서)
-│   ├─ spec/                 요구 정리 → spec 한 장 (grill-me·brainstorming 응용)
-│   └─ review/               diff 리뷰 (reviewer 역할 + ponytail-review 참조)
-├─ rules/                    항상 켜지는 규칙 조각. 모드 훅이 넣거나 AGENTS.md에 붙인다
-│   ├─ dev.md                개발: 짧은 답, 최소 구현, 테스트 먼저. caveman·ponytail이 있으면 따른다
-│   ├─ write.md              기획·메시지: 일반 문장, caveman 끔, AI 티 나는 문장 피하기
-│   └─ plan.md               write + 질문 몰아서 하기, 산출은 spec
+│   ├─ dev/                  /dev <요청>: caveman·ponytail을 끌어와 코드 작업 (이 턴만)
+│   ├─ plan/                 /plan <요청>: superpowers brainstorming·grill-me로 spec 한 장
+│   ├─ write/                /write <요청>: 일반 문장. 기획서·메시지·PR 본문
+│   ├─ review/               /review [대상]: reviewer 역할 + ponytail-review (+ review-animations)
+│   └─ crew/                 직군×스택으로 일 맡기기 (서브에이전트 없으면 같은 세션에서)
+├─ rules/                    트리거 본문의 재료이자 외부 Skill이 없을 때의 축약 규칙
+│   ├─ dev.md                짧은 답, 최소 구현, 테스트 먼저
+│   ├─ write.md              일반 문장, AI 티 나는 문장 피하기
+│   └─ plan.md               질문 몰아서 하기, 산출은 spec
 ├─ roles/                    직군 원본 (plugins/ok/roles에서 옮김). 스택과 무관
 │   ├─ frontend.md backend.md designer.md planner.md qa.md reviewer.md security.md …
 │   └─ review-format.md
@@ -49,13 +50,12 @@ agent-kit/
 │   └─ node/       TypeScript · pnpm · vitest
 ├─ vendor/                   그대로 들여온 외부 Skill. 폴더마다 LICENSE, 고정 커밋
 │   └─ <owner>-<repo>/
-├─ hooks/                    Claude·Codex 공용 (같은 hooks.json)
-│   ├─ hooks.json            SessionStart: 모드 규칙 주입 · UserPromptSubmit: /mode 추적 · SubagentStart
-│   └─ mode.sh               POSIX sh. 모드 파일을 읽어 rules/<mode>.md를 additionalContext로
+├─ hooks/                    선택. Claude·Codex 공용 (같은 hooks.json)
+│   └─ hooks.json            UserPromptSubmit: /dev가 아닌 턴에 "일반 문장" 한 줄 (caveman 말투 잔류 방지)
 ├─ agents/                   Claude 서브에이전트. roles/ + stacks/에서 **생성** (손으로 안 고침)
-├─ plugins/
-│   ├─ mods-hud/             Claude 전용 mod (그대로)
-│   └─ ok/                   오케스트레이션 (Claude + Orca 전용)
+├─ plugins/                  Claude 전용. 지금 쓰는 것을 그대로 유지한다
+│   ├─ mods-hud/             mod. 파일·명령·설치 방법 모두 그대로
+│   └─ ok/                   오케스트레이션 (Claude + Orca 전용). 흐름 그대로
 │       └─ roles/            roles/에서 **생성**한 사본. tests/run.sh가 어긋남을 잡는다
 ├─ scripts/
 │   ├─ link.sh               (있음) skills/ → 각 도구 폴더
@@ -77,23 +77,24 @@ agent-kit/
 
 ## 핵심 설계 네 가지
 
-### 1. 모드 (`skills/mode`, `rules/`, `hooks/`)
+### 1. 트리거 Skill (`skills/dev`·`plan`·`write`·`review`, `rules/`)
 
-불편 2·3번(기획·메시지에서는 caveman이 안 돌았으면, 개발에서만 caveman·ponytail)을 푼다.
+불편 2·3번(기획·메시지에서는 caveman이 안 돌았으면, 개발에서만 caveman·ponytail)을 푼다. 상태를 저장하는 모드 대신 **요청에 붙이는 트리거**로 한다. 상태·훅이 없어 세 도구에서 똑같이 돈다.
 
-| 모드 | 규칙 파일 | 켜는 것 | 쓰는 때 |
-|---|---|---|---|
-| `dev` | `rules/dev.md` | caveman·ponytail(설치돼 있으면), 테스트 먼저, 최소 변경 | 코드 고칠 때 |
-| `write` | `rules/write.md` | 일반 문장, AI 티 나는 표현 금지, 문서 형식 | 기획서·메시지·PR 본문 |
-| `plan` | `rules/plan.md` | write + 질문 몰아서, 산출은 spec | 요구 정리 |
-| `off` | 없음 | | 기본값 |
+| 트리거 | 끌어오는 Skill | 산출 |
+|---|---|---|
+| `/dev <요청>` | caveman, ponytail, karpathy-guidelines | 코드 + 테스트 |
+| `/plan <요청>` | superpowers `brainstorming`·`writing-plans`, mattpocock `grill-me` | spec 한 장 |
+| `/write <요청>` | Vercel `writing-guidelines`, `avoid-ai-writing`, internal-comms | 일반 문장 문서·메시지 |
+| `/review [대상]` | reviewer 역할, `ponytail-review`, 프론트면 `review-animations` | 지적 목록 |
 
-- **모드 저장**: 폴더마다 `.agent-kit/mode`(git에 안 올림, `info/exclude`), 없으면 `~/.config/agent-kit/mode`, 없으면 `off`.
-- **Claude·Codex**: `hooks/mode.sh`가 SessionStart·UserPromptSubmit마다 모드 파일을 읽어 `rules/<mode>.md` 한 장을 넣는다. `/mode dev`는 파일을 쓰고 한 줄 알린다. 압축 뒤에도 유지된다.
-- **AGY**: 훅이 없다. `/mode dev` Skill이 같은 규칙 파일을 읽어 따르고, 대화가 압축되면 다시 부른다. 항상 켜고 싶으면 그 레포 `AGENTS.md`에 `rules/dev.md`를 붙인다(`build.sh`가 만들어 준다).
-- **폴더로 가르기**: 코드 레포는 `dev`, hub·문서 폴더는 `write`. 폴더 모드 파일 하나로 세 도구가 같이 갈린다.
-- **세션 밖으로 나가는 글은 항상 일반 문장**: 커밋 메시지, PR 본문, 슬랙 초안. `dev.md`에 박는다.
-- caveman·ponytail은 원본 설치기로 설치하고 기본은 끔(`PONYTAIL_DEFAULT_MODE=off`, `caveman off`). `dev.md`가 "설치돼 있으면 `caveman`·`ponytail` Skill을 따른다"고 적는다. 우리 규칙 사본을 두지 않는다.
+- **본문 형식**: `요청: $ARGUMENTS` → "`caveman`·`ponytail` Skill이 있으면 읽고 따른다(이름으로 부르거나 그 SKILL.md를 연다). 없으면 `rules/dev.md`의 축약 규칙으로" → 처리 → "이 턴에만. 커밋 메시지·PR 본문은 일반 문장".
+- **부르는 법**: Claude `/dev`, Codex `$dev`, AGY `/dev`(슬래시 명령 변환). 다른 Skill을 끌어오는 문장을 도구 중립으로 쓰면 같은 파일이 세 곳에서 된다.
+- **frontmatter**: `name`·`description`만(저장소 규칙). description에 "사용자가 /dev를 직접 입력했을 때만"을 적어 자동 발동을 막는다.
+- **잔류 방지**: caveman은 "stop caveman까지 켜져 있다"고 자기 Skill에 적어 뒀다. `/dev`의 "이 턴에만"이 대부분 막는다. 더 단단히 하려면 Claude·Codex에서만 `hooks/`의 UserPromptSubmit 한 줄(`/dev`가 아니면 일반 문장). 선택이고 나중에 붙여도 된다. AGY는 본문 지시에 맡긴다.
+- **외부 Skill의 자체 훅은 끔**: ponytail `PONYTAIL_DEFAULT_MODE=off`, caveman `caveman off`. 안 끄면 `/dev` 없이도 켜진다.
+- **세션 밖으로 나가는 글은 항상 일반 문장**: 커밋 메시지, PR 본문, 슬랙 초안. `rules/dev.md`에 박는다.
+- 여러 턴 동안 계속 켜 두고 싶어지면 그때 `/dev on`(폴더 모드 파일 + 훅)을 더한다. 지금은 만들지 않는다.
 
 ### 2. 직군 × 스택 (`roles/`, `stacks/`, `skills/crew`)
 
@@ -139,11 +140,12 @@ ok는 `roles/`를 플러그인 밖에서 읽을 수 없으므로 `build.sh`가 `
 
 | 지금 | 바뀐 뒤 |
 |---|---|
-| `skills/` 비어 있음 | `mode`·`crew`·`spec`·`review` |
+| `skills/` 비어 있음 | `dev`·`plan`·`write`·`review`·`crew` |
 | `plugins/ok/roles/` 원본 | `roles/` 원본, ok 안은 생성 사본 |
 | `plugins/ok/agents/` 손으로 작성 | 루트 `agents/`를 roles에서 생성, ok는 그대로 쓰되 역할 경로만 바뀜 |
 | 역할만 있고 스택 없음 | `stacks/` 추가, `crew`가 조합 |
-| caveman·ponytail 항상 켜짐 | 기본 끔, `dev` 모드에서만 |
+| caveman·ponytail 항상 켜짐 | 기본 끔, `/dev` 턴에서만 |
+| `mods-hud` | 그대로 (Claude 전용 mod는 계속 `plugins/`에) |
 | 마켓플레이스 플러그인 2개 | 3개(`kit` 루트 추가). Codex·AGY 매니페스트 추가 |
 | `AGENTS.md` "plugins/는 Claude 전용", "skills/ frontmatter는 name·description만" | 루트 플러그인은 세 도구 공용. `skills/` 규칙은 유지(도구 전용 필드 금지), `plugins/*`만 Claude 필드 허용 |
 
@@ -155,12 +157,12 @@ ok는 `roles/`를 플러그인 밖에서 읽을 수 없으므로 `build.sh`가 `
 
 | # | 일 | 결과 | 검사 |
 |---|---|---|---|
-| 1 | 루트 플러그인 `kit` + `skills/mode` + `rules/` + `hooks/mode.sh` | 세 도구에서 `/mode dev`·`write`. Claude·Codex는 압축 뒤에도 유지 | `claude plugin validate .`, hooks 테스트, Codex·AGY에 설치해 모드 전환 확인 |
+| 1 | 루트 플러그인 `kit` + `skills/dev`·`plan`·`write`·`review` + `rules/` | 세 도구에서 `/dev 요청`이 caveman·ponytail을 끌어옴, `/write`는 일반 문장 | `claude plugin validate .`, Codex·AGY에 설치해 네 트리거 확인 |
 | 2 | `roles/`로 옮기고 `build.sh`·`check.sh` | ok 테스트 통과, 생성 사본 어긋남 검사 | `plugins/ok/tests/run.sh` |
 | 3 | `stacks/react` + `stacks/animation` + `roles/frontend.md` 다듬기 | 첫 스택 팩. 형식이 정해짐 | `crew review frontend:react`로 실제 diff 리뷰 |
 | 4 | `skills/crew` | 직군×스택 호출. 서브에이전트 없으면 같은 세션 | 세 도구에서 같은 요청 |
 | 5 | `stacks/python`·`java`·`node` | 3번 형식 그대로 | |
-| 6 | `vendor/` + `vendor.sh` + `skills/spec`·`review` | 외부 Skill 고정 커밋으로 | `check.sh` 라이선스 |
+| 6 | `vendor/` + `vendor.sh` | 외부 Skill 고정 커밋으로. 트리거가 vendor 경로를 가리킴 | `check.sh` 라이선스 |
 | 7 | ok: `build` 트랙, progress.md, 첫 기능 먼저, 시간 기록 | 1번 불편 해소 | ok 테스트 |
 
 1번이 가장 작고 체감이 크다. 4번 전에 Codex·AGY의 서브에이전트 정의 형식을 공식 문서에서 확인한다(이 세션에서는 네트워크 정책으로 못 읽었다).
@@ -168,7 +170,7 @@ ok는 `roles/`를 플러그인 밖에서 읽을 수 없으므로 `build.sh`가 `
 ## 열린 질문
 
 - **스택 팩 `team.md`**: 팀의 React 규칙(상태 관리, 폴더 구조, 이름 짓기)과 백엔드 규칙을 사용자가 준다.
-- **모드 자동 판별**: 프롬프트를 보고 개발인지 판단해 자동으로 켜는 것. 오판과 비용 때문에 뒤로 미룬다.
+- **트리거 없이 자동 판별**: 프롬프트를 보고 개발인지 판단해 `/dev`를 자동으로 붙이는 것. 오판과 비용 때문에 뒤로 미룬다.
 - **Codex 마켓플레이스에 플러그인 여러 개**: 루트 `kit`만 Codex·AGY에 올리고 `mods-hud`·`ok`는 Claude 마켓플레이스에만 둔다. Codex 마켓플레이스가 여러 플러그인을 받는지는 확인하지 않았다.
 - **`crew`와 `ok`의 경계**: `crew`는 한 세션 안, 어느 도구나. `ok`는 작업당 세션·Orca·hub. `crew`가 커지면 "`/ok:start`로 가세요" 한 줄로 넘긴다.
 
