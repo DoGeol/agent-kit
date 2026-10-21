@@ -126,6 +126,24 @@ crew build backend <요청>        ← 스택 생략: 레포 파일로 판단
 
 불편 1번(오케스트레이션이 오래 걸리고 중간에 볼 게 없음)은 ok를 지우면서 사라진다. `crew`가 한 세션 안에서 가볍게 맡기는 쪽을 맡고, 단계가 끝날 때마다 결과를 보여 준다. 더 큰 흐름이 필요해지면 그때 `crew` 위에 얹는다(superpowers `subagent-driven-development`를 참고하되 중간 확인 지점을 둔다).
 
+## 다 반영하면 이렇게 쓴다
+
+처음 말한 불편 다섯 가지와 뒤에 물은 네 가지가 어디서 풀리는지, 실제 호출로 본다. 세 도구에서 같은 파일이 돈다(Claude `/dev`, Codex `$dev`, AGY `/dev`).
+
+| 상황 | 호출 | 뒤에서 일어나는 일 |
+|---|---|---|
+| 기능 하나 구현 | `/dev 주문 취소 API 추가` | `skills/dev`가 설치된 `caveman`·`ponytail`을 읽고 따른다 → 레포 파일로 스택 판단(`pyproject.toml`→`stacks/python`) → 테스트 먼저 → 최소 변경. 커밋 메시지는 일반 문장. 다음 턴은 다시 보통 말투 |
+| 요구 구체화 | `/plan 주문 취소를 만들 건데 구체화하고 싶어` | `vendor/`의 superpowers `brainstorming`과 mattpocock `grill-me`를 따라 질문을 몰아서 묻고 → `spec.md` 한 장. caveman 안 켜짐 |
+| 기획서·슬랙 메시지 | `/write 취소 정책 변경 공지 초안` | 일반 문장. `writing-guidelines`·`avoid-ai-writing` 따름 |
+| 프론트 리뷰 | `/review frontend:react` | `roles/reviewer.md` + `stacks/react` 규칙 + `stacks/animation`(애니메이션 코드가 있으면 `review-animations`) → 지적마다 위치·실패 상황·확신도 |
+| 백엔드 직군에 스택 지정해 맡기기 | `crew build backend:java 결제 재시도 큐` | 받는 쪽에 `역할: roles/backend.md`, `스택: stacks/java/SKILL.md` 두 줄. Claude는 생성된 `agents/backend.md` 서브에이전트, Codex·AGY는 서브에이전트가 있으면 그것, 없으면 같은 세션에서 순서대로. 단계가 끝날 때마다 결과를 보여 준다 |
+| 리뷰를 다른 직군에 | `crew review security` | 읽기 전용. `roles/security.md`로 지적 목록만 |
+| 유명 스킬 그대로 | (별도 호출 없음) | caveman·ponytail은 원본 설치(기본 끔), 작은 텍스트 Skill은 `vendor/`에 고정 커밋. 트리거가 경로로 가리킨다 |
+| 팀 규칙 반영 | `stacks/react/team.md` 편집 | 상태 관리·폴더 구조·이름 짓기. `/dev`·`/review`가 같이 읽는다 |
+| 현황판 | (Claude) | `mods-hud` 그대로. 서브에이전트 상태·사용량 |
+
+없어진 것: 작업마다 Coordinator 세션·Orca·hub·승인 카드(옛 ok). 그 대신 한 세션 안에서 트리거와 `crew`로 단계마다 보면서 간다.
+
 ## 지금 구조에서 바뀌는 것
 
 | 지금 | 바뀐 뒤 |
