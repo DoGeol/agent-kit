@@ -1,0 +1,10 @@
+# skill	source (relative to repo root)	dest (relative to skills/<skill>/)
+dev	rules/dev.md	_rules/dev.md
+dev	vendor/forrestchang-karpathy/skills/karpathy-guidelines/SKILL.md	_vendor/karpathy-guidelines.md
+dev	vendor/obra-superpowers/skills/verification-before-completion/SKILL.md	_vendor/verification-before-completion.md
+spec	rules/spec.md	_rules/spec.md
+spec	rules/ask.md	_rules/ask.md
+spec	vendor/mattpocock-skills/skills/productivity/grilling/SKILL.md	_vendor/grilling.md
+spec	vendor/mattpocock-skills/skills/engineering/to-spec/SKILL.md	_vendor/to-spec.md
+write	rules/write.md	_rules/write.md
+write	rules/ask.md	_rules/ask.md

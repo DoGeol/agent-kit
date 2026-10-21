@@ -1,10 +1,15 @@
 {
   "name": "dg-agent-kit",
-  "description": "DoGeol's agent kit: vendor-neutral skills (Agent Skills / SKILL.md) and Claude Code mods",
+  "description": "DoGeol's agent kit: trigger skills shared by Claude Code, Codex and Antigravity, plus Claude Code mods",
   "owner": {
     "name": "DoGeol"
   },
   "plugins": [
+    {
+      "name": "kit",
+      "source": "./",
+      "description": "/dev, /spec, /write, /setup — shared skills (Claude Code, Codex, Antigravity)"
+    },
     {
       "name": "mods-hud",
       "source": "./plugins/mods-hud",

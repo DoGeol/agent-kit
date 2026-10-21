@@ -1,0 +1,5 @@
+MIT License (as stated in the repository README and in SKILL.md frontmatter `license: MIT`;
+the repository ships no LICENSE file at the pinned commit).
+
+Source: https://github.com/forrestchang/andrej-karpathy-skills
+Copyright (c) forrestchang

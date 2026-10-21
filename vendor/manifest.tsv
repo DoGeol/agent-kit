@@ -1,0 +1,4 @@
+# name	repo	commit	paths (space-separated, relative to repo root)
+mattpocock-skills	https://github.com/mattpocock/skills.git	5beb35b040e3de97e54fa9e386d7e42d15c295c2	LICENSE skills/productivity/grilling/SKILL.md skills/engineering/to-spec/SKILL.md
+obra-superpowers	https://github.com/obra/superpowers.git	b739a8af570e10a95898f2bdf6cec97467fa6c12	LICENSE skills/verification-before-completion/SKILL.md
+forrestchang-karpathy	https://github.com/forrestchang/andrej-karpathy-skills.git	2c606141936f1eeef17fa3043a72095b4765b9c2	skills/karpathy-guidelines/SKILL.md
