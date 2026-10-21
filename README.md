@@ -54,9 +54,11 @@ git clone https://github.com/DoGeol/agent-kit.git ~/agent-kit
 | `/dev <요청>` | 테스트 먼저, 최소 변경으로 코드를 고친다. caveman·ponytail이 있으면 같이 쓴다 |
 | `/spec <요청>` | 질문 라운드(추천이 첫 번째인 선택지) → `docs/specs/<slug>.md` spec 한 장 → 범위 깎기 |
 | `/write <요청>` | 한국어 일반 문장으로 기획서·공지·메시지·PR 본문. AI 티 나는 패턴을 피한다 |
+| `/check [직군[:스택]] [대상]` | 현재 diff(또는 브랜치·경로·PR)를 읽기 전용으로 리뷰. 지적마다 위치·실패 상황·고치는 법·확신도 |
+| `crew build\|check\|plan <직군>[:<스택>] <요청>` | 직군(frontend backend qa designer reviewer security)에 맡긴다. 서브에이전트가 있으면 그것으로, 없으면 같은 세션에서. 직군이 둘이면 계약을 먼저 뽑고 병렬·순차를 묻는다 |
 | `/setup` | caveman·ponytail·im-not-ai 설치 확인과 설치 명령 |
 
-예정: `/check`(리뷰), `crew`(직군×스택으로 맡기기), `/design`·`/mock`(화면 설계와 시안), `stacks/`(react·design·python·java·node). 순서는 [docs/restructure.md](docs/restructure.md#진행-순서).
+예정: `/design`·`/mock`(화면 설계와 시안), `stacks/`(react·animation·design·python·java·node). 순서는 [docs/restructure.md](docs/restructure.md#진행-순서).
 
 ## 플러그인 (Claude Code 전용)
 
@@ -72,7 +74,7 @@ agent-kit/
 ├─ .codex-plugin/    plugin.json (kit)
 ├─ .agents/plugins/  marketplace.json (Codex)
 ├─ gemini-extension.json                 (AGY)
-├─ skills/<name>/    SKILL.md + _rules/ + _vendor/ (build.sh가 만든 사본)
+├─ skills/<name>/    SKILL.md + _rules/ _vendor/ _roles/ (build.sh가 만든 사본)
 ├─ rules/            dev · spec · write · ask
 ├─ vendor/           manifest.tsv + 외부 Skill 원본 (커밋 고정, LICENSE 포함)
 ├─ roles/            직군 원본 6개 (frontend backend qa designer reviewer security) + review-format.md

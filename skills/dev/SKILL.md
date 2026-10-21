@@ -22,7 +22,7 @@ argument-hint: "<요청>   고칠 파일 경로를 적으면 더 정확"
 2. `_rules/dev.md`를 읽고 따른다.
 3. ponytail과 caveman이 설치돼 있는지 본다: Skill 목록에 있으면 이름으로 부르고, 아니면 사용자 Skill 폴더(`~/.claude/skills`, `~/.codex/skills`, `~/.agents/skills`)와 플러그인 폴더에서 그 `SKILL.md`를 찾아 읽는다. 있으면 따른다. 없으면 `_rules/dev.md`만으로 간다. 없다고 멈추지 않는다.
 4. `_vendor/karpathy-guidelines.md`의 1·2절대로 가정과 더 단순한 길을 먼저 말한다. 해석이 둘이면 `ask.md` 형식 없이 짧게 묻는다.
-5. 레포 파일로 스택을 판단한다(`pyproject.toml` python, `build.gradle`·`pom.xml` java, `package.json` node, `react` 의존성이면 react). 이 Skill 옆에 `../../stacks/<스택>/SKILL.md`가 있으면 읽는다. 없으면 레포 규칙 문서만 따른다.
+5. 레포 파일로 스택을 판단한다(`pyproject.toml` python, `build.gradle`·`pom.xml` java, `package.json` node, `react` 의존성이면 react). `_stacks/<스택>.md`가 있으면 읽는다. 없으면 레포 규칙 문서만 따른다.
 6. 테스트 먼저 → 구현 → 테스트·타입체크·lint 실행.
 7. `_vendor/verification-before-completion.md`의 관문: 실제로 돌린 명령과 결과 없이는 "끝났다"고 하지 않는다.
 8. 보고는 3줄: 바꾼 파일, 돌린 명령과 결과, 남은 것. 커밋 메시지·PR 본문은 일반 문장.

@@ -339,7 +339,9 @@ caveman·ponytail·im-not-ai는 kit에 넣지 않고 사용자가 설치한다. 
 
 1단계에서 바뀐 것: `grill-me`는 `grilling`을 부르는 껍데기라 `grilling`을 가져옴. Vercel `writing-guidelines`는 매번 원격 URL을 받는 구조라 vendor에서 뺌(구조 규칙은 `rules/write.md`에 직접 씀). blader humanizer(32KB)는 예산을 넘어 보류, 영어 글은 `rules/write.md`의 한 절로. manifest는 jq 없이 쓰려고 TSV. vendor와 rules 사본은 `skills/<name>/_vendor/`·`_rules/`에 두고 `SKILL.md`가 아닌 이름으로 복사해 중첩 Skill로 잡히지 않게 함.
 | 2 ✅ | `roles/` 정리(6개 남기고 `_archive/`), 역할 frontmatter(name·description·kind·model), `build.sh`가 `agents/` 생성 + `kit-brief` 가드, `check.sh` 어긋남 검사. kit 0.2.0 | 직군 원본 확정, 생성 서브에이전트 6개 | `check.sh`·`validate .` 통과 |
-| 3 | `skills/check` + `skills/crew`(vendor: code-reviewer, security-auditor, subagent-driven-development) | 리뷰와 직군 호출 | 세 도구에서 같은 diff 리뷰 |
+| 3 ✅ | `skills/check` + `skills/crew` + `rules/check.md`·`crew.md`. vendor: addyosmani `code-reviewer`·`security-auditor`, superpowers `dispatching-parallel-agents`. kit 0.3.0 | 리뷰와 직군 호출. 역할·참고 파일은 각 Skill 폴더 `_roles/`에 사본 | `check.sh`·`validate .` 통과. **실제 서브에이전트 호출 확인은 아직** |
+
+3단계에서 바뀐 것: superpowers `subagent-driven-development`(32KB)·`writing-plans`(10KB)는 예산을 넘어 빼고, 핵심(작업마다 새 에이전트, 보고를 믿지 않고 산출 확인, 2회 실패면 멈춤)을 `rules/crew.md`에 직접 씀. 병렬 원칙은 `dispatching-parallel-agents`(6KB)로. `crew plan`은 작업 쪼개기 표만. 브리핑 경로는 Skill 폴더의 절대 경로 아래 `_roles/`·`_stacks/`를 쓰고, 산출은 레포의 `.kit/<slug>/`(`info/exclude`로 커밋 제외). `_roles/`·`_stacks/`는 선택적으로 읽는 파일이라 예산 합계에 넣지 않는다.
 | 4 | `stacks/react`·`animation`·`design` + `roles/frontend.md`·`designer.md` 다듬기 (vendor: Vercel, Emil) | 첫 스택 팩. 형식 확정 | `/check frontend:react`로 실제 diff |
 | 5 | `skills/design`·`mock` (vendor: frontend-design, prototype, break-ui, pick-ui-library) | 화면 설계 흐름 | `/mock`으로 시안 3개 실제 생성 |
 | 6 | `stacks/python`·`java`·`node` (vendor: wshobson 일부) | 4번 형식 그대로 | |

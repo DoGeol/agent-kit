@@ -4,7 +4,7 @@
 #   - skills/*/_rules and _vendor copies match their sources (run build.sh)
 #   - every skills/*/SKILL.md has name and description, and no tool-specific keys other than argument-hint
 #   - agents/*.md equal what build.sh generates from roles/*.md
-#   - the text a skill reads (_rules + _vendor) stays under the budget
+#   - the text a skill always reads (_rules + _vendor) stays under the budget; _roles/_stacks are read selectively and not counted
 set -u
 root=$(cd "$(dirname "$0")/.." && pwd)
 fail=0
@@ -28,7 +28,7 @@ grep -v '^#' "$root/scripts/vendor-map.tsv" | grep -v '^[[:space:]]*$' | while I
   cmp -s "$root/$src" "$out" || echo "FAIL skills/$skill/$dest differs from $src (run build.sh)"
 done | grep . && fail=1
 # no stray copies
-for f in "$root"/skills/*/_rules/* "$root"/skills/*/_vendor/*; do
+for f in $(find "$root"/skills -path '*/_rules/*' -o -path '*/_vendor/*' -o -path '*/_roles/*' -o -path '*/_stacks/*' | grep -v '/\.' ); do
   [ -f "$f" ] || continue
   rel=${f#"$root"/skills/}; skill=${rel%%/*}; dest=${rel#*/}
   grep -q "^$skill	.*	$dest$" "$root/scripts/vendor-map.tsv" || err "skills/$rel not in vendor-map.tsv"
