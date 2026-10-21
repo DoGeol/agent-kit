@@ -1,7 +1,9 @@
 # Working rules for this repository
 
-- Top-level `skills/<name>/SKILL.md` follows the Agent Skills standard. Its frontmatter holds only `name` and `description`, with no fields tied to one tool. Plugin skills (`plugins/*/skills/`) are Claude Code only and may use Claude Code fields such as `disable-model-invocation` and `argument-hint`.
-- Skill bodies don't name a particular agent's tools ("셸에서 실행", not "Bash 도구로"). Script paths are relative to the skill folder.
-- `plugins/` holds plugins for Claude Code only. Before committing, run `claude plugin validate plugins/<name>`, `claude plugin test plugins/<name>` when the plugin has a mod (`hooks/hooks.json` with `modules`), and the plugin's `tests/run.sh` when it has one.
-- When a plugin changes, bump the `version` in its `.claude-plugin/plugin.json`. That is how users receive the update.
+- The repository root is the plugin `kit`, shared by Claude Code, Codex and Antigravity. `skills/<name>/SKILL.md` follows the Agent Skills standard. Its frontmatter holds `name` and `description`, plus `argument-hint` (Claude Code reads it, other tools ignore it). No other tool-specific fields. Plugin folders under `plugins/` are Claude Code only (mods) and may use Claude Code fields.
+- Skill bodies don't name a particular agent's tools ("셸에서 실행", not "Bash 도구로") and don't use tool variables such as `$ARGUMENTS`; say "명령 뒤에 적힌 문장". Paths are relative to the skill folder, and a skill reads only files inside its own folder.
+- `skills/*/_rules/`, `_vendor/`, `_roles/`, `_stacks/` and `stacks/*/vendor/` are copies made by `scripts/build.sh` per `scripts/vendor-map.tsv` (target folder, source file or folder, dest). Edit the sources (`rules/`, `vendor/`, `roles/`, `stacks/`), run `build.sh`, never edit the copies. A stack's entry file is `STACK.md`, never `SKILL.md` (tools would register it as a skill).
+- `vendor/` changes only through `scripts/vendor.sh` (commits pinned in `vendor/manifest.tsv`, a LICENSE file in every folder). Review the diff `vendor.sh update` prints before committing it.
+- Before committing: `scripts/check.sh` and `claude plugin validate .`. When `plugins/mods-hud` changes, also `claude plugin validate plugins/mods-hud` and `claude plugin test plugins/mods-hud`.
+- When anything kit ships changes (`skills/`, `rules/`, `vendor/`, `roles/`, `stacks/`), bump `version` in `.claude-plugin/plugin.json`, `.codex-plugin/plugin.json` and `gemini-extension.json` together. That is how users receive the update. `mods-hud` has its own version in its `plugin.json`.
 - Never commit secrets (API keys, tokens), company-internal information or personal paths.

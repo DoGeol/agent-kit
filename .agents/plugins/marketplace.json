@@ -1,0 +1,21 @@
+{
+  "name": "dg-agent-kit",
+  "interface": {
+    "displayName": "DoGeol agent kit"
+  },
+  "plugins": [
+    {
+      "name": "kit",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/DoGeol/agent-kit.git",
+        "ref": "main"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

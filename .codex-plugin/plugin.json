@@ -1,0 +1,32 @@
+{
+  "name": "kit",
+  "version": "0.7.0",
+  "description": "Trigger skills: $dev (test-first, minimal change), $spec (question rounds to a spec), $write (Korean prose without AI tells), $check (read-only review), $crew (delegate to a role×stack), $design (screen design brief), $mock (3 working variants behind a picker), $debug (signal first, then root cause), $setup (check companion skills)",
+  "author": {
+    "name": "DoGeol",
+    "url": "https://github.com/DoGeol"
+  },
+  "homepage": "https://github.com/DoGeol/agent-kit",
+  "repository": "https://github.com/DoGeol/agent-kit",
+  "license": "MIT",
+  "keywords": [
+    "skills",
+    "korean",
+    "spec",
+    "tdd"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "kit",
+    "shortDescription": "dev / spec / write / setup trigger skills",
+    "longDescription": "Shared trigger skills: $dev for test-first minimal code changes (uses caveman and ponytail when installed), $spec for question rounds that end in a spec, $write for Korean prose without AI tells, $setup to check companion skills.",
+    "developerName": "DoGeol",
+    "category": "Productivity",
+    "capabilities": [
+      "Instructions",
+      "Lifecycle hooks"
+    ],
+    "websiteURL": "https://github.com/DoGeol/agent-kit"
+  },
+  "hooks": "./hooks/hooks.json"
+}
