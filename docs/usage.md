@@ -69,6 +69,17 @@ crew plan frontend 알림 센터               → 작업 단위로 쪼갠 계�
 
 같은 diff를 `crew check security`·`crew check qa`로 따로 돌리면 관점이 달라 겹치는 지적이 적다.
 
+spec에 직군이 둘 이상이면 `crew build spec.md`가 카드로 묻는다:
+
+```
+Q1. spec에 backend·frontend 일이 있습니다. 어떻게 맡길까요?
+  1. 병렬: backend:python + frontend:react, 계약 먼저 (추천) — 기능이 서로 독립
+  2. 순차: backend 먼저 → frontend — 계약이 아직 흔들릴 때
+  3. 하나로: backend가 둘 다 — 변경이 작을 때
+```
+
+병렬이면 본 세션이 먼저 `contract.md`(API 모양·오류 코드)를 뽑고 둘을 동시에 띄운다. 계약을 바꿔야 하면 에이전트가 `contract-changes.md`에 적고 본 세션이 판단한다. 끝나면 머지 → 계약 테스트 → `/check`. 서브에이전트가 없는 도구에서는 같은 세션에서 순서대로 한다.
+
 ## 질문 카드
 
 `/spec`·`/design`·`/mock`·`crew`가 물을 때는 모두 같은 형식이다. 카드가 있는 도구는 카드로, 없는 도구는 번호 목록으로. 추천이 항상 1번이고 라벨 끝에 "(추천)". 한 번에 질문 4개까지.
