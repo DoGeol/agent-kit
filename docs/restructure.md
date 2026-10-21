@@ -193,6 +193,7 @@ Claude는 플러그인 Skill에 접두어가 붙어(`/kit:dev`) 내장 명령과
 - [ ] **Emil `prototype`의 실행 환경**: 피커가 프로젝트 dev 서버를 요구하는지, 단독 HTML로도 되는지. `/mock` 설계에 영향.
 - [ ] **Codex·AGY의 사용자 질문 도구**: Codex에 선택지 카드 도구가 있는지(plan 모드의 사용자 질문 도구로 알려짐), AGY는 무엇인지. 없으면 번호 목록으로 간다.
 - [ ] **옛 ok `templates/design/DESIGN-PRINCIPLES.md`**: git 기록(`e393647`)에서 꺼내 `stacks/design/team.md` 출발점으로 쓸지.
+- [ ] **Codex·AGY 팝업의 인자 힌트**: `$crew`·`/crew` 팝업이 description 외에 인자 힌트를 보여 주는지. 보여 주면 그 필드도 쓴다.
 - [ ] **caveman 기본 끔 방법**: Claude 플러그인의 SessionStart 훅이 매 세션 켠다. `caveman off`가 훅까지 끄는지, 아니면 플러그인을 빼고 Skill만 둬야 하는지. ponytail 훅이 off 상태에서 매 턴 무엇을 주입하는지도.
 - [ ] **AGY 플러그인 설치 범위**: `agy plugin install <git url>`이 저장소 전체를 받는지, `skills/`만 보는지. 전체면 `plugins/mods-hud`·`docs`·`vendor`가 따라가는데 문제가 없는지.
 - [ ] **`claude plugin validate .`**: 루트가 마켓플레이스이면서 플러그인일 때 둘 다 검증하는지.
@@ -246,6 +247,11 @@ Claude는 플러그인 Skill에 접두어가 붙어(`/kit:dev`) 내장 명령과
 - 답이 모호하면 다시 묻는다. 되돌리기 어려운 일이면 특히.
 - 혼자 정할 수 있는 일은 묻지 않는다. 묻는 것은 범위·우선순위·되돌리기 어려운 선택뿐.
 
+**인자 안내.** 값 자동완성은 세 도구 다 없다. 대신 두 겹으로 한다.
+
+1. **팝업 힌트**: description 문장에 형식과 값 목록을 넣는다(세 도구 팝업이 description을 보여 줌). 예: `crew build|check|plan <직군>[:<스택>] <요청>. 직군: frontend backend designer qa reviewer security. 스택: react animation design python java node`. Claude 전용 `argument-hint`도 같은 문구로 넣는다(다른 도구는 무시, 저장소 규칙에 예외로 적는다).
+2. **빠뜨리면 카드**: 직군을 빼면 요청 내용·레포 파일로 추천을 1번에 놓고 묻는다. 스택만 빼면 레포 파일로 판단해 진행하고 첫 줄에 "스택: python(pyproject.toml)"처럼 표시한다. 둘 다 적으면 묻지 않는다. `/check`(생략 → 현재 diff), `/design`·`/mock`(대상 생략 → 묻기)도 같다.
+
 예 (`/spec` 1단계):
 
 ```
@@ -278,7 +284,7 @@ caveman·ponytail·im-not-ai는 kit에 넣지 않고 사용자가 설치한다. 
 | 5 | **진행 순서 모순.** 1단계 `/spec`이 vendor(grill-me)를 쓰는데 vendor는 6단계. 3단계 검사가 4단계 `crew`를 쓴다 | 순서를 아래처럼 다시 잡음 |
 | 6 | **테스트 부담.** 트리거 7개 × 도구 3개 수동 | Claude만 `claude plugin eval`로 자동. Codex·AGY는 트리거마다 1회 수동, 결과를 `docs/checks.md`에 날짜와 함께 적는다 |
 | 7 | **`stacks/*/SKILL.md`가 Codex·AGY에서 Skill로 안 보임** (`skills/` 밖) | 의도대로. 스택은 트리거가 경로로 읽는 재료이지 명령이 아니다. 직접 부르고 싶어지면 그때 `skills/`에 얇은 트리거를 둔다 |
-| 8 | **AGENTS.md 저장소 규칙 개정 필요.** "plugins/는 Claude 전용", "skills/ frontmatter는 name·description만", "플러그인이 바뀌면 version" | 1단계 PR에서 같이 고친다: 루트 kit은 세 도구 공용, `skills/`·`stacks/`·`roles/`는 도구 전용 필드 금지, `plugins/*`만 Claude 필드 허용, vendor·rules가 바뀌어도 kit version 올림 |
+| 8 | **AGENTS.md 저장소 규칙 개정 필요.** "plugins/는 Claude 전용", "skills/ frontmatter는 name·description만", "플러그인이 바뀌면 version" | 1단계 PR에서 같이 고친다: 루트 kit은 세 도구 공용, `skills/`·`stacks/`·`roles/`는 도구 전용 필드 금지(예외: `argument-hint`는 다른 도구가 무시하므로 허용), `plugins/*`만 Claude 필드 허용, vendor·rules가 바뀌어도 kit version 올림 |
 | 9 | **`rules/ask.md` 예시의 2열 표.** 카드 없는 도구에서 모델이 그대로 찍으면 읽기 어렵다 | 예시를 세로 번호 목록으로 바꾼다 |
 | 10 | **roles 13개 중 crew가 쓰는 건 6개** | 본문에 반영함(`roles/_archive/`) |
 
