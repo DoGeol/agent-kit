@@ -38,7 +38,8 @@ agent-kit/
 ├─ rules/                    트리거 본문의 재료이자 외부 Skill이 없을 때의 축약 규칙
 │   ├─ dev.md                짧은 답, 최소 구현, 테스트 먼저
 │   ├─ write.md              일반 문장, AI 티 나는 문장 피하기
-│   └─ plan.md               질문 몰아서 하기, 산출은 spec
+│   ├─ plan.md               질문 몰아서 하기, 산출은 spec
+│   └─ ask.md                묻는 방식: 카드 있으면 카드, 추천 첫 번째, 한 카드에 4개까지
 ├─ roles/                    직군 원본 (옛 ok에서 옮김, 손질 필요). 스택과 무관
 │   ├─ frontend.md backend.md designer.md planner.md qa.md reviewer.md security.md …
 │   └─ review-format.md
