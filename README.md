@@ -75,7 +75,8 @@ agent-kit/
 ├─ skills/<name>/    SKILL.md + _rules/ + _vendor/ (build.sh가 만든 사본)
 ├─ rules/            dev · spec · write · ask
 ├─ vendor/           manifest.tsv + 외부 Skill 원본 (커밋 고정, LICENSE 포함)
-├─ roles/            직군 문서 (다음 단계에서 정리)
+├─ roles/            직군 원본 6개 (frontend backend qa designer reviewer security) + review-format.md
+├─ agents/           roles/에서 build.sh가 만든 Claude 서브에이전트 (kit-brief 가드)
 ├─ plugins/mods-hud/
 ├─ scripts/          build.sh · check.sh · vendor.sh · link.sh
 └─ docs/             usage.md · restructure.md · issues/

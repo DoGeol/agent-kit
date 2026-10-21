@@ -338,7 +338,7 @@ caveman·ponytail·im-not-ai는 kit에 넣지 않고 사용자가 설치한다. 
 | 1 ✅ | 세 도구 매니페스트(루트 `kit` 0.1.0) + `vendor/manifest.tsv`·`vendor.sh` + `build.sh`·`check.sh` + `rules/` + `skills/dev`·`spec`·`write`·`setup` + `AGENTS.md`·README 개정 | `claude plugin validate .` 통과, `check.sh` 통과. **Codex·AGY 실제 설치 확인은 아직** | 각 도구에서 네 트리거 1회씩 |
 
 1단계에서 바뀐 것: `grill-me`는 `grilling`을 부르는 껍데기라 `grilling`을 가져옴. Vercel `writing-guidelines`는 매번 원격 URL을 받는 구조라 vendor에서 뺌(구조 규칙은 `rules/write.md`에 직접 씀). blader humanizer(32KB)는 예산을 넘어 보류, 영어 글은 `rules/write.md`의 한 절로. manifest는 jq 없이 쓰려고 TSV. vendor와 rules 사본은 `skills/<name>/_vendor/`·`_rules/`에 두고 `SKILL.md`가 아닌 이름으로 복사해 중첩 Skill로 잡히지 않게 함.
-| 2 | `roles/` 정리(6개 남기고 `_archive/`), `build.sh`에 `agents/` 생성 + `kit-brief` 가드 | 직군 원본 확정 | `check.sh` 어긋남 |
+| 2 ✅ | `roles/` 정리(6개 남기고 `_archive/`), 역할 frontmatter(name·description·kind·model), `build.sh`가 `agents/` 생성 + `kit-brief` 가드, `check.sh` 어긋남 검사. kit 0.2.0 | 직군 원본 확정, 생성 서브에이전트 6개 | `check.sh`·`validate .` 통과 |
 | 3 | `skills/check` + `skills/crew`(vendor: code-reviewer, security-auditor, subagent-driven-development) | 리뷰와 직군 호출 | 세 도구에서 같은 diff 리뷰 |
 | 4 | `stacks/react`·`animation`·`design` + `roles/frontend.md`·`designer.md` 다듬기 (vendor: Vercel, Emil) | 첫 스택 팩. 형식 확정 | `/check frontend:react`로 실제 diff |
 | 5 | `skills/design`·`mock` (vendor: frontend-design, prototype, break-ui, pick-ui-library) | 화면 설계 흐름 | `/mock`으로 시안 3개 실제 생성 |

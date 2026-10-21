@@ -3,6 +3,7 @@
 #   - every vendor/<name> is in manifest.tsv and has a LICENSE file
 #   - skills/*/_rules and _vendor copies match their sources (run build.sh)
 #   - every skills/*/SKILL.md has name and description, and no tool-specific keys other than argument-hint
+#   - agents/*.md equal what build.sh generates from roles/*.md
 #   - the text a skill reads (_rules + _vendor) stays under the budget
 set -u
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -44,6 +45,21 @@ for s in "$root"/skills/*/SKILL.md; do
   name=$(printf '%s\n' "$fm" | sed -n 's/^name:[[:space:]]*//p')
   [ "$name" = "$(basename "$(dirname "$s")")" ] || err "$rel: name '$name' differs from folder"
 done
+
+# agents match roles (regenerate into a temp dir and compare)
+tmpd=$(mktemp -d)
+KIT_AGENTS_DIR="$tmpd" sh "$root/scripts/build.sh" >/dev/null 2>&1 || err "build.sh failed while regenerating agents"
+for f in "$tmpd"/*.md; do
+  [ -f "$f" ] || continue
+  n=$(basename "$f")
+  [ -f "$root/agents/$n" ] || { err "agents/$n missing (run build.sh)"; continue; }
+  cmp -s "$f" "$root/agents/$n" || err "agents/$n differs from roles (run build.sh)"
+done
+for f in "$root"/agents/*.md; do
+  [ -f "$f" ] || continue
+  [ -f "$tmpd/$(basename "$f")" ] || err "agents/$(basename "$f") has no role in roles/ (delete it)"
+done
+rm -rf "$tmpd"
 
 # budget
 for d in "$root"/skills/*/; do
