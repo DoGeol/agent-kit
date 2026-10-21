@@ -204,7 +204,7 @@ Claude는 플러그인 Skill에 접두어가 붙어(`/kit:dev`) 내장 명령과
 - [ ] **caveman 기본 끔 방법**: Claude 플러그인의 SessionStart 훅이 매 세션 켠다. `caveman off`가 훅까지 끄는지, 아니면 플러그인을 빼고 Skill만 둬야 하는지. ponytail 훅이 off 상태에서 매 턴 무엇을 주입하는지도.
 - [ ] **AGY 플러그인 설치 범위**: `agy plugin install <git url>`이 저장소 전체를 받는지, `skills/`만 보는지. 전체면 `plugins/mods-hud`·`docs`·`vendor`가 따라가는데 문제가 없는지.
 - [ ] **`claude plugin validate .`**: 루트가 마켓플레이스이면서 플러그인일 때 둘 다 검증하는지.
-- [ ] **플러그인 루트 `hooks/hooks.json` 자동 로드**: Claude가 설치 즉시 읽으면 "선택"이 아니다. 훅 안에서 설정 파일(`~/.config/agent-kit/hooks=off`)로 끄게 하거나 별도 플러그인으로 뺀다.
+- [x] **플러그인 루트 `hooks/hooks.json` 자동 로드**: 훅 스크립트가 `~/.config/agent-kit/hooks`에 `plain=on`이 없으면 아무것도 출력하지 않는다(기본 꺼짐). 실제 세션에서 켜 보고 Claude가 stdout을 컨텍스트로 넣는지, Codex가 `${CLAUDE_PLUGIN_ROOT}`를 주는지 확인.
 
 ## 디자인 (초안)
 
@@ -348,8 +348,10 @@ caveman·ponytail·im-not-ai는 kit에 넣지 않고 사용자가 설치한다. 
 | 5 ✅ | `skills/design`·`mock` + `rules/design.md`·`mock.md`. vendor: Emil `prototype`·`PICKER.md`. kit 0.5.0 | 화면 설계 문서(`docs/design/<slug>.md`)와 시안 3개 피커 | `check.sh`·`validate .` 통과. **실제 시안 생성은 아직** |
 
 5단계에서 바뀐 것: `/mock`은 Emil `prototype`을 뼈대로 쓰고 덮어쓰기만 `rules/mock.md`에(인사 없이 시작, 한국어 방향어·제품 문구, 카드로 고르기, 반영은 `/dev` 규칙). `prototype`이 dev 서버 유무를 스스로 가르므로(격리 라우트 / 단독 HTML) 후속 확인 항목은 해결. 예산을 20KB로 올림(`prototype`+`PICKER.md` 15KB).
-| 6 | `stacks/python`·`java`·`node` (vendor: wshobson 일부) | 4번 형식 그대로 | |
-| 7 | `hooks/`(선택), `/debug` | | |
+| 6 ✅ | `stacks/python`·`java`·`node`. vendor: wshobson python 4개(type-safety, testing, error-handling, uv), node 2개(backend-patterns, advanced-types). java는 직접 쓴 체크리스트 | 4번 형식 그대로. `team.md` 틀 | `check.sh`·`validate .` 통과 |
+| 7 ✅ | `/debug`(superpowers `systematic-debugging` 뼈대 + "신호 먼저"), `hooks/plain.sh`(선택, `~/.config/agent-kit/hooks`에 `plain=on`일 때만). kit 0.6.0 | 명령 9개 완성 | 훅 스크립트는 셸에서 켜짐·꺼짐·`/dev` 제외 확인 |
+
+6·7단계에서 바뀐 것: wshobson Skill의 `references/`는 가져오지 않음(STACK.md에 "없다고 나오면 무시"). Java는 공개 Skill이 페르소나 위주라 wshobson `java-pro`·VoltAgent `spring-boot-engineer`를 보고 체크리스트만 직접 씀. `/debug`는 mattpocock `diagnosing-bugs`를 vendor에 받았지만 예산 때문에 Skill에는 넣지 않고 "신호 먼저" 절(1절)로 요약. 훅은 플러그인 루트 `hooks/hooks.json`이라 설치 즉시 등록되지만, 스크립트가 설정 파일 없이는 아무것도 출력하지 않아 사실상 꺼져 있다. Codex는 `/hooks`에서 신뢰해야 돈다.
 
 0·1번이 한 묶음이다. 3번 전에 Codex·AGY의 서브에이전트 정의 형식을 공식 문서에서 확인한다(이 세션에서는 네트워크 정책으로 못 읽었다).
 

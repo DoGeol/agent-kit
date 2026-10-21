@@ -58,11 +58,12 @@ git clone https://github.com/DoGeol/agent-kit.git ~/agent-kit
 | `crew build\|check\|plan <직군>[:<스택>] <요청>` | 직군(frontend backend qa designer reviewer security)에 맡긴다. 서브에이전트가 있으면 그것으로, 없으면 같은 세션에서. 직군이 둘이면 계약을 먼저 뽑고 병렬·순차를 묻는다 |
 | `/design <화면>` | 화면 하나를 질문(목적→독자→우선순위→제약→분위기)으로 굳히고 구성 2~3개를 비교해 `docs/design/<slug>.md` 설계 문서 |
 | `/mock <UI 조각>` | 서로 다른 축의 동작하는 시안 3개를 피커 뒤에 두고, 고른 것만 코드에 반영 (`x5`, `riff`, `keep`) |
+| `/debug <증상>` | 이 버그에만 켜지는 신호(실패 테스트, 요청 스크립트)부터 만들고 원인 조사 → 가설 하나씩 → 고침 → 회귀 테스트 |
 | `/setup` | caveman·ponytail·im-not-ai 설치 확인과 설치 명령 |
 
-스택 팩 `stacks/react`·`animation`·`design`은 `/dev`·`/check`·`crew`·`/design`·`/mock`이 레포 파일로 판단해 읽는다. 팀 규칙은 `stacks/<스택>/team.md`에 적는다.
+스택 팩 `stacks/react`·`animation`·`design`·`python`·`java`·`node`는 `/dev`·`/check`·`crew`·`/debug` 등이 레포 파일로 판단해 읽는다. 팀 규칙은 `stacks/<스택>/team.md`에 적는다(지금은 틀만 있다).
 
-예정: `stacks/python`·`java`·`node`, 선택 훅, `/debug`. 순서는 [docs/restructure.md](docs/restructure.md#진행-순서).
+선택 훅(Claude·Codex): `~/.config/agent-kit/hooks`에 `plain=on`을 적으면 `/dev`가 아닌 턴에 "일반 문장으로" 한 줄을 넣어 짧은 말투 잔류를 막는다. 기본은 꺼짐.
 
 ## 플러그인 (Claude Code 전용)
 
@@ -79,8 +80,9 @@ agent-kit/
 ├─ .agents/plugins/  marketplace.json (Codex)
 ├─ gemini-extension.json                 (AGY)
 ├─ skills/<name>/    SKILL.md + _rules/ _vendor/ _roles/ _stacks/ (build.sh가 만든 사본)
-├─ rules/            dev · spec · write · check · crew · design · mock · ask
-├─ stacks/<name>/    STACK.md + team.md(팀 규칙) + vendor/(사본). react · animation · design
+├─ rules/            dev · spec · write · check · crew · design · mock · debug · ask
+├─ stacks/<name>/    STACK.md + team.md(팀 규칙) + vendor/(사본). react · animation · design · python · java · node
+├─ hooks/            선택 훅 (plain.sh, 기본 꺼짐)
 ├─ vendor/           manifest.tsv + 외부 Skill 원본 (커밋 고정, LICENSE 포함)
 ├─ roles/            직군 원본 6개 (frontend backend qa designer reviewer security) + review-format.md
 ├─ agents/           roles/에서 build.sh가 만든 Claude 서브에이전트 (kit-brief 가드)
