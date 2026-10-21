@@ -15,6 +15,17 @@ stacks/python	vendor/wshobson-agents/plugins/python-development/skills/python-er
 stacks/python	vendor/wshobson-agents/plugins/python-development/skills/uv-package-manager/SKILL.md	vendor/uv-package-manager.md
 stacks/node	vendor/wshobson-agents/plugins/javascript-typescript/skills/nodejs-backend-patterns/SKILL.md	vendor/nodejs-backend-patterns.md
 stacks/node	vendor/wshobson-agents/plugins/javascript-typescript/skills/typescript-advanced-types/SKILL.md	vendor/typescript-advanced-types.md
+stacks/design	vendor/anthropics-skills/skills/webapp-testing/SKILL.md	vendor/webapp-testing.md
+stacks/design	vendor/anthropics-skills/skills/webapp-testing/scripts/with_server.py	vendor/with_server.py
+stacks/design	vendor/emilkowalski-skills/skills/emil-design-eng/SKILL.md	vendor/emil-design-eng.md
+stacks/design	vendor/emilkowalski-skills/skills/find-animation-opportunities/SKILL.md	vendor/find-animation-opportunities.md
+stacks/animation	vendor/emilkowalski-skills/skills/find-animation-opportunities/SKILL.md	vendor/find-animation-opportunities.md
+stacks/animation	vendor/vercel-labs-agent-skills/skills/react-view-transitions/SKILL.md	vendor/react-view-transitions.md
+stacks/animation	vendor/emilkowalski-skills/skills/apple-design/SKILL.md	vendor/apple-design.md
+stacks/mobile	vendor/vercel-labs-agent-skills/skills/react-native-skills/SKILL.md	vendor/react-native-skills.md
+stacks/mobile	vendor/emilkowalski-skills/skills/mobile-native/SKILL.md	vendor/mobile-native.md
+stacks/mobile	vendor/emilkowalski-skills/skills/animate-expo/SKILL.md	vendor/animate-expo.md
+stacks/mobile	vendor/emilkowalski-skills/skills/animate-expo/RECIPES.md	vendor/animate-expo-recipes.md
 # skills
 skills/dev	rules/dev.md	_rules/dev.md
 skills/dev	vendor/forrestchang-karpathy/skills/karpathy-guidelines/SKILL.md	_vendor/karpathy-guidelines.md
@@ -25,6 +36,7 @@ skills/dev	stacks/design	_stacks/design
 skills/dev	stacks/python	_stacks/python
 skills/dev	stacks/java	_stacks/java
 skills/dev	stacks/node	_stacks/node
+skills/dev	stacks/mobile	_stacks/mobile
 skills/spec	rules/spec.md	_rules/spec.md
 skills/spec	rules/ask.md	_rules/ask.md
 skills/spec	vendor/mattpocock-skills/skills/productivity/grilling/SKILL.md	_vendor/grilling.md
@@ -48,6 +60,7 @@ skills/check	stacks/design	_stacks/design
 skills/check	stacks/python	_stacks/python
 skills/check	stacks/java	_stacks/java
 skills/check	stacks/node	_stacks/node
+skills/check	stacks/mobile	_stacks/mobile
 skills/crew	rules/crew.md	_rules/crew.md
 skills/crew	rules/ask.md	_rules/ask.md
 skills/crew	vendor/obra-superpowers/skills/dispatching-parallel-agents/SKILL.md	_vendor/dispatching-parallel-agents.md
@@ -67,10 +80,12 @@ skills/crew	stacks/design	_stacks/design
 skills/crew	stacks/python	_stacks/python
 skills/crew	stacks/java	_stacks/java
 skills/crew	stacks/node	_stacks/node
+skills/crew	stacks/mobile	_stacks/mobile
 skills/design	rules/design.md	_rules/design.md
 skills/design	rules/ask.md	_rules/ask.md
 skills/design	vendor/mattpocock-skills/skills/productivity/grilling/SKILL.md	_vendor/grilling.md
 skills/design	stacks/design	_stacks/design
+skills/design	roles/designer/reference.md	_roles/designer/reference.md
 skills/mock	rules/mock.md	_rules/mock.md
 skills/mock	rules/ask.md	_rules/ask.md
 skills/mock	vendor/emilkowalski-skills/skills/prototype/SKILL.md	_vendor/prototype.md
@@ -78,6 +93,7 @@ skills/mock	vendor/emilkowalski-skills/skills/prototype/PICKER.md	_vendor/picker
 skills/mock	stacks/design	_stacks/design
 skills/mock	stacks/react	_stacks/react
 skills/mock	stacks/animation	_stacks/animation
+skills/mock	stacks/mobile	_stacks/mobile
 skills/debug	rules/debug.md	_rules/debug.md
 skills/debug	rules/ask.md	_rules/ask.md
 skills/debug	vendor/obra-superpowers/skills/systematic-debugging/SKILL.md	_vendor/systematic-debugging.md

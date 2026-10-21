@@ -29,12 +29,15 @@ caveman·ponytail·im-not-ai가 설치돼 있는지 보여 주고, 없는 것은
 | `/write <요청>` | 사람이 읽을 글 | 목적·독자·형식 | 한국어 일반 문장. 끝에 "`/humanize`로 다듬으세요" |
 | `/check [직군[:스택]] [대상]` | 머지 전, 남의 PR | 생략하면 현재 diff | 지적 목록: 위치·실패 상황·고치는 법·확신도. 파일은 안 고침 |
 | `crew <build\|check\|plan> <직군>[:<스택>] <요청>` | 일을 직군에 맡길 때 | 직군, 스택(생략 가능), 요청 | 그 역할의 산출물. 단계마다 멈춰 보여 줌 |
-| `/design <화면>` | 화면을 어떻게 짤지 정할 때 | 화면 이름 | 질문 카드(목적→독자→우선순위→제약→분위기) → 구성 2~3개 비교 → `design-brief.md` |
+| `/design <화면>` | 화면을 어떻게 짤지 정할 때 | 화면 이름 | 질문 카드(목적→독자→우선순위→제약→분위기) → 구성 2~3개 비교 → `docs/design/<slug>.md` |
+| `/design audit` | 디자인 시스템을 점검할 때 | 없음 | 컴포넌트·토큰 목록, 변형 수, 토큰 미사용, 원칙 초안 → 카드로 승인 → `team.md` |
 | `/mock <UI 조각>` | 시안을 보고 고르고 싶을 때 | 컴포넌트 하나 | 서로 다른 축의 시안 3개를 피커로 → 고른 것만 코드에 반영 |
 | `/debug <증상>` | 버그·실패·느려짐 | 오류 메시지, 재현 절차, 파일 | 이 버그에만 켜지는 신호부터 → 원인(파일:줄) → 고침 → 회귀 테스트. 3번 실패하면 멈추고 카드 |
 | `/setup` | 처음, 또는 도구를 옮겼을 때 | 없음 | 설치 상태 표 + 설치 명령 |
 
-직군: `frontend` `backend` `designer` `qa` `reviewer` `security`. 스택: `react` `animation` `design` `python` `java` `node`. 스택을 생략하면 레포 파일로 판단한다.
+직군: `frontend` `backend` `designer` `qa` `reviewer` `security`. 스택: `react` `animation` `design` `mobile` `python` `java` `node`. 스택을 생략하면 레포 파일로 판단한다.
+
+`/check design`은 dev 서버를 띄울 수 있으면 실제 브라우저에서 상태별 스크린샷·콘솔 오류·키보드 흐름을 본다(Playwright). 화면 작업은 `/design` → `/mock` → `/dev` → `/check design` 순서가 끊기지 않는다.
 
 짧은 말투가 `/dev` 밖으로 새는 게 거슬리면(Claude·Codex): `~/.config/agent-kit/hooks` 파일에 `plain=on` 한 줄. `/dev`가 아닌 턴마다 "일반 문장으로" 한 줄이 들어간다. 지우면 꺼진다.
 

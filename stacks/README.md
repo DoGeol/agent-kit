@@ -17,7 +17,10 @@ stacks/<스택>/
 | python | uv·ruff·타입·pytest·예외 | wshobson python-type-safety·testing-patterns·error-handling·uv-package-manager |
 | node | TypeScript strict·검증·오류·비동기·테스트 | wshobson nodejs-backend-patterns·typescript-advanced-types |
 | java | Spring Boot 계층·주입·검증·트랜잭션·JPA·테스트 | 없음 (직접 쓴 체크리스트) |
+| mobile | React Native·Expo: 가상화 목록, 제스처, UI 스레드 모션, 안전 영역, 오프라인 | Vercel react-native-skills(목록만), Emil mobile-native·animate-expo |
 
-판단 규칙(`/dev`·`/check`·`crew` 공통): `pyproject.toml` → python, `build.gradle`·`pom.xml` → java, `package.json`에 `react` → react(모션이 있으면 animation도), 그 밖의 `package.json` → node, 화면을 새로 짜거나 리뷰하면 design. 섞이면 직군으로 가르고(frontend는 react, backend는 node) 그래도 애매하면 묻는다.
+`design`에는 패턴 규칙 `rules/`(폼·목록·상태·내비·반응형·대화상자·피드백·문구)가 있고, 브라우저 확인(anthropics webapp-testing)과 컴포넌트 원칙(Emil emil-design-eng 일부 절)도 여기 둔다.
+
+판단 규칙(`/dev`·`/check`·`crew` 공통): `pyproject.toml` → python, `build.gradle`·`pom.xml` → java, `package.json`에 `react-native`·`expo` → mobile, `react` → react(모션이 있으면 animation도), 그 밖의 `package.json` → node, 화면을 새로 짜거나 리뷰하면 design. 섞이면 직군으로 가르고(frontend는 react, backend는 node) 그래도 애매하면 묻는다.
 
 새 스택: 폴더와 `STACK.md`·`team.md`를 만들고, 외부 규칙은 `vendor/manifest.tsv`에 받아 `scripts/vendor-map.tsv`에 `stacks/<스택>` 행으로 복사한다. 그다음 `skills/dev`·`check`·`crew`에 `_stacks/<스택>` 행을 더한다.

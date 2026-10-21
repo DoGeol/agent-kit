@@ -351,6 +351,8 @@ caveman·ponytail·im-not-ai는 kit에 넣지 않고 사용자가 설치한다. 
 | 6 ✅ | `stacks/python`·`java`·`node`. vendor: wshobson python 4개(type-safety, testing, error-handling, uv), node 2개(backend-patterns, advanced-types). java는 직접 쓴 체크리스트 | 4번 형식 그대로. `team.md` 틀 | `check.sh`·`validate .` 통과 |
 | 7 ✅ | `/debug`(superpowers `systematic-debugging` 뼈대 + "신호 먼저"), `hooks/plain.sh`(선택, `~/.config/agent-kit/hooks`에 `plain=on`일 때만). kit 0.6.0 | 명령 9개 완성 | 훅 스크립트는 셸에서 켜짐·꺼짐·`/dev` 제외 확인 |
 
+| 8 ✅ | 프론트·디자인 보강. `stacks/design/rules/` 8개(폼·목록·상태·내비·반응형·대화상자·피드백·문구, 직접 작성), 브라우저 확인(anthropics `webapp-testing`), 컴포넌트 원칙(Emil `emil-design-eng` 절 발췌), `/design audit`, 애니메이션 기회(`find-animation-opportunities`), 페이지 전환(`react-view-transitions`), iOS 느낌(`apple-design`), `stacks/mobile`(Vercel `react-native-skills` 목록 + Emil `mobile-native`·`animate-expo`). kit 0.7.0 | 설계 → 시안 → 구현 → 브라우저 확인 → 점검이 이어짐 | `check.sh`·`validate .` 통과 |
+
 6·7단계에서 바뀐 것: wshobson Skill의 `references/`는 가져오지 않음(STACK.md에 "없다고 나오면 무시"). Java는 공개 Skill이 페르소나 위주라 wshobson `java-pro`·VoltAgent `spring-boot-engineer`를 보고 체크리스트만 직접 씀. `/debug`는 mattpocock `diagnosing-bugs`를 vendor에 받았지만 예산 때문에 Skill에는 넣지 않고 "신호 먼저" 절(1절)로 요약. 훅은 플러그인 루트 `hooks/hooks.json`이라 설치 즉시 등록되지만, 스크립트가 설정 파일 없이는 아무것도 출력하지 않아 사실상 꺼져 있다. Codex는 `/hooks`에서 신뢰해야 돈다.
 
 0·1번이 한 묶음이다. 3번 전에 Codex·AGY의 서브에이전트 정의 형식을 공식 문서에서 확인한다(이 세션에서는 네트워크 정책으로 못 읽었다).
