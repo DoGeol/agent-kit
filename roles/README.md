@@ -28,3 +28,5 @@ model: inherit | opus | sonnet | haiku
 - `<역할>/reference.md`는 특정 상황에서만 붙이는 절차. 브리핑에 `참고:`로 넘긴다.
 - 스택별 규칙(React, Python …)은 여기 쓰지 않고 `stacks/`에 둔다.
 - `review-format.md`는 리뷰 산출 형식. review 역할과 `/check`가 같이 쓴다.
+- 여기 파일은 `build.sh`가 `skills/check`·`crew`·`design`의 `_roles/`와 `agents/`로 복사·생성한다. 역할을 고치면 `build.sh` → `check.sh`.
+- `_archive/`는 옛 ok 흐름의 역할 7개. `build.sh`가 읽지 않는다.
