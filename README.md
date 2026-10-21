@@ -56,11 +56,13 @@ git clone https://github.com/DoGeol/agent-kit.git ~/agent-kit
 | `/write <요청>` | 한국어 일반 문장으로 기획서·공지·메시지·PR 본문. AI 티 나는 패턴을 피한다 |
 | `/check [직군[:스택]] [대상]` | 현재 diff(또는 브랜치·경로·PR)를 읽기 전용으로 리뷰. 지적마다 위치·실패 상황·고치는 법·확신도 |
 | `crew build\|check\|plan <직군>[:<스택>] <요청>` | 직군(frontend backend qa designer reviewer security)에 맡긴다. 서브에이전트가 있으면 그것으로, 없으면 같은 세션에서. 직군이 둘이면 계약을 먼저 뽑고 병렬·순차를 묻는다 |
+| `/design <화면>` | 화면 하나를 질문(목적→독자→우선순위→제약→분위기)으로 굳히고 구성 2~3개를 비교해 `docs/design/<slug>.md` 설계 문서 |
+| `/mock <UI 조각>` | 서로 다른 축의 동작하는 시안 3개를 피커 뒤에 두고, 고른 것만 코드에 반영 (`x5`, `riff`, `keep`) |
 | `/setup` | caveman·ponytail·im-not-ai 설치 확인과 설치 명령 |
 
-스택 팩 `stacks/react`·`animation`·`design`은 `/dev`·`/check`·`crew`가 레포 파일로 판단해 읽는다. 팀 규칙은 `stacks/<스택>/team.md`에 적는다.
+스택 팩 `stacks/react`·`animation`·`design`은 `/dev`·`/check`·`crew`·`/design`·`/mock`이 레포 파일로 판단해 읽는다. 팀 규칙은 `stacks/<스택>/team.md`에 적는다.
 
-예정: `/design`·`/mock`(화면 설계와 시안), `stacks/python`·`java`·`node`. 순서는 [docs/restructure.md](docs/restructure.md#진행-순서).
+예정: `stacks/python`·`java`·`node`, 선택 훅, `/debug`. 순서는 [docs/restructure.md](docs/restructure.md#진행-순서).
 
 ## 플러그인 (Claude Code 전용)
 
@@ -77,7 +79,7 @@ agent-kit/
 ├─ .agents/plugins/  marketplace.json (Codex)
 ├─ gemini-extension.json                 (AGY)
 ├─ skills/<name>/    SKILL.md + _rules/ _vendor/ _roles/ _stacks/ (build.sh가 만든 사본)
-├─ rules/            dev · spec · write · check · crew · ask
+├─ rules/            dev · spec · write · check · crew · design · mock · ask
 ├─ stacks/<name>/    STACK.md + team.md(팀 규칙) + vendor/(사본). react · animation · design
 ├─ vendor/           manifest.tsv + 외부 Skill 원본 (커밋 고정, LICENSE 포함)
 ├─ roles/            직군 원본 6개 (frontend backend qa designer reviewer security) + review-format.md

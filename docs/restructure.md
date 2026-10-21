@@ -197,7 +197,7 @@ Claude는 플러그인 Skill에 접두어가 붙어(`/kit:dev`) 내장 명령과
 - [ ] **AGY 규칙 상한 12,000자**: 공식 문서에서 확인. `stacks/` 목록 길이에 영향.
 - [ ] **`link.sh` 경로에서 Claude 맨 이름 충돌**: `~/.claude/skills/spec`이 플러그인 없이 `/spec`으로 뜨는지, 내장과 겹치면 어느 쪽이 이기는지.
 - [ ] **`/write`**: Claude 바이너리의 `write`가 명령인지 tool인지. `/help`로 확인.
-- [ ] **Emil `prototype`의 실행 환경**: 피커가 프로젝트 dev 서버를 요구하는지, 단독 HTML로도 되는지. `/mock` 설계에 영향.
+- [x] **Emil `prototype`의 실행 환경**: 둘 다 된다. dev 서버가 있으면 격리 라우트, 없으면 단독 HTML 파일(원본 Phase 4).
 - [ ] **Codex·AGY의 사용자 질문 도구**: Codex에 선택지 카드 도구가 있는지(plan 모드의 사용자 질문 도구로 알려짐), AGY는 무엇인지. 없으면 번호 목록으로 간다.
 - [ ] **옛 ok `templates/design/DESIGN-PRINCIPLES.md`**: git 기록(`e393647`)에서 꺼내 `stacks/design/team.md` 출발점으로 쓸지.
 - [ ] **Codex·AGY 팝업의 인자 힌트**: `$crew`·`/crew` 팝업이 description 외에 인자 힌트를 보여 주는지. 보여 주면 그 필드도 쓴다.
@@ -345,7 +345,9 @@ caveman·ponytail·im-not-ai는 kit에 넣지 않고 사용자가 설치한다. 
 | 4 ✅ | `stacks/react`·`animation`·`design` (`STACK.md` + `team.md` + `vendor/`). vendor: Vercel react-best-practices 17개 규칙·composition-patterns, Emil animate·recipes·animation-performance·review-animations·pick-ui-library·break-ui, anthropics frontend-design. kit 0.4.0 | 스택 팩 형식 확정. `team.md`는 틀만(팀이 채움) | `check.sh`·`validate .` 통과. **실제 diff 리뷰는 아직** |
 
 4단계에서 바뀐 것: 스택 진입 파일은 `STACK.md`(SKILL.md로 두면 도구가 Skill로 등록). 스택의 외부 규칙은 `stacks/<스택>/vendor/`에 사본, 스택 폴더 전체를 `skills/dev`·`check`·`crew`의 `_stacks/<스택>/`에 다시 사본(vendor-map에 폴더 행 지원). Vercel 규칙 72개 중 17개만(치명·높음·중간 위주), Emil `emil-design-eng`(27KB)와 `prototype`은 5단계로. Vercel `web-design-guidelines`는 원격 URL이라 `design/STACK.md`에 "읽을 수 있으면" 한 줄로만.
-| 5 | `skills/design`·`mock` (vendor: frontend-design, prototype, break-ui, pick-ui-library) | 화면 설계 흐름 | `/mock`으로 시안 3개 실제 생성 |
+| 5 ✅ | `skills/design`·`mock` + `rules/design.md`·`mock.md`. vendor: Emil `prototype`·`PICKER.md`. kit 0.5.0 | 화면 설계 문서(`docs/design/<slug>.md`)와 시안 3개 피커 | `check.sh`·`validate .` 통과. **실제 시안 생성은 아직** |
+
+5단계에서 바뀐 것: `/mock`은 Emil `prototype`을 뼈대로 쓰고 덮어쓰기만 `rules/mock.md`에(인사 없이 시작, 한국어 방향어·제품 문구, 카드로 고르기, 반영은 `/dev` 규칙). `prototype`이 dev 서버 유무를 스스로 가르므로(격리 라우트 / 단독 HTML) 후속 확인 항목은 해결. 예산을 20KB로 올림(`prototype`+`PICKER.md` 15KB).
 | 6 | `stacks/python`·`java`·`node` (vendor: wshobson 일부) | 4번 형식 그대로 | |
 | 7 | `hooks/`(선택), `/debug` | | |
 

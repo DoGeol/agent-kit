@@ -10,7 +10,7 @@ set -u
 root=$(cd "$(dirname "$0")/.." && pwd)
 fail=0
 err() { echo "FAIL $*"; fail=1; }
-budget=${KIT_BUDGET_BYTES:-16000}
+budget=${KIT_BUDGET_BYTES:-20000}
 tmpd=$(mktemp -d); trap 'rm -rf "$tmpd"' EXIT
 
 # vendor folders
