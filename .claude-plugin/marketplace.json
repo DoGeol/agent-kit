@@ -9,11 +9,6 @@
       "name": "mods-hud",
       "source": "./plugins/mods-hud",
       "description": "Claude Code HUD: session summary, subagents, orchestration, usage limits"
-    },
-    {
-      "name": "ok",
-      "source": "./plugins/ok",
-      "description": "ok (orchestration kit): /ok:start, /ok:plan, /ok:quick on Orca with Claude, Codex and Antigravity Workers"
     }
   ]
 }

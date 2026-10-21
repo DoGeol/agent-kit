@@ -13,7 +13,6 @@ Agent Skill은 `SKILL.md`(frontmatter `name`·`description` + 절차)가 든 폴
 
 ```
 /plugin install mods-hud --marketplace DoGeol/agent-kit
-/plugin install ok --marketplace DoGeol/agent-kit
 ```
 
 마켓플레이스 추가를 물으면 `y`, 범위는 user를 고른다. 터미널과 데스크탑 앱의 모든 세션에 적용된다.
@@ -32,7 +31,8 @@ git clone https://github.com/DoGeol/agent-kit.git ~/agent-kit
 | 플러그인 | 설명 |
 |---|---|
 | [mods-hud](plugins/mods-hud) | 입력창 위 현황판: 세션 요약, 서브에이전트, 오케스트레이션, 브랜치, 사용량 |
-| [ok](plugins/ok) | orchestration kit. hub의 접수 세션에서 `/ok:start`로 작업마다 Coordinator 세션을 Orca 워크트리에 열고, `/ok:plan`(요구 정리 → spec → 설계 리뷰·critic → 승인 한 번 → 기능별 Worker 구현 → 코드 리뷰·머지·PR) 또는 `/ok:quick`으로 끝낸다. 리뷰는 Claude Subagent, 구현은 Claude·Codex·AGY Worker가 기본이고 단계마다 바꿀 수 있다. 모든 Skill은 이름으로 부를 때만 돈다. orchestration-kit의 새 이름이다 ([옮기기](plugins/ok/README.md#orchestration-kit에서-옮기기)) |
+
+`roles/`에는 직군별 역할 문서(frontend, backend, reviewer …)가 있다. 세 도구 공용 구조로 가는 계획은 [docs/restructure.md](docs/restructure.md).
 
 설치: `/plugin install <플러그인> --marketplace DoGeol/agent-kit`. 업데이트: `claude plugin update <플러그인>`
 
@@ -51,9 +51,6 @@ claude plugin install mods-hud@dg-agent-kit
 ```bash
 claude plugin validate plugins/mods-hud
 claude plugin test plugins/mods-hud
-
-claude plugin validate plugins/ok
-plugins/ok/tests/run.sh          # ok에는 mod가 없어 plugin test 대상이 아니다
 
 claude plugin validate .   # 마켓플레이스
 ```

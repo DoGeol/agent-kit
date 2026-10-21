@@ -23,7 +23,7 @@ Claude Code·Codex·Antigravity(AGY) 세 도구에서 같은 키트를 쓰기 �
 ```text
 agent-kit/
 ├─ .claude-plugin/
-│   ├─ marketplace.json      kit(루트), mods-hud, ok
+│   ├─ marketplace.json      kit(루트), mods-hud
 │   └─ plugin.json           루트 = 플러그인 "kit" (Claude)
 ├─ .codex-plugin/plugin.json 루트 = 플러그인 "kit" (Codex)
 ├─ .agents/plugins/marketplace.json
@@ -39,7 +39,7 @@ agent-kit/
 │   ├─ dev.md                짧은 답, 최소 구현, 테스트 먼저
 │   ├─ write.md              일반 문장, AI 티 나는 문장 피하기
 │   └─ plan.md               질문 몰아서 하기, 산출은 spec
-├─ roles/                    직군 원본 (plugins/ok/roles에서 옮김). 스택과 무관
+├─ roles/                    직군 원본 (옛 ok에서 옮김, 손질 필요). 스택과 무관
 │   ├─ frontend.md backend.md designer.md planner.md qa.md reviewer.md security.md …
 │   └─ review-format.md
 ├─ stacks/                   스택 팩. 역할에 붙여 쓴다
@@ -54,28 +54,27 @@ agent-kit/
 │   └─ hooks.json            UserPromptSubmit: /dev가 아닌 턴에 "일반 문장" 한 줄 (caveman 말투 잔류 방지)
 ├─ agents/                   Claude 서브에이전트. roles/ + stacks/에서 **생성** (손으로 안 고침)
 ├─ plugins/                  Claude 전용. 지금 쓰는 것을 그대로 유지한다
-│   ├─ mods-hud/             mod. 파일·명령·설치 방법 모두 그대로
-│   └─ ok/                   오케스트레이션 (Claude + Orca 전용). 흐름 그대로
-│       └─ roles/            roles/에서 **생성**한 사본. tests/run.sh가 어긋남을 잡는다
+│   └─ mods-hud/             mod. 파일·명령·설치 방법 모두 그대로
 ├─ scripts/
 │   ├─ link.sh               (있음) skills/ → 각 도구 폴더
-│   ├─ build.sh              roles+stacks → agents/, plugins/ok/roles/, AGENTS.md 조각
+│   ├─ build.sh              roles+stacks → agents/, AGENTS.md 조각
 │   ├─ vendor.sh             vendor/ 갱신 (고정 커밋에서)
 │   └─ check.sh              생성물 어긋남 · 라이선스 파일 · frontmatter 검사
 └─ docs/
 ```
 
-플러그인은 셋이 된다.
+플러그인은 둘이 된다.
 
 | 플러그인 | 내용 | 도구 |
 |---|---|---|
 | `kit` (루트) | skills · rules · roles · stacks · hooks · agents | Claude · Codex · AGY |
 | `mods-hud` | 현황판 mod | Claude |
-| `ok` | Orca 오케스트레이션 | Claude |
+
+옛 `ok`(Orca 오케스트레이션)는 지웠다. 역할 문서만 `roles/`로 옮겼고 나머지는 git 기록에 있다.
 
 루트를 플러그인으로 쓰는 건 ponytail과 같은 방식이다(`marketplace.json`의 `source: "./"`). 플러그인을 하나로 설치해 세 도구가 같은 Skill을 본다.
 
-## 핵심 설계 네 가지
+## 핵심 설계 세 가지
 
 ### 1. 트리거 Skill (`skills/dev`·`plan`·`write`·`review`, `rules/`)
 
@@ -106,10 +105,10 @@ crew review frontend:react
 crew build backend <요청>        ← 스택 생략: 레포 파일로 판단
 ```
 
-- **역할**(`roles/<직군>.md`): 하는 일, 산출물, 수용 기준, 하지 않는 것. 스택과 무관. ok의 지금 역할 파일이 그대로 원본이다.
+- **역할**(`roles/<직군>.md`): 하는 일, 산출물, 수용 기준, 하지 않는 것. 스택과 무관. 옛 ok의 역할 파일을 옮겨 왔으므로 ok 전용 문구(`plan 8단계`, `<KIT>`, `reports/` 경로)를 걷어내야 한다.
 - **스택 팩**(`stacks/<스택>/`): `SKILL.md`(언제 읽나 + 규칙 목록, 영향도 순) + `rules/`(규칙 하나에 파일 하나: 영향도·틀린 예·맞는 예·이유) + `team.md`(팀 고유 규칙). Vercel `react-best-practices`의 72개 규칙 형식을 따른다.
 - **스택 정하기**(먼저 찾은 값): 호출 인자 → 프로젝트 설정 `stack:` → 레포 파일(`pyproject.toml`→python, `build.gradle`·`pom.xml`→java, `package.json`→node, 거기에 `react` 의존성→react).
-- **전달**: 받는 쪽에 `역할: roles/backend.md`, `스택: stacks/python/SKILL.md` 경로 두 줄. ok의 "역할 + 보강"과 같은 방식이라 세 도구 어디서든 된다.
+- **전달**: 받는 쪽에 `역할: roles/backend.md`, `스택: stacks/python/SKILL.md` 경로 두 줄. 파일 내용을 프롬프트에 복사하지 않으므로 세 도구 어디서든 된다.
 - **실행 주체**: Claude는 생성된 `agents/<직군>.md`로 서브에이전트, Codex·AGY는 서브에이전트가 있으면 그것, 없으면 **같은 세션에서 역할 파일을 읽고 순서대로**. superpowers `subagent-driven-development`의 분기와 같다.
 - **AGY 상한**: 항상 켜지는 규칙은 12,000자 안에 둔다. 스택 규칙 전부를 `AGENTS.md`에 넣지 않고 상위 10개 목록만 넣고 나머지는 필요할 때 읽게 한다.
 
@@ -119,37 +118,27 @@ crew build backend <요청>        ← 스택 생략: 레포 파일로 판단
 |---|---|---|
 | 원본 설치기로 그대로 | caveman, ponytail | 훅·CLI가 딸려 있고 자주 바뀐다. 우리는 모드에서 켜고 끄기만 |
 | `vendor/`에 복사 | 작은 텍스트 Skill: superpowers 일부, mattpocock `grill-me`·`to-spec`, addyosmani `code-reviewer`, Vercel `react-best-practices`·`writing-guidelines`, Emil `animate`·`review-animations`, `karpathy-guidelines` | 고정 커밋에서 받아 재현된다. 폴더마다 LICENSE |
-| 응용 | 우리 Skill이 "vendor의 X를 읽고 따른 뒤 아래 다른 점만" | ok 보강 파일과 같은 방식. 원본을 안 고치니 갱신이 쉽다 |
+| 응용 | 우리 Skill이 "vendor의 X를 읽고 따른 뒤 아래 다른 점만" | 원본을 안 고치니 갱신이 쉽다 |
 
 - 오픈 라이선스가 아닌 것은 복사하지 않는다(anthropics/skills의 `docx`·`pdf`·`pptx`·`xlsx`).
 - VoltAgent 류 페르소나 정의(280줄 "You are a senior…")는 복사하지 않고 체크리스트만 뽑아 `roles/`·`stacks/`에 넣는다.
 - `scripts/vendor.sh`가 `vendor/manifest.json`(repo, commit, 경로)대로 받는다. `check.sh`가 LICENSE 없는 폴더를 잡는다.
 
-### 4. ok 손보기 (불편 1번: 오래 걸리고 중간에 볼 게 없음)
-
-구조는 그대로 두고 네 가지를 더한다. 자세한 것은 ok README에 둔다.
-
-1. **`build` 트랙**: quick과 plan 사이. spec 한 장 → 승인 → 구현 → 리뷰 1회. critic 토론과 리뷰어 여러 명은 L 등급이거나 high 지적이 있을 때만.
-2. **첫 기능 먼저 끝내기**: 첫 기능을 구현·테스트·머지까지 끝내고 멈춰 보여 준다. 확인 뒤 나머지를 동시에.
-3. **진행 파일**: Worker가 서브태스크마다 `tasks/<slug>/progress.md`에 한 줄(`14:02 F1-2 테스트 통과`). `/ok:status`와 mods-hud가 그대로 보여 준다.
-4. **단계별 시간**: 작업 파일 `## 실행`에 시작·끝 시각. 어디서 시간이 가는지 숫자로 본 뒤 줄인다.
-
-ok는 `roles/`를 플러그인 밖에서 읽을 수 없으므로 `build.sh`가 `plugins/ok/roles/`에 사본을 만든다. `tests/run.sh`에 어긋남 검사를 더한다(caveman이 `SKILL.md`에서 규칙 사본을 만들고 drift 테스트로 잡는 것과 같다).
+불편 1번(오케스트레이션이 오래 걸리고 중간에 볼 게 없음)은 ok를 지우면서 사라진다. `crew`가 한 세션 안에서 가볍게 맡기는 쪽을 맡고, 단계가 끝날 때마다 결과를 보여 준다. 더 큰 흐름이 필요해지면 그때 `crew` 위에 얹는다(superpowers `subagent-driven-development`를 참고하되 중간 확인 지점을 둔다).
 
 ## 지금 구조에서 바뀌는 것
 
 | 지금 | 바뀐 뒤 |
 |---|---|
 | `skills/` 비어 있음 | `dev`·`plan`·`write`·`review`·`crew` |
-| `plugins/ok/roles/` 원본 | `roles/` 원본, ok 안은 생성 사본 |
-| `plugins/ok/agents/` 손으로 작성 | 루트 `agents/`를 roles에서 생성, ok는 그대로 쓰되 역할 경로만 바뀜 |
+| `roles/` (옛 ok 역할, ok 문구 섞임) | ok 문구를 걷어낸 직군 원본 |
 | 역할만 있고 스택 없음 | `stacks/` 추가, `crew`가 조합 |
 | caveman·ponytail 항상 켜짐 | 기본 끔, `/dev` 턴에서만 |
 | `mods-hud` | 그대로 (Claude 전용 mod는 계속 `plugins/`에) |
-| 마켓플레이스 플러그인 2개 | 3개(`kit` 루트 추가). Codex·AGY 매니페스트 추가 |
+| 마켓플레이스 플러그인 1개 | 2개(`kit` 루트 추가). Codex·AGY 매니페스트 추가 |
 | `AGENTS.md` "plugins/는 Claude 전용", "skills/ frontmatter는 name·description만" | 루트 플러그인은 세 도구 공용. `skills/` 규칙은 유지(도구 전용 필드 금지), `plugins/*`만 Claude 필드 허용 |
 
-안 바뀌는 것: `mods-hud` 전부, ok의 흐름과 hub 형식, `link.sh`.
+안 바뀌는 것: `mods-hud` 전부, `link.sh`.
 
 ## 진행 순서
 
@@ -158,12 +147,11 @@ ok는 `roles/`를 플러그인 밖에서 읽을 수 없으므로 `build.sh`가 `
 | # | 일 | 결과 | 검사 |
 |---|---|---|---|
 | 1 | 루트 플러그인 `kit` + `skills/dev`·`plan`·`write`·`review` + `rules/` | 세 도구에서 `/dev 요청`이 caveman·ponytail을 끌어옴, `/write`는 일반 문장 | `claude plugin validate .`, Codex·AGY에 설치해 네 트리거 확인 |
-| 2 | `roles/`로 옮기고 `build.sh`·`check.sh` | ok 테스트 통과, 생성 사본 어긋남 검사 | `plugins/ok/tests/run.sh` |
+| 2 | `roles/`에서 ok 문구 걷어내기, `build.sh`·`check.sh` | 직군 원본 확정, 생성 `agents/` 어긋남 검사 | `check.sh` |
 | 3 | `stacks/react` + `stacks/animation` + `roles/frontend.md` 다듬기 | 첫 스택 팩. 형식이 정해짐 | `crew review frontend:react`로 실제 diff 리뷰 |
 | 4 | `skills/crew` | 직군×스택 호출. 서브에이전트 없으면 같은 세션 | 세 도구에서 같은 요청 |
 | 5 | `stacks/python`·`java`·`node` | 3번 형식 그대로 | |
 | 6 | `vendor/` + `vendor.sh` | 외부 Skill 고정 커밋으로. 트리거가 vendor 경로를 가리킴 | `check.sh` 라이선스 |
-| 7 | ok: `build` 트랙, progress.md, 첫 기능 먼저, 시간 기록 | 1번 불편 해소 | ok 테스트 |
 
 1번이 가장 작고 체감이 크다. 4번 전에 Codex·AGY의 서브에이전트 정의 형식을 공식 문서에서 확인한다(이 세션에서는 네트워크 정책으로 못 읽었다).
 
@@ -171,8 +159,8 @@ ok는 `roles/`를 플러그인 밖에서 읽을 수 없으므로 `build.sh`가 `
 
 - **스택 팩 `team.md`**: 팀의 React 규칙(상태 관리, 폴더 구조, 이름 짓기)과 백엔드 규칙을 사용자가 준다.
 - **트리거 없이 자동 판별**: 프롬프트를 보고 개발인지 판단해 `/dev`를 자동으로 붙이는 것. 오판과 비용 때문에 뒤로 미룬다.
-- **Codex 마켓플레이스에 플러그인 여러 개**: 루트 `kit`만 Codex·AGY에 올리고 `mods-hud`·`ok`는 Claude 마켓플레이스에만 둔다. Codex 마켓플레이스가 여러 플러그인을 받는지는 확인하지 않았다.
-- **`crew`와 `ok`의 경계**: `crew`는 한 세션 안, 어느 도구나. `ok`는 작업당 세션·Orca·hub. `crew`가 커지면 "`/ok:start`로 가세요" 한 줄로 넘긴다.
+- **Codex 마켓플레이스에 플러그인 여러 개**: 루트 `kit`만 Codex·AGY에 올리고 `mods-hud`는 Claude 마켓플레이스에만 둔다. Codex 마켓플레이스가 여러 플러그인을 받는지는 확인하지 않았다.
+- **`crew`의 상한**: 한 세션 안에서 몇 개까지 맡기나. 넘으면 어떻게 할지는 써 보고 정한다.
 
 ## 참고한 것
 
