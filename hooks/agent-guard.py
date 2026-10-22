@@ -3,14 +3,16 @@
 Claude Code has no setting that stops the model from delegating to a plugin subagent on its own, and the
 written guard inside each agent was talked past in tests (2026-10-22: the model re-sent the request
 as "crew 진행자가 맡긴 일" and the subagent worked). This hook decides before the subagent starts:
-- the user typed a crew command in this session (crew-mark.py left a mark for this session_id),
+- the user typed a crew command in this session (crew-mark.py left a mark for this session_id), and the
+  command named this role (or named none, when crew asks the user to pick),
 - the brief's first line is `kit-brief: <role>[:<stack>]`,
 - its `산출:` path (absolute, or relative to the session folder) is inside `<repo>/.kit/<slug>/`,
-- `<repo>/.kit/<slug>/brief-<role>.md` was written after the crew command and the brief starts with its
-  text (a note may follow).
+- `<repo>/.kit/<slug>/brief-<role>.md` (or `brief-<role>-<n>.md` when the same role runs twice at once) was
+  written after the crew command and the brief starts with its text (a note may follow).
 Anything else is denied, and so is a kit call this script cannot read. Other agents pass untouched.
 Reads the hook JSON on stdin. agent-guard.sh runs it and blocks kit calls when python3 is missing.
 """
+import glob
 import json
 import os
 import re
@@ -53,6 +55,13 @@ def check(event):
     mark = os.path.join(state_dir(), session)
     if not os.path.isfile(mark):
         deny()
+    try:
+        with open(mark, encoding="utf-8") as f:
+            roles = json.load(f).get("roles") or []
+    except (OSError, ValueError, AttributeError):
+        roles = []
+    if roles and role not in roles:
+        deny()
     prompt = str(tool_input.get("prompt") or "").strip()
     lines = prompt.splitlines()
     if not lines or not re.fullmatch(rf"kit-brief:\s*{re.escape(role)}(:[\w.-]+)?", lines[0].strip()):
@@ -68,16 +77,19 @@ def check(event):
     parts = os.path.relpath(out, kit).split(os.sep)
     if len(parts) < 2 or parts[0] in ("", ".", ".."):
         deny()
-    saved = os.path.join(kit, parts[0], f"brief-{role}.md")
-    try:
-        if os.path.getmtime(saved) < os.path.getmtime(mark):
-            deny()
-        with open(saved, encoding="utf-8") as f:
-            text = f.read().strip()
-    except OSError:
-        deny()
-    if not text or not prompt.startswith(text):
-        deny()
+    folder = os.path.join(kit, glob.escape(parts[0]))
+    started = os.path.getmtime(mark)
+    for saved in glob.glob(os.path.join(folder, f"brief-{role}.md")) + glob.glob(os.path.join(folder, f"brief-{role}-*.md")):
+        try:
+            if os.path.getmtime(saved) < started:
+                continue
+            with open(saved, encoding="utf-8") as f:
+                text = f.read().strip()
+        except OSError:
+            continue
+        if text and prompt.startswith(text):
+            return
+    deny()
 
 
 raw = sys.stdin.read()

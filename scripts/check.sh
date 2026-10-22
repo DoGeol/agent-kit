@@ -79,7 +79,7 @@ brief="kit-brief: backend:node
 mark() { python3 -I -c 'import json,sys; print(json.dumps({"session_id":sys.argv[1],"prompt":sys.argv[2],"cwd":sys.argv[3]}))' "$1" "$2" "$repo" | python3 -I "$m"; }
 guard() { python3 -I -c 'import json,sys; print(json.dumps({"session_id":sys.argv[1],"cwd":sys.argv[4],"tool_name":"Agent","tool_input":{"subagent_type":sys.argv[2],"prompt":sys.argv[3]}}))' "$1" "$2" "$3" "${4:-$repo}" | python3 -I "$g"; }
 st="$XDG_STATE_HOME/agent-kit/crew"
-mark s1 "crew build backend 정렬"; [ -f "$st/s1" ] || err "crew-mark did not mark a crew prompt"
+mark s1 "crew build backend:node,qa 정렬"; [ -f "$st/s1" ] || err "crew-mark did not mark a crew prompt"
 sleep 1; printf '%s\n' "$brief" > "$gd/brief-backend.md"
 [ -z "$(guard s1 kit:backend "$brief
 (덧붙임)")" ] || err "agent-guard denied a saved brief"
@@ -87,6 +87,15 @@ rel="kit-brief: qa
 산출: .kit/r/report-qa.md"
 mkdir -p "$repo/.kit/r"; printf '%s\n' "$rel" > "$repo/.kit/r/brief-qa.md"
 [ -z "$(guard s1 kit:qa "$rel")" ] || err "agent-guard denied a relative 산출 path inside the repo"
+brief2="kit-brief: backend:node
+산출: $gd/report-backend-2.md
+작업: 두 번째"
+printf '%s\n' "$brief2" > "$gd/brief-backend-2.md"
+[ -z "$(guard s1 kit:backend "$brief2")" ] || err "agent-guard denied a numbered brief for the same role"
+mark s4 "/kit:crew build backend 정렬"; sleep 1; touch "$repo/.kit/r/brief-qa.md"
+[ -n "$(guard s4 kit:qa "$rel")" ] || err "agent-guard allowed a role the crew command did not name"
+mark s5 "crew build docs/specs/a.md"; sleep 1; touch "$repo/.kit/r/brief-qa.md"
+[ -z "$(guard s5 kit:qa "$rel")" ] || err "agent-guard denied a role when the crew command named none"
 [ -n "$(guard s2 kit:backend "$brief")" ] || err "agent-guard allowed a session with no crew command"
 [ -n "$(guard s1 kit:backend "crew build backend 정렬")" ] || err "agent-guard allowed a brief without kit-brief"
 [ -n "$(guard s1 kit:frontend "$brief")" ] || err "agent-guard allowed a brief for another role"
