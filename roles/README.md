@@ -16,9 +16,9 @@
 ```markdown
 ---
 name: backend
-description: 한 줄. 생성되는 서브에이전트의 description이 된다
-kind: build | review        review면 읽기 전용 도구만
-model: inherit | opus | sonnet | haiku     crew가 띄울 때 고르는 모델. 생성된 에이전트 파일은 늘 inherit (AGY가 opus 같은 이름을 받지 않는다)
+description: 한 줄. 생성되는 서브에이전트 description의 고정 앞부분(crew 진행자만 부른다) 뒤에 붙는다
+kind: build | review        review면 읽기 전용 도구만(파일 쓰기 없음)
+model: inherit | opus | sonnet | haiku     claude-agents/에 그대로 들어간다. agents/(AGY)는 늘 inherit (AGY가 opus 같은 이름을 받지 않는다)
 ---
 # backend: 백엔드 개발자
 ## 관점 / ## 산출물 / ## 수용 기준 / ## 하지 않는 것 / ## 리뷰에서 보는 것

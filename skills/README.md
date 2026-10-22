@@ -15,14 +15,16 @@ skills/<name>/
 | Skill | 뼈대 | 읽는 사본 |
 |---|---|---|
 | dev | `_rules/dev.md` | karpathy, verification-before-completion, `_stacks/*` |
-| spec | grilling | `_rules/spec.md`·`ask.md`, to-spec |
-| write | `_rules/write.md` | `ask.md` |
+| spec | grilling | `_rules/spec.md`, to-spec |
+| write | `_rules/write.md` | 없음 |
 | check | `_rules/check.md` | code-reviewer, security-auditor, `_roles/*`, `_stacks/*` |
 | crew | `_rules/crew.md` | dispatching-parallel-agents, `_roles/*`(브리핑 경로용), `_stacks/*` |
 | design | `_rules/design.md` | grilling, `_stacks/design`, `_roles/designer/reference.md` |
 | mock | Emil prototype | `_rules/mock.md`, picker, `_stacks/design`·`react`·`animation`·`mobile` |
 | debug | systematic-debugging | `_rules/debug.md`, `_stacks/*` |
 | setup | `check.sh` | 없음 |
+
+묻는 자리가 있는 Skill(dev·setup 빼고 전부)은 `_rules/ask.md`도 함께 받는다.
 
 ## 쓰는 법
 
@@ -51,4 +53,4 @@ argument-hint: "<요청>"
 - **사본 추가**: `scripts/vendor-map.tsv`에 행(`skills/<name>  <원본>  <사본 경로>`)을 더하고 `build.sh` → `check.sh`. `_rules`+`_vendor` 합계는 20KB까지(`check.sh`가 잰다). `_roles`·`_stacks`는 선택적으로 읽어 예산 밖.
 - **이름**: Codex·AGY에서 맨 이름으로 뜨므로 내장 명령과 겹치면 안 된다. 피할 이름은 [docs/restructure.md](../docs/restructure.md#4-skill-이름).
 
-Codex·AGY는 `scripts/link.sh`로 링크해도 된다. Claude Code는 루트 플러그인으로만 설치한다.
+Codex·AGY는 `scripts/link.sh`로 링크해도 된다. Claude Code는 루트 플러그인으로만 설치한다. kit을 고치면서 세 도구에서 바로 보려면 `scripts/dev-mode.sh on`(루트 README의 로컬 개발).

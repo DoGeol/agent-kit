@@ -11,19 +11,20 @@
 | 문서 | 내용 |
 |---|---|
 | [docs/usage.md](docs/usage.md) | 사용법: 부르는 법, 명령 9개, 흐름 예, 질문 카드, 팀 규칙 넣는 곳 |
-| [docs/restructure.md](docs/restructure.md) | 구조와 설계 결정, 확인 안 된 것, 진행 기록 |
-| [skills/README.md](skills/README.md) · [roles/README.md](roles/README.md) · [stacks/README.md](stacks/README.md) · [vendor/README.md](vendor/README.md) | 각 폴더의 규칙 |
+| [docs/restructure.md](docs/restructure.md) | 구조와 설계 결정, 도구별 확인 기록, 진행 기록 |
+| [skills/README.md](skills/README.md) · [roles/README.md](roles/README.md) · [stacks/README.md](stacks/README.md) · [vendor/README.md](vendor/README.md) · [hooks/README.md](hooks/README.md) | 각 폴더의 규칙 |
 
 ## 설치
 
 **Claude Code**
 
 ```
-/plugin install kit --marketplace DoGeol/agent-kit
-/plugin install mods-hud --marketplace DoGeol/agent-kit
+claude plugin marketplace add DoGeol/agent-kit
+claude plugin install kit@dg-agent-kit
+claude plugin install mods-hud@dg-agent-kit   # 현황판, 필요할 때만
 ```
 
-마켓플레이스 추가를 물으면 `y`, 범위는 user. Skill은 `/kit:dev`처럼 부른다. 업데이트: `claude plugin update kit`.
+범위는 기본값 user라서 모든 레포에서 쓴다. Skill은 `/kit:dev`처럼 부른다. 업데이트는 `claude plugin update kit@dg-agent-kit` 뒤 새 세션.
 
 **Codex**
 
@@ -69,7 +70,7 @@ git clone https://github.com/DoGeol/agent-kit.git ~/agent-kit
 
 직군: `frontend` `backend` `qa` `designer` `reviewer` `security`. 스택: `react` `animation` `design` `mobile` `python` `java` `node`(레포 파일로 판단, 생략 가능). 팀 규칙은 `stacks/<스택>/team.md`에 범용 기본값이 들어 있고, 팀에 맞게 바꾸면 그것이 이긴다.
 
-서브에이전트 가드(Claude Code·AGY, 항상 켜짐): kit 직군 서브에이전트는 사용자가 그 세션에서 crew 명령을 친 뒤, 명령에 적힌 직군만, crew가 저장한 브리핑으로만 돈다. 모델이 혼자 부르면 훅이 막는다. python3가 필요하고, 없으면 kit 서브에이전트 호출은 막힌다. 자세한 내용은 [`hooks/README.md`](hooks/README.md).
+서브에이전트 가드(Claude Code·AGY, 항상 켜짐): kit 직군 서브에이전트는 사용자가 그 세션에서 crew 명령을 친 뒤, 명령에 적힌 직군만, crew가 저장한 브리핑으로만 돈다. 모델이 혼자 부르면 훅이 막는다. crew 세션 안에서 막히면 무엇이 틀렸는지 알려 주고, crew를 치지 않은 세션에는 한 줄만 돌려준다. python3가 필요하고, 없으면 kit 서브에이전트 호출은 막힌다. 자세한 내용은 [`hooks/README.md`](hooks/README.md).
 
 선택 훅(Claude·Codex): `~/.config/agent-kit/hooks`에 `plain=on`을 적으면 `/dev`가 아닌 턴에 "일반 문장으로" 한 줄을 넣어 짧은 말투 잔류를 막는다. 기본은 꺼짐.
 
@@ -93,7 +94,7 @@ agent-kit/
 ├─ agents/           roles/에서 build.sh가 만든 AGY 서브에이전트 (AGY 도구 이름)
 ├─ claude-agents/    같은 역할의 Claude Code 서브에이전트 (Claude 도구 이름, 역할 모델). .claude-plugin/plugin.json이 이것만 읽는다
 ├─ stacks/<name>/    STACK.md + team.md + vendor/. react · animation · design(+rules/ 8개) · mobile · python · java · node
-├─ vendor/           manifest.tsv + 외부 Skill 원본 9개 저장소 (커밋 고정, LICENSE 포함)
+├─ vendor/           manifest.tsv + 외부 Skill 원본 8개 저장소 (커밋 고정, LICENSE 포함)
 ├─ hooks/            서브에이전트 가드(crew_mark.py, agent-guard.sh·.py), 선택 훅 plain.sh (기본 꺼짐)
 ├─ plugins/mods-hud/ Claude Code mod
 ├─ scripts/          build.sh · check.sh · vendor.sh · vendor-map.tsv · link.sh · dev-mode.sh · try.sh · hooks/pre-commit

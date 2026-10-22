@@ -30,7 +30,7 @@ agent-kit/
 ├─ agents/             roles/에서 생성한 AGY 서브에이전트 (AGY 도구 이름)
 ├─ claude-agents/      같은 역할의 Claude 서브에이전트 (review 역할은 읽기 전용 도구, 역할 모델)
 ├─ stacks/<name>/      STACK.md + team.md + vendor/. react animation design(+rules/) mobile python java node
-├─ vendor/             manifest.tsv(저장소·커밋·경로) + 원본 사본 9개 저장소, 폴더마다 LICENSE
+├─ vendor/             manifest.tsv(저장소·커밋·경로) + 원본 사본 8개 저장소, 폴더마다 LICENSE
 ├─ hooks/              plain.sh (선택, 기본 꺼짐)
 ├─ plugins/mods-hud/   Claude 전용 mod (그대로)
 └─ scripts/            vendor.sh(fetch·check·update) build.sh(사본·agents 생성) check.sh link.sh vendor-map.tsv
