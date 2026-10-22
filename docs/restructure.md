@@ -94,6 +94,10 @@ Claude 플러그인은 `/kit:dev`처럼 접두어가 붙어 안 겹치지만, Co
 - [x] **Codex** (0.163.0, `codex plugin add kit@dg-agent-kit`): `$이름`으로 Skill이 돈다. 서브에이전트(collab)로 병렬 crew도 됨. 답 첫 줄 앞에 안내 문장을 하나 붙이는 버릇이 있고, `_rules/` 경로를 처음에 `skills/_rules/`로 잘못 찾았다가 검색으로 고친다. 질문은 번호 없는 글머리표.
 - [x] **Codex 훅**: 신뢰 전에는 돌지 않는다. 대화형 `/hooks`에 kit 훅 2개(`agent-guard.py`, `plain.sh`)가 경로가 펼쳐진 채 보이고 `t`로 신뢰된다. `${CLAUDE_PLUGIN_ROOT}`가 전달되고, `agent-guard`가 있어도 일반 도구 호출은 그대로 돈다.
 - [x] **질문 카드** (대화형): Claude는 카드 4장을 한 번에, Codex는 `request_user_input_async`로, AGY는 `ask_question`으로 묻는다(한국어, 추천이 첫 번째). AGY는 두 번 중 한 번 글 목록으로 물었다(규칙의 대체 형식).
+- [x] **질문 카드 규칙** (0.7.4): 카드 도구가 있으면 반드시 카드로, 독립 질문은 한 번에 모두, 혼자 정한 것은 "정한 것:" 줄로 보이게 했다. 대화형에서 Codex는 `request_user_input_async` 질문 수가 1개에서 4개로 늘었고, AGY는 `ask_question` 카드로 4개를 한 번에 물었다. AGY `-p`는 두 번 모두 카드 없이 글 목록으로 3~4개를 물었다(비대화라 카드 도구를 쓰지 않는 듯).
+- [x] **가드 거부 이유** (0.7.4): crew 세션 안에서는 무엇이 틀렸는지 알려 준다(`crew build backend` 세션에서 `kit:security`를 부르면 맡긴 직군 목록과 "사용자가 다시 쳐야 한다"를 받는다). crew 기록이 없는 새 세션에서 남은 brief로 부르게 하면 고정 한 줄만 받는다.
+- [x] **보고 파일** (0.7.4): Claude Code가 서브에이전트의 보고 파일 쓰기를 막을 때가 있다("Subagents should return findings as text"). 에이전트는 그때 같은 내용을 답으로 돌려주고, crew 진행자가 그 답을 산출 경로에 적는다.
+- [x] **개발 도구** (0.7.4): `scripts/dev-mode.sh off → on` 왕복으로 Codex·AGY가 GitHub 설치(0.7.3)와 레포 링크(0.7.4) 사이를 오가는 것을 확인했다. pre-commit은 사본을 망가뜨리면 커밋을 멈추고 사본을 되돌린다.
 - [x] **링크 설치**: Codex는 `~/.codex/skills` 링크로 `_rules`·`_vendor`를 읽는다. AGY는 `~/.agents/skills`를 읽지 않고 `~/.gemini/config/skills`를 읽는다 → `link.sh` 기본 대상과 README를 고침(0.7.2).
 - [x] **끝 안내 명령**: 규칙의 `/dev` 표기가 모든 도구에서 그대로 나왔다 → 사용자가 부른 형식(`/kit:dev`·`$dev`·`/dev`)을 따르게 고침(0.7.2).
 - [x] **caveman·ponytail 끔**: `/caveman off`는 그 세션만 끈다. 새 세션은 다시 켜지므로 `CAVEMAN_DEFAULT_MODE=off`를 안내한다. `PONYTAIL_DEFAULT_MODE=off`면 ponytail 훅은 아무것도 넣지 않는다.

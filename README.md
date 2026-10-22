@@ -96,7 +96,7 @@ agent-kit/
 ├─ vendor/           manifest.tsv + 외부 Skill 원본 9개 저장소 (커밋 고정, LICENSE 포함)
 ├─ hooks/            서브에이전트 가드(crew_mark.py, agent-guard.sh·.py), 선택 훅 plain.sh (기본 꺼짐)
 ├─ plugins/mods-hud/ Claude Code mod
-├─ scripts/          build.sh · check.sh · vendor.sh · vendor-map.tsv · link.sh
+├─ scripts/          build.sh · check.sh · vendor.sh · vendor-map.tsv · link.sh · dev-mode.sh · try.sh · hooks/pre-commit
 └─ docs/             usage.md · restructure.md · issues/ (mods-hud)
 ```
 
@@ -105,18 +105,39 @@ agent-kit/
 <details>
 <summary>로컬 개발</summary>
 
+Claude Code는 이 폴더를 marketplace로 더하면 바로 읽는다.
+
 ```bash
 claude plugin marketplace add ~/agent-kit
 claude plugin install kit@dg-agent-kit
 ```
 
-고친 뒤 `/reload-plugins`. 커밋 전:
+Codex·AGY도 이 폴더를 바로 읽게 하려면:
+
+```bash
+scripts/dev-mode.sh on       # Codex: kit 플러그인을 끄고 Skill 링크 / AGY: 플러그인 폴더를 이 레포 링크로 / git pre-commit 켬
+scripts/dev-mode.sh status   # 세 도구가 kit을 어디서 읽는지 (아무것도 바꾸지 않음)
+scripts/dev-mode.sh off      # 링크를 지우고 GitHub main에서 다시 설치 (Codex는 훅 신뢰를 다시 물을 수 있음)
+```
+
+고친 뒤 `scripts/build.sh`를 돌리고 새 세션을 연다(Claude는 `/reload-plugins`). 커밋하면 pre-commit 훅이 `build.sh`와 `check.sh`를 돌린다. `build.sh`가 사본을 고쳤으면 커밋을 멈추니 `git add` 뒤 다시 커밋한다. `KIT_VALIDATE=1`이면 `claude plugin validate .`도 돈다. 훅만 켜려면 `git config core.hooksPath scripts/hooks`. 손으로 돌리기:
 
 ```bash
 scripts/build.sh && scripts/check.sh
 claude plugin validate .
 claude plugin validate plugins/mods-hud && claude plugin test plugins/mods-hud   # mods-hud를 고쳤을 때
 ```
+
+세 도구에서 명령 시험: `scripts/try.sh`가 프로젝트를 버려도 되는 사본으로 복사해 비대화로 돌리고, 도구 호출·마지막 답·파일이 바뀌었는지를 요약한다. 사본 안에서는 권한 확인을 건너뛴다.
+
+```bash
+export KIT_TRY_PROJECT=~/some-project              # git 레포
+scripts/try.sh claude '/kit:spec 로그인 화면'       # codex는 '$spec …', agy는 '/spec …'
+scripts/try.sh claude '1번으로' <session-id>         # 같은 사본에서 이어서
+scripts/try.sh clean                                # 사본과 Codex 신뢰 항목 지우기
+```
+
+비대화에서는 질문 카드를 띄우지 않고 번호 목록으로 묻는다. 카드는 대화형으로 확인한다.
 
 kit이 바뀌면 `.claude-plugin/plugin.json`·`.codex-plugin/plugin.json`·`gemini-extension.json`의 version을 같이 올린다. 외부 Skill 갱신: `scripts/vendor.sh check`로 뒤처진 것을 보고, `scripts/vendor.sh update <이름>`으로 diff를 확인한 뒤 `build.sh`, 버전 올리고 커밋. 사용자는 플러그인 업데이트로 받는다.
 

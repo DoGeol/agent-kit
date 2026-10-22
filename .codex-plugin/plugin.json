@@ -1,6 +1,6 @@
 {
   "name": "kit",
-  "version": "0.7.3",
+  "version": "0.7.4",
   "description": "Trigger skills: $dev (test-first, minimal change), $spec (question rounds to a spec), $write (Korean prose without AI tells), $check (read-only review), $crew (delegate to a role×stack), $design (screen design brief), $mock (3 working variants behind a picker), $debug (signal first, then root cause), $setup (check companion skills)",
   "author": {
     "name": "DoGeol",
