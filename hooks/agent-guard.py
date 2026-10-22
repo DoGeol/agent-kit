@@ -11,6 +11,8 @@ as "crew 진행자가 맡긴 일" and the subagent worked). This hook decides be
 - `<repo>/.kit/<slug>/brief-<role>.md` (or `brief-<role>-<n>.md` when the same role runs twice at once) was
   written after the crew command and the brief starts with its text (a note may follow).
 Anything else is denied, and so is a kit call this script cannot read. Other agents pass untouched.
+Without a crew command the reason is one fixed line, so a model calling kit on its own learns nothing about
+the brief. Inside a crew session the reason says what to fix, so the crew orchestrator can correct its call.
 Claude Code calls arrive as tool_name Agent with subagent_type kit:<role>; Antigravity calls as toolCall
 invoke_subagent with TypeName <role>. Prints nothing to allow (Antigravity treats "allow" as auto-approve).
 Reads the hook JSON on stdin. agent-guard.sh runs it and blocks kit calls when python3 is missing.
@@ -29,14 +31,14 @@ DENY = "kit 서브에이전트는 사용자가 crew 명령을 친 작업에서�
 AGY = False
 
 
-def deny():
+def deny(reason=DENY):
     if AGY:
-        print(json.dumps({"decision": "deny", "reason": DENY}, ensure_ascii=False))
+        print(json.dumps({"decision": "deny", "reason": reason}, ensure_ascii=False))
     else:
         print(json.dumps({"hookSpecificOutput": {
             "hookEventName": "PreToolUse",
             "permissionDecision": "deny",
-            "permissionDecisionReason": DENY,
+            "permissionDecisionReason": reason,
         }}, ensure_ascii=False))
     sys.exit(0)
 
@@ -95,22 +97,24 @@ def check(role, prompt, cwd, crew):
         deny()
     roles, started = crew
     if roles and role not in roles:
-        deny()
+        deny(f"kit: 이 crew 명령이 맡긴 직군은 {', '.join(roles)}입니다. {role} 직군이 필요하면 사용자에게 묻고, "
+             f"사용자가 그 직군으로 crew 명령을 다시 쳐야 합니다.")
     prompt = prompt.strip()
     lines = prompt.splitlines()
     if not lines or not re.fullmatch(rf"kit-brief:\s*{re.escape(role)}(:[\w.-]+)?", lines[0].strip()):
-        deny()
+        deny(f"kit: 브리핑 첫 줄은 `kit-brief: {role}` 또는 `kit-brief: {role}:<스택>`이어야 합니다.")
     out = next((l.split(":", 1)[1].strip() for l in lines if l.startswith("산출:")), "")
     cwd = os.path.realpath(cwd or os.getcwd())
+    where = "kit: 브리핑의 `산출:` 경로가 레포의 `.kit/<slug>/` 안이어야 합니다."
     if not out:
-        deny()
+        deny(where)
     out = os.path.realpath(os.path.join(cwd, os.path.expanduser(out)))
     kit = os.path.join(repo_root(cwd), ".kit")
     if os.path.commonpath([out, kit]) != kit:
-        deny()
+        deny(where)
     parts = os.path.relpath(out, kit).split(os.sep)
     if len(parts) < 2 or parts[0] in ("", ".", ".."):
-        deny()
+        deny(where)
     folder = os.path.join(kit, glob.escape(parts[0]))
     for saved in glob.glob(os.path.join(folder, f"brief-{role}.md")) + glob.glob(os.path.join(folder, f"brief-{role}-*.md")):
         try:
@@ -122,7 +126,8 @@ def check(role, prompt, cwd, crew):
             continue
         if text and prompt.startswith(text):
             return
-    deny()
+    deny(f"kit: 넘긴 브리핑이 `.kit/{parts[0]}/brief-{role}.md`의 내용으로 시작하지 않습니다. crew 명령 뒤에 "
+         f"그 파일에 브리핑 전문을 저장하고, 같은 내용으로 시작하는 브리핑을 넘기세요(뒤에 덧붙이는 것은 괜찮습니다).")
 
 
 raw = sys.stdin.read()

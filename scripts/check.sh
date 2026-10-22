@@ -113,6 +113,14 @@ mkdir -p "$tmpd/other/.kit/s"; printf '%s\n' "kit-brief: backend
 산출: $tmpd/other/.kit/s/r.md")" ] || err "agent-guard allowed a .kit folder outside the repo"
 mark s1 "/kit:crew build backend 정렬"   # a new crew command: the old brief file is now stale
 [ -n "$(guard s1 kit:backend "$brief")" ] || err "agent-guard allowed a brief saved before the crew command"
+# reasons: specific inside a crew session, the fixed line without one
+guard s1 kit:backend "$brief" | grep -q 'brief-backend.md`의 내용으로' || err "agent-guard did not say the brief is stale"
+guard s1 kit:security "kit-brief: security" | grep -q '맡긴 직군은 backend' || err "agent-guard did not name the roles the crew command gave"
+guard s1 kit:backend "crew build backend" | grep -q '첫 줄은' || err "agent-guard did not explain the kit-brief line"
+guard s1 kit:backend "kit-brief: backend
+산출: $tmpd/elsewhere/r.md" | grep -q '산출:` 경로' || err "agent-guard did not explain the 산출 path"
+guard s9 kit:backend "$brief" | grep -q 'crew 명령을 친 작업에서만' || err "agent-guard gave a specific reason without a crew command"
+guard s9 kit:backend "$brief" | grep -q 'brief-' && err "agent-guard leaked brief details without a crew command"
 [ -z "$(guard s1 general-purpose "anything")" ] || err "agent-guard touched a non-kit agent"
 mark s1 "<task-notification>done"; [ -f "$st/s1" ] || err "crew_mark cleared the mark on a background notice"
 mark s1 '$dev 고쳐 줘'; [ ! -f "$st/s1" ] || err "crew_mark kept the mark after another kit command"
@@ -142,6 +150,7 @@ agy backend "$abrief" | grep -q '"decision": "deny"' || err "agent-guard allowed
 [ -n "$(agy backend "$abrief")" ] || err "agent-guard allowed an AGY brief saved before the crew command"
 : > "$tr"; step "정렬 기능 만들어 줘" "2000-01-01T00:00:00Z"
 [ -n "$(agy backend "$abrief")" ] || err "agent-guard allowed AGY without a crew command"
+agy backend "$abrief" | grep -q 'crew 명령을 친 작업에서만' || err "agent-guard gave AGY a specific reason without a crew command"
 printf '%s' '{"toolCall":{"name":"invoke_subagent","args":{"TypeName":"backend","Prompt":"x"}}}' | PATH="$tmpd/bin" sh "$root/hooks/agent-guard.sh" | grep -q '"decision":"deny"' || err "agent-guard.sh without python3 did not block an AGY kit call"
 unset XDG_STATE_HOME
 

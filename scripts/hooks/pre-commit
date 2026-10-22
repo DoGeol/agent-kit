@@ -1,0 +1,15 @@
+#!/bin/sh
+# Pre-commit for this repo. Turn on with scripts/dev-mode.sh on, or: git config core.hooksPath scripts/hooks
+# 1. scripts/build.sh. If it changed any copy or agent file, stop so the change can be added to the commit.
+# 2. scripts/check.sh. KIT_VALIDATE=1 also runs `claude plugin validate .` (slower).
+set -u
+root=$(git rev-parse --show-toplevel)
+out=$(sh "$root/scripts/build.sh") || { echo "$out"; exit 1; }
+changed=$(printf '%s\n' "$out" | grep -E '^(copy|agent) ' || true)
+if [ -n "$changed" ]; then
+  echo "build.sh가 사본을 고쳤습니다. git add 뒤 다시 커밋하세요:"
+  printf '%s\n' "$changed" | sed 's/^/  /'
+  exit 1
+fi
+sh "$root/scripts/check.sh" || exit 1
+if [ "${KIT_VALIDATE:-}" = 1 ]; then claude plugin validate "$root" || exit 1; fi
