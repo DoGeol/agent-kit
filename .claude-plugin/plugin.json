@@ -5,5 +5,13 @@
   "author": {
     "name": "DoGeol"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "agents": [
+    "./claude-agents/backend.md",
+    "./claude-agents/designer.md",
+    "./claude-agents/frontend.md",
+    "./claude-agents/qa.md",
+    "./claude-agents/reviewer.md",
+    "./claude-agents/security.md"
+  ]
 }

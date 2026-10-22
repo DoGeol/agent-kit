@@ -5,12 +5,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/hooks/plain.sh\"",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT:-.}/hooks/plain.sh\"",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "command -v python3 >/dev/null 2>&1 && python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/crew-mark.py\" || true",
+            "command": "command -v python3 >/dev/null 2>&1 && python3 \"${CLAUDE_PLUGIN_ROOT:-.}/hooks/crew_mark.py\" || true",
             "timeout": 5
           }
         ]
@@ -18,11 +18,11 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "Agent|Task",
+        "matcher": "Agent|Task|invoke_subagent",
         "hooks": [
           {
             "type": "command",
-            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/hooks/agent-guard.sh\"",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT:-.}/hooks/agent-guard.sh\"",
             "timeout": 5
           }
         ]
