@@ -4,8 +4,8 @@
 set -u
 home=${HOME:-~}
 claude_dirs="$home/.claude/skills $home/.claude/plugins ${CLAUDE_CONFIG_DIR:-}"
-codex_dirs="$home/.codex/skills $home/.codex/plugins"
-agy_dirs="$home/.agents/skills $home/.gemini/extensions $home/.gemini/skills $home/.config/antigravity $home/.antigravity"
+codex_dirs="$home/.codex/skills $home/.agents/skills $home/.codex/plugins"
+agy_dirs="$home/.gemini/config/skills $home/.gemini/config/plugins $home/.gemini/extensions $home/.gemini/skills $home/.config/antigravity $home/.antigravity"
 
 found() { # dirs pattern
   for d in $1; do
@@ -36,5 +36,6 @@ cat <<'EOF'
 
 기본 끔 (kit의 /dev가 켤 때만 쓰도록)
   ponytail   환경변수 PONYTAIL_DEFAULT_MODE=off, 또는 세션에서 /ponytail default off
-  caveman    세션에서 /caveman off. 플러그인 훅이 다음 세션에 다시 켜는지는 확인 필요
+  caveman    환경변수 CAVEMAN_DEFAULT_MODE=off, 또는 ~/.config/caveman/config.json에 {"defaultMode": "off"}
+             세션의 /caveman off는 그 세션만 끈다. 새 세션은 기본값으로 다시 켜진다
 EOF

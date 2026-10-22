@@ -20,7 +20,7 @@ argument-hint: "<요청>   고칠 파일 경로를 적으면 더 정확"
 
 1. 첫 줄에 재료를 적는다: `재료: dev.md · karpathy · ponytail(있음/없음) · caveman(있음/없음)`.
 2. `_rules/dev.md`를 읽고 따른다.
-3. ponytail과 caveman이 **지금 쓰는 도구에** 설치돼 있는지 본다. 이 세션의 Skill 목록에 이름이 있으면(플러그인 접두어가 붙은 `caveman:caveman`도 같다) 있음이고, 이름으로 부른다. 목록에 없으면 이 도구의 Skill 폴더(Claude Code `~/.claude/skills`, Codex `~/.codex/skills`, AGY `~/.agents/skills`)에서만 그 `SKILL.md`를 찾아 읽는다. 다른 도구의 폴더나 플러그인 캐시에 있는 것은 없음으로 친다(`/setup` 표와 같게). 있으면 따른다. 없으면 `_rules/dev.md`만으로 간다. 없다고 멈추지 않는다.
+3. ponytail과 caveman이 **지금 쓰는 도구에** 설치돼 있는지 본다. 이 세션의 Skill 목록에 이름이 있으면(플러그인 접두어가 붙은 `caveman:caveman`도 같다) 있음이고, 이름으로 부른다. 목록에 없으면 이 도구의 Skill 폴더(Claude Code `~/.claude/skills`, Codex `~/.codex/skills`·`~/.agents/skills`, AGY `~/.gemini/config/skills`)에서만 그 `SKILL.md`를 찾아 읽는다. 다른 도구의 폴더나 플러그인 캐시에 있는 것은 없음으로 친다(`/setup` 표와 같게). 있으면 따른다. 없으면 `_rules/dev.md`만으로 간다. 없다고 멈추지 않는다.
 4. `_vendor/karpathy-guidelines.md`의 1·2절대로 가정과 더 단순한 길을 먼저 말한다. 해석이 둘이면 `ask.md` 형식 없이 짧게 묻는다.
 5. 레포 파일로 스택을 판단한다(`pyproject.toml` python, `build.gradle`·`pom.xml` java, `package.json`에 `react-native`·`expo`면 mobile, `react`면 react, 그 밖은 node). `_stacks/<스택>/STACK.md`가 있으면 읽는다(화면 코드면 `_stacks/design/STACK.md`의 걸리는 패턴 규칙도, 모션이 있으면 `_stacks/animation/STACK.md`도). 없으면 레포 규칙 문서만 따른다.
 6. 테스트 먼저 → 구현 → 테스트·타입체크·lint 실행.
@@ -31,4 +31,4 @@ argument-hint: "<요청>   고칠 파일 경로를 적으면 더 정확"
 
 - 요청 밖 파일 수정, 의존성 추가, 리팩터링.
 - 커밋·푸시(사용자가 요청했을 때만).
-- `/spec`·`/write`의 일(요구 정리, 문서 작성). 그쪽이면 "`/spec`으로 하세요" 한 줄.
+- `/spec`·`/write`의 일(요구 정리, 문서 작성). 그쪽이면 "`/spec`으로 하세요" 한 줄(사용자가 이 명령을 부른 형식으로: `/kit:spec`, `$spec`, `/spec`).
