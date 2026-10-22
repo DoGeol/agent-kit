@@ -4,7 +4,7 @@
 
 | 폴더 | 저장소 | 라이선스 | 가져온 것 | 쓰는 곳 |
 |---|---|---|---|---|
-| `mattpocock-skills` | mattpocock/skills | MIT | grilling, to-spec, diagnosing-bugs | `/spec`, `/design`(질문), `/debug`(참고) |
+| `mattpocock-skills` | mattpocock/skills | MIT | grilling, to-spec, diagnosing-bugs | `/spec`, `/design`(질문). diagnosing-bugs는 받아만 두었고 어느 Skill에도 복사하지 않는다 |
 | `obra-superpowers` | obra/superpowers | MIT | verification-before-completion, dispatching-parallel-agents, systematic-debugging | `/dev`(끝 관문), `crew`(병렬), `/debug`(뼈대) |
 | `forrestchang-karpathy` | forrestchang/andrej-karpathy-skills | MIT (README·frontmatter) | karpathy-guidelines | `/dev`(시작 전) |
 | `addyosmani-agent-skills` | addyosmani/agent-skills | MIT | agents/code-reviewer, agents/security-auditor | `/check` |
