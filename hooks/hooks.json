@@ -7,6 +7,11 @@
             "type": "command",
             "command": "sh \"${CLAUDE_PLUGIN_ROOT}/hooks/plain.sh\"",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "command -v python3 >/dev/null 2>&1 && python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/crew-mark.py\" || true",
+            "timeout": 5
           }
         ]
       }
@@ -17,7 +22,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/agent-guard.py\"",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/hooks/agent-guard.sh\"",
             "timeout": 5
           }
         ]

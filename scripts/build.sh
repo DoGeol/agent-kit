@@ -36,7 +36,7 @@ body() { awk 'NR==1&&$0!="---"{p=1} p{print; next} NR>1&&$0=="---"{p=1}' "$1"; }
 mkdir -p "$out_agents"
 for role in "$root"/roles/*.md; do
   name=$(fm_get "$role" name); [ -n "$name" ] || continue   # README.md and files without frontmatter are skipped
-  desc=$(fm_get "$role" description); kind=$(fm_get "$role" kind); model=$(fm_get "$role" model)
+  desc=$(fm_get "$role" description); kind=$(fm_get "$role" kind)
   [ "$name" = "$(basename "$role" .md)" ] || { echo "roles/$(basename "$role"): name '$name' differs from file name" >&2; exit 1; }
   case "$kind" in
     build)  tools="" ;;

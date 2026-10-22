@@ -69,6 +69,8 @@ git clone https://github.com/DoGeol/agent-kit.git ~/agent-kit
 
 직군: `frontend` `backend` `qa` `designer` `reviewer` `security`. 스택: `react` `animation` `design` `mobile` `python` `java` `node`(레포 파일로 판단, 생략 가능). 팀 규칙은 `stacks/<스택>/team.md`에 범용 기본값이 들어 있고, 팀에 맞게 바꾸면 그것이 이긴다.
 
+서브에이전트 가드(Claude Code, 항상 켜짐): `kit:<직군>` 서브에이전트는 사용자가 그 세션에서 crew 명령을 친 뒤, crew가 저장한 브리핑으로만 돈다. 모델이 혼자 부르면 훅이 막는다. python3가 필요하고, 없으면 kit 서브에이전트 호출은 막힌다. 자세한 내용은 [`hooks/README.md`](hooks/README.md).
+
 선택 훅(Claude·Codex): `~/.config/agent-kit/hooks`에 `plain=on`을 적으면 `/dev`가 아닌 턴에 "일반 문장으로" 한 줄을 넣어 짧은 말투 잔류를 막는다. 기본은 꺼짐.
 
 ## 플러그인 (Claude Code 전용)
@@ -91,7 +93,7 @@ agent-kit/
 ├─ agents/           roles/에서 build.sh가 만든 Claude 서브에이전트 (kit-brief 가드)
 ├─ stacks/<name>/    STACK.md + team.md + vendor/. react · animation · design(+rules/ 8개) · mobile · python · java · node
 ├─ vendor/           manifest.tsv + 외부 Skill 원본 9개 저장소 (커밋 고정, LICENSE 포함)
-├─ hooks/            선택 훅 plain.sh (기본 꺼짐)
+├─ hooks/            서브에이전트 가드(crew-mark.py, agent-guard.sh·.py), 선택 훅 plain.sh (기본 꺼짐)
 ├─ plugins/mods-hud/ Claude Code mod
 ├─ scripts/          build.sh · check.sh · vendor.sh · vendor-map.tsv · link.sh
 └─ docs/             usage.md · restructure.md · issues/ (mods-hud)

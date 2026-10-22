@@ -5,7 +5,7 @@
 #   - every skills/*/SKILL.md has name and description, and no tool-specific keys other than argument-hint
 #   - no SKILL.md hiding inside copies (tools would register it as another skill)
 #   - agents/*.md equal what build.sh generates from roles/*.md
-#   - hooks/agent-guard.py lets a saved crew brief through and denies other kit:<role> calls
+#   - hooks/agent-guard.py lets a crew brief through only after a crew command (crew-mark.py) and denies other kit:<role> calls
 #   - the text a skill always reads (_rules + _vendor) stays under the budget; _roles/_stacks are read selectively and not counted
 set -u
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -70,20 +70,44 @@ for f in "$root"/agents/*.md; do
   [ -f "$tmpd/agents/$(basename "$f")" ] || err "agents/$(basename "$f") has no role in roles/ (delete it)"
 done
 
-# agent-guard hook: allows a brief crew saved, denies everything else aimed at kit:<role>
-g="$root/hooks/agent-guard.py"; gd="$tmpd/guard/.kit/s"; mkdir -p "$gd"
+# agent-guard hook: allows a brief crew saved after the user's crew command, denies everything else aimed at kit:<role>
+g="$root/hooks/agent-guard.py"; m="$root/hooks/crew-mark.py"; repo="$tmpd/guard"; gd="$repo/.kit/s"
+mkdir -p "$gd" "$repo/.git"; export XDG_STATE_HOME="$tmpd/state"
 brief="kit-brief: backend:node
 산출: $gd/report-backend.md
 작업: x"
-printf '%s\n' "$brief" > "$gd/brief-backend.md"
-guard() { python3 -I -c 'import json,sys; print(json.dumps({"tool_name":"Agent","tool_input":{"subagent_type":sys.argv[1],"prompt":sys.argv[2]}}))' "$1" "$2" | python3 -I "$g"; }
-[ -z "$(guard kit:backend "$brief
+mark() { python3 -I -c 'import json,sys; print(json.dumps({"session_id":sys.argv[1],"prompt":sys.argv[2],"cwd":sys.argv[3]}))' "$1" "$2" "$repo" | python3 -I "$m"; }
+guard() { python3 -I -c 'import json,sys; print(json.dumps({"session_id":sys.argv[1],"cwd":sys.argv[4],"tool_name":"Agent","tool_input":{"subagent_type":sys.argv[2],"prompt":sys.argv[3]}}))' "$1" "$2" "$3" "${4:-$repo}" | python3 -I "$g"; }
+st="$XDG_STATE_HOME/agent-kit/crew"
+mark s1 "crew build backend 정렬"; [ -f "$st/s1" ] || err "crew-mark did not mark a crew prompt"
+sleep 1; printf '%s\n' "$brief" > "$gd/brief-backend.md"
+[ -z "$(guard s1 kit:backend "$brief
 (덧붙임)")" ] || err "agent-guard denied a saved brief"
-[ -n "$(guard kit:backend "crew build backend 정렬")" ] || err "agent-guard allowed a brief without kit-brief"
-[ -n "$(guard kit:frontend "$brief")" ] || err "agent-guard allowed a brief for another role"
-[ -n "$(guard kit:qa "kit-brief: qa
-산출: $tmpd/guard/.kit/none/review-qa.md")" ] || err "agent-guard allowed a brief crew did not save"
-[ -z "$(guard general-purpose "anything")" ] || err "agent-guard touched a non-kit agent"
+rel="kit-brief: qa
+산출: .kit/r/report-qa.md"
+mkdir -p "$repo/.kit/r"; printf '%s\n' "$rel" > "$repo/.kit/r/brief-qa.md"
+[ -z "$(guard s1 kit:qa "$rel")" ] || err "agent-guard denied a relative 산출 path inside the repo"
+[ -n "$(guard s2 kit:backend "$brief")" ] || err "agent-guard allowed a session with no crew command"
+[ -n "$(guard s1 kit:backend "crew build backend 정렬")" ] || err "agent-guard allowed a brief without kit-brief"
+[ -n "$(guard s1 kit:frontend "$brief")" ] || err "agent-guard allowed a brief for another role"
+[ -n "$(guard s1 kit:qa "kit-brief: qa
+산출: $repo/.kit/none/review-qa.md")" ] || err "agent-guard allowed a brief crew did not save"
+mkdir -p "$tmpd/other/.kit/s"; printf '%s\n' "kit-brief: backend
+산출: $tmpd/other/.kit/s/r.md" > "$tmpd/other/.kit/s/brief-backend.md"
+[ -n "$(guard s1 kit:backend "kit-brief: backend
+산출: $tmpd/other/.kit/s/r.md")" ] || err "agent-guard allowed a .kit folder outside the repo"
+mark s1 "/kit:crew build backend 정렬"   # a new crew command: the old brief file is now stale
+[ -n "$(guard s1 kit:backend "$brief")" ] || err "agent-guard allowed a brief saved before the crew command"
+[ -z "$(guard s1 general-purpose "anything")" ] || err "agent-guard touched a non-kit agent"
+mark s1 "<task-notification>done"; [ -f "$st/s1" ] || err "crew-mark cleared the mark on a background notice"
+mark s1 '$dev 고쳐 줘'; [ ! -f "$st/s1" ] || err "crew-mark kept the mark after another kit command"
+mark s3 "crew가 뭐야"; [ ! -f "$st/s3" ] || err "crew-mark marked a prompt that only mentions crew"
+mkdir -p "$tmpd/bin"; for c in sh cat grep printf dirname; do p=$(command -v "$c") && ln -sf "$p" "$tmpd/bin/$c"; done
+printf '%s' '{"tool_name":"Agent","tool_input":{"subagent_type":"kit:backend","prompt":"x"}}' | PATH="$tmpd/bin" sh "$root/hooks/agent-guard.sh" 2>/dev/null
+[ $? = 2 ] || err "agent-guard.sh without python3 did not block a kit call"
+printf '%s' '{"tool_name":"Agent","tool_input":{"subagent_type":"general-purpose","prompt":"x"}}' | PATH="$tmpd/bin" sh "$root/hooks/agent-guard.sh"
+[ $? = 0 ] || err "agent-guard.sh without python3 blocked a non-kit call"
+unset XDG_STATE_HOME
 
 # budget
 for d in "$root"/skills/*/; do
