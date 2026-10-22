@@ -7,6 +7,14 @@
 set -eu
 root=$(cd "$(dirname "$0")/.." && pwd)
 [ $# -gt 0 ] || set -- "$HOME/.codex/skills" "$HOME/.gemini/config/skills"
+# Before 0.7.2 the default was ~/.agents/skills. Remove those old links (links into this repo only),
+# or Codex, which reads both folders, would see each skill twice.
+for old in "$HOME/.agents/skills"/*; do
+  [ -L "$old" ] || continue
+  case "$(readlink "$old")" in
+    "$root/skills/"*) rm "$old"; echo "unlink $old (old default)" ;;
+  esac
+done
 for target in "$@"; do
   mkdir -p "$target"
   for skill in "$root"/skills/*/; do

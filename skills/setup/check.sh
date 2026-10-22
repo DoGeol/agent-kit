@@ -1,26 +1,39 @@
 #!/bin/sh
 # Report whether caveman, ponytail and im-not-ai are installed for Claude Code, Codex and Antigravity on this machine.
-# Looks for a folder or file whose name contains the skill name under each tool's skill/plugin folders. Read-only.
+# A tool counts as having one when its installed-plugin list names it (enabled, for Codex and AGY) or its own skill
+# folder holds a folder with that name. Plugin caches and marketplace copies do not count, the same rule /dev uses.
+# Read-only.
 set -u
 home=${HOME:-~}
-claude_dirs="$home/.claude/skills $home/.claude/plugins ${CLAUDE_CONFIG_DIR:-}"
-codex_dirs="$home/.codex/skills $home/.agents/skills $home/.codex/plugins"
-agy_dirs="$home/.gemini/config/skills $home/.gemini/config/plugins $home/.gemini/extensions $home/.gemini/skills $home/.config/antigravity $home/.antigravity"
+claude_home=${CLAUDE_CONFIG_DIR:-$home/.claude}
+claude_dirs="$claude_home/skills"
+codex_dirs="${CODEX_HOME:-$home/.codex}/skills $home/.agents/skills"
+agy_dirs="$home/.gemini/config/skills $home/.gemini/extensions"
 
-found() { # dirs pattern
+in_dirs() { # dirs pattern
   for d in $1; do
     [ -d "$d" ] || continue
-    if find "$d" -maxdepth 4 -iname "*$2*" 2>/dev/null | grep -q .; then return 0; fi
+    if find "$d" -mindepth 1 -maxdepth 2 -iname "*$2*" 2>/dev/null | grep -q .; then return 0; fi
   done
   return 1
 }
-mark() { if found "$1" "$2"; then printf '있음'; else printf '없음'; fi; }
+claude_plugins() { grep -o '"[^"/]*@[^"/]*"' "$claude_home/plugins/installed_plugins.json" 2>/dev/null; }
+codex_plugins() { # enabled entries of [plugins."name@marketplace"] in Codex config.toml
+  awk '/^\[plugins\."/ { n = $0; sub(/^\[plugins\."/, "", n); sub(/"\].*/, "", n); next }
+       /^\[/ { n = "" }
+       n != "" && /^enabled[[:space:]]*=[[:space:]]*true/ { print n }' "${CODEX_HOME:-$home/.codex}/config.toml" 2>/dev/null
+}
+agy_plugins() { command -v agy >/dev/null 2>&1 && agy plugin list 2>/dev/null | sed -n 's/^- \([^ ]*\) (enabled.*/\1/p'; }
+plugins_claude=$(claude_plugins); plugins_codex=$(codex_plugins); plugins_agy=$(agy_plugins)
+mark() { # dirs plugin-list pattern
+  if in_dirs "$1" "$3" || printf '%s\n' "$2" | grep -qi "$3"; then printf '있음'; else printf '없음'; fi
+}
 
 printf '%-10s %-8s %-8s %-8s\n' "외부 Skill" "Claude" "Codex" "AGY"
 for s in caveman ponytail; do
-  printf '%-10s %-8s %-8s %-8s\n' "$s" "$(mark "$claude_dirs" "$s")" "$(mark "$codex_dirs" "$s")" "$(mark "$agy_dirs" "$s")"
+  printf '%-10s %-8s %-8s %-8s\n' "$s" "$(mark "$claude_dirs" "$plugins_claude" "$s")" "$(mark "$codex_dirs" "$plugins_codex" "$s")" "$(mark "$agy_dirs" "$plugins_agy" "$s")"
 done
-printf '%-10s %-8s %-8s %-8s\n' "im-not-ai" "$(mark "$claude_dirs" "humanize")" "$(mark "$codex_dirs" "humanize")" "$(mark "$agy_dirs" "humanize")"
+printf '%-10s %-8s %-8s %-8s\n' "im-not-ai" "$(mark "$claude_dirs" "$plugins_claude" "humanize")" "$(mark "$codex_dirs" "$plugins_codex" "humanize")" "$(mark "$agy_dirs" "$plugins_agy" "humanize")"
 
 cat <<'EOF'
 

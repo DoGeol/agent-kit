@@ -10,14 +10,14 @@ Claude Code·Codex·Antigravity(AGY) 세 도구에서 같은 키트를 쓰기 �
 | `AGENTS.md` 규칙 | 됨 | 됨 (폴더마다 쌓임) | 됨 (워크스페이스 규칙, 상한 약 12,000자) |
 | 훅 | 됨 | 됨, 설정 형식이 Claude와 같음 | **없음** |
 | 플러그인 설치 | `.claude-plugin/plugin.json` | `.codex-plugin/plugin.json` + `.agents/plugins/marketplace.json` | `gemini-extension.json` (`agy plugin install <git url>`) |
-| 서브에이전트 | `agents/*.md` | 있음, 정의 파일 형식 미확인 | 2차 자료상 `.agents/agents/*.md`, 미확인 |
+| 서브에이전트 | `claude-agents/*.md` (manifest `agents`) | kit 에이전트 없음(일반 에이전트에 브리핑) | `agents/*.md` (AGY 도구 이름, `tools`가 없으면 읽기 전용) |
 
 원칙:
 
 1. **동작은 텍스트로 만든다.** Skill·규칙·역할·작업 파일. 세 도구가 모두 읽는다.
 2. **훅은 보조다.** Claude·Codex에서 말투 잔류를 막는 정도로만 쓴다. 훅이 없어도 Skill만으로 같은 일이 된다.
 3. **Skill 폴더는 자기 완결이다.** 설치 사본에는 플러그인 폴더만 들어가고 `link.sh`는 Skill 폴더 하나씩 링크하므로, Skill이 읽는 규칙·vendor·역할·스택은 `build.sh`가 그 Skill 폴더 안에 사본으로 넣는다(`_rules/`·`_vendor/`·`_roles/`·`_stacks/`). Skill 본문은 자기 폴더 기준 상대 경로만 쓰고 도구 전용 변수(`$ARGUMENTS`)를 쓰지 않는다. 어긋남은 `check.sh`가 잡는다.
-4. **트리거만, 자동 발동 없음.** description에 "직접 입력했을 때만"을 적는다. 서브에이전트는 자동 위임을 끌 수 없어 가드로 막는다: 브리핑 첫 줄 `kit-brief:`와, crew가 띄우기 전에 저장한 `.kit/<slug>/brief-<직군>.md`. 에이전트 설명에는 표지를 적지 않는다(적으면 모델이 흉내 내 부른다, 2026-10-22 시험).
+4. **트리거만, 자동 발동 없음.** description에 "직접 입력했을 때만"을 적는다. 서브에이전트는 자동 위임을 끌 수 없어 가드로 막는다: 사용자가 그 세션에서 crew 명령을 쳤다는 표식(UserPromptSubmit 훅), 브리핑 첫 줄 `kit-brief:`, crew가 그 뒤에 저장한 `.kit/<slug>/brief-<직군>.md`. 에이전트 설명에는 표지를 적지 않는다(적으면 모델이 흉내 내 부른다, 2026-10-22 시험).
 
 ## 2. 구조
 
@@ -27,7 +27,8 @@ agent-kit/
 ├─ skills/<name>/      SKILL.md + 사본(_rules _vendor _roles _stacks). dev spec write check crew design mock debug setup
 ├─ rules/              우리 규칙 원본: dev spec write check crew design mock debug ask
 ├─ roles/              직군 원본 6개 + review-format.md + <직군>/reference.md. _archive/는 옛 ok 역할
-├─ agents/             roles/에서 생성한 Claude 서브에이전트 (kit-brief 가드, review 역할은 읽기 전용 도구)
+├─ agents/             roles/에서 생성한 AGY 서브에이전트 (AGY 도구 이름)
+├─ claude-agents/      같은 역할의 Claude 서브에이전트 (review 역할은 읽기 전용 도구, 역할 모델)
 ├─ stacks/<name>/      STACK.md + team.md + vendor/. react animation design(+rules/) mobile python java node
 ├─ vendor/             manifest.tsv(저장소·커밋·경로) + 원본 사본 9개 저장소, 폴더마다 LICENSE
 ├─ hooks/              plain.sh (선택, 기본 꺼짐)
@@ -86,6 +87,10 @@ Claude 플러그인은 `/kit:dev`처럼 접두어가 붙어 안 겹치지만, Co
 
 - [x] **Claude** (2026-10-22, 2.1.307): 로컬 폴더 marketplace 설치, Skill 9개 등록, `/kit:setup`·`/kit:spec`부터 `/kit:check design`까지 비대화(`-p`)로 확인. 질문은 카드 대신 번호 목록(비대화 모드라 카드 도구 없음). `crew build`는 `kit:backend`·`kit:frontend` 서브에이전트로, 두 직군이면 `contract.md` 먼저 병렬. `plain=on` 훅은 `/dev`가 아닌 턴에만 줄을 넣음.
 - [x] **서브에이전트 가드**: 설명에 `kit-brief`를 적어 두었더니 모델이 표지를 흉내 내 혼자 불렀고, 글로 된 가드는 "crew 진행자가 맡긴 일"이라는 말에 뚫렸다. 설명에서 표지를 빼고, crew가 띄우기 전에 `.kit/<slug>/brief-<직군>.md`를 저장하게 하고, `hooks/agent-guard.py`(PreToolUse)가 그 파일 없이 오는 `kit:*` 호출을 막게 했다. 위조 2건 차단, 정상 crew 통과 확인.
+- [x] **가드 보강** (0.7.3, 코드 리뷰): 남아 있던 brief 파일을 다른 대화에서 다시 쓰면 통과하는 구멍을 막았다. `hooks/crew_mark.py`(UserPromptSubmit)가 사용자가 crew를 친 세션을 기록하고, 가드는 그 세션에서 crew 명령 뒤에 저장된 brief만 인정한다. `산출:`은 레포 `.kit/` 안이어야 하고(상대 경로 허용), python3가 없거나 입력을 못 읽으면 kit 호출만 막는다(`agent-guard.sh`). 명령에 적힌 직군만 통과시키고(예: `crew build backend` 세션에서 `kit:security`는 막힘, Claude 실행으로 확인), 같은 직군 동시 호출은 `brief-<직군>-<번호>.md`로 받는다. `/setup`은 폴더를 뒤지는 대신 설치 목록(Claude `installed_plugins.json`, Codex `config.toml`의 켜진 plugin, `agy plugin list`)과 각 도구의 Skill 폴더만 보아 `/dev` 판정과 같아졌다.
+- [x] **AGY 서브에이전트** (0.7.3): `tools`에 Claude 이름이 있는 reviewer·designer·security는 `tool "Read" not found in registry`로 시작부터 실패했고, `tools`가 없는 backend·frontend·qa는 읽기 도구만 받아 진행자가 일반 에이전트로 다시 띄웠다. → 에이전트를 두 벌 생성: AGY용 `agents/`(AGY 도구 이름), Claude용 `claude-agents/`(manifest `agents`로 지정하면 Claude는 기본 `agents/`를 읽지 않는다). AGY crew에서 backend가 직접 코드를 고치는 것을 확인했다.
+- [x] **AGY 가드** (0.7.3): AGY `PreToolUse`가 `invoke_subagent`에 걸리고, 대화 기록에서 마지막 kit 명령이 crew인지 본다. 새 대화에서 남은 brief로 `backend`를 부르게 하니 `tool call denied by pre-tool hook`으로 막혔다.
+- [x] **슬래시 없는 crew** (0.7.3): `crew build …`를 haiku가 Skill로 받지 않은 적이 있어, `crew_mark.py`가 그때 crew Skill을 따르라는 한 줄을 넣는다. 두 번 모두 `kit:crew` Skill로 진행했다.
 - [x] **Codex** (0.163.0, `codex plugin add kit@dg-agent-kit`): `$이름`으로 Skill이 돈다. 서브에이전트(collab)로 병렬 crew도 됨. 답 첫 줄 앞에 안내 문장을 하나 붙이는 버릇이 있고, `_rules/` 경로를 처음에 `skills/_rules/`로 잘못 찾았다가 검색으로 고친다. 질문은 번호 없는 글머리표.
 - [x] **Codex 훅**: 신뢰 전에는 돌지 않는다. 대화형 `/hooks`에 kit 훅 2개(`agent-guard.py`, `plain.sh`)가 경로가 펼쳐진 채 보이고 `t`로 신뢰된다. `${CLAUDE_PLUGIN_ROOT}`가 전달되고, `agent-guard`가 있어도 일반 도구 호출은 그대로 돈다.
 - [x] **질문 카드** (대화형): Claude는 카드 4장을 한 번에, Codex는 `request_user_input_async`로, AGY는 `ask_question`으로 묻는다(한국어, 추천이 첫 번째). AGY는 두 번 중 한 번 글 목록으로 물었다(규칙의 대체 형식).
@@ -95,9 +100,6 @@ Claude 플러그인은 `/kit:dev`처럼 접두어가 붙어 안 겹치지만, Co
 - [x] **서브에이전트끼리 메시지**: 같은 턴에 띄운 형제 서브에이전트는 서로 `SendMessage`를 못 한다. crew는 이것에 기대지 않는다.
 - [x] **AGY** (`agy plugin install https://github.com/DoGeol/agent-kit`): `/이름`으로 돈다. 저장소 전체(약 4MB)가 설치되지만 문제 없음. `rules/`는 trigger가 없어 적용되지 않음(Skill 안 사본만 쓰임). 서브에이전트는 `tools:`가 문자열이거나 `model: opus`면 건너뛰어 6개 중 3개만 등록됐다 → `tools: [ … ]` 목록, 생성 파일은 `model: inherit`으로 고쳐 6개 등록. crew는 AGY 서브에이전트로 병렬 진행. 훅은 `UserPromptSubmit`이 없어 `plain`은 돌지 않음.
 - [x] **외부 Skill**: `/setup` 표가 실제 설치와 맞음(세 도구). `/dev`의 `재료:` 줄은 감지가 엇갈렸다(Claude는 설치된 caveman을 없음, Codex는 Claude 폴더를 보고 있음) → 지금 쓰는 도구의 목록·폴더만 보게 고침.
-- [ ] caveman `/caveman off` 뒤 다음 세션, ponytail `off` 주입 내용: 확인 안 함.
-- [ ] **Claude 서브에이전트끼리 메시지**: 확인 안 함.
-- [ ] **`link.sh` 경로**: 플러그인 설치로 시험해서 링크 방식은 확인 안 함.
 - [x] **`/check design` 브라우저 확인**: Playwright가 없으면 "코드만 봤다"고 적고 리뷰만 한다.
 - [x] Emil `prototype` 실행 환경: dev 서버면 격리 라우트, 없으면 단독 HTML. 둘 다 됨.
 - [x] 플러그인 루트 `hooks/hooks.json` 자동 로드: 스크립트가 설정 없이는 아무것도 출력하지 않아 기본 꺼짐.

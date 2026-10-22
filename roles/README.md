@@ -1,6 +1,6 @@
 # roles
 
-직군 원본. 스택과 무관하다. `crew`가 일을 맡길 때 `역할: roles/<직군>.md` 경로로 넘기고, `scripts/build.sh`가 같은 파일로 Claude 서브에이전트 `agents/<직군>.md`를 만든다(손으로 고치지 않는다).
+직군 원본. 스택과 무관하다. `crew`가 일을 맡길 때 `역할: roles/<직군>.md` 경로로 넘기고, `scripts/build.sh`가 같은 파일로 서브에이전트 두 벌을 만든다: AGY용 `agents/<직군>.md`(AGY 도구 이름, `model: inherit`)와 Claude Code용 `claude-agents/<직군>.md`(Claude 도구 이름, 역할 모델). 한 파일로는 안 된다: AGY는 `tools`에 Claude 이름(`Read` 등)이 있으면 에이전트를 띄우지 못하고, `tools`가 없으면 읽기 도구만 준다. 손으로 고치지 않는다.
 
 | 직군 | 종류 | 하는 일 |
 |---|---|---|
@@ -28,5 +28,5 @@ model: inherit | opus | sonnet | haiku     crew가 띄울 때 고르는 모델. 
 - `<역할>/reference.md`는 특정 상황에서만 붙이는 절차. 브리핑에 `참고:`로 넘긴다.
 - 스택별 규칙(React, Python …)은 여기 쓰지 않고 `stacks/`에 둔다.
 - `review-format.md`는 리뷰 산출 형식. review 역할과 `/check`가 같이 쓴다.
-- 여기 파일은 `build.sh`가 `skills/check`·`crew`·`design`의 `_roles/`와 `agents/`로 복사·생성한다. 역할을 고치면 `build.sh` → `check.sh`.
+- 여기 파일은 `build.sh`가 `skills/check`·`crew`·`design`의 `_roles/`와 `agents/`·`claude-agents/`로 복사·생성한다. 역할을 고치면 `build.sh` → `check.sh`.
 - `_archive/`는 옛 ok 흐름의 역할 7개. `build.sh`가 읽지 않는다.
