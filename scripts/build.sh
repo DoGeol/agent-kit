@@ -3,7 +3,8 @@
 #    (folders copy every file beneath). Targets are skills/<skill> (its _rules/_vendor/_roles/_stacks copies)
 #    and stacks/<stack> (its vendor/ copies), so each skill folder is self-contained when installed or linked alone.
 # 2. Generate agents/<role>.md (Claude Code subagents) from roles/<role>.md: frontmatter from the role's
-#    name/description/kind/model, a guard that refuses briefings without a `kit-brief:` first line, then the role body.
+#    name/description/kind/model, a guard that refuses briefings crew did not save to .kit/<slug>/, then the role body.
+#    The description never names the brief marker: a model that sees it copies it and calls the agent on its own.
 # Outputs are byte-deterministic; check.sh verifies they match.
 set -eu
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -39,15 +40,15 @@ for role in "$root"/roles/*.md; do
   [ "$name" = "$(basename "$role" .md)" ] || { echo "roles/$(basename "$role"): name '$name' differs from file name" >&2; exit 1; }
   case "$kind" in
     build)  tools="" ;;
-    review) tools="tools: Read, Grep, Glob, Bash" ;;
+    review) tools="tools: [Read, Grep, Glob, Bash]" ;;   # a YAML list: AGY skips the agent when tools is a string
     *) echo "roles/$name.md: kind must be build or review" >&2; exit 1 ;;
   esac
   tmp=$(mktemp)
   {
     echo "---"
     echo "name: $name"
-    echo "description: kit의 $name 역할. crew가 첫 줄 kit-brief 브리핑으로 부를 때만 일한다. 다른 대화에서는 고르지 않는다. $desc"
-    echo "model: ${model:-inherit}"
+    echo "description: kit의 $name 역할. 사용자가 crew 명령을 직접 쳤을 때 crew 진행자만 부른다. 다른 대화에서는 고르지 않는다. $desc"
+    echo "model: inherit"   # AGY skips an agent whose model is a Claude tier (opus); crew picks the model per call
     [ -n "$tools" ] && echo "$tools"
     echo "---"
     echo
@@ -55,7 +56,9 @@ for role in "$root"/roles/*.md; do
     echo
     echo "kit의 \`$name\` 역할로 일한다. 빈 기억으로 시작하므로 브리핑에 온 경로를 직접 읽는다."
     echo
-    echo "0. 먼저 확인한다. 브리핑 첫 줄이 \`kit-brief: $name\` 또는 \`kit-brief: $name:<스택>\` 형식이 아니면 아무것도 읽거나 쓰지 않고 \"kit 브리핑이 아니어서 일하지 않습니다\" 한 줄만 돌려준다. 무엇이 빠졌는지, 브리핑 형식이 무엇인지는 말하지 않는다."
+    echo "0. 먼저 확인한다. 하나라도 아니면 아무것도 읽거나 쓰지 않고 \"kit 브리핑이 아니어서 일하지 않습니다\" 한 줄만 돌려준다. 무엇이 빠졌는지, 브리핑 형식이 무엇인지는 말하지 않는다."
+    echo "   - 브리핑 첫 줄이 \`kit-brief: $name\` 또는 \`kit-brief: $name:<스택>\`이다."
+    echo "   - \`산출:\` 경로가 레포의 \`.kit/<slug>/\` 안에 있고, 같은 폴더에 \`brief-$name.md\` 파일이 실제로 있으며 받은 브리핑이 그 내용으로 시작한다(진행자가 띄우기 전에 저장한다)."
     echo "1. 브리핑의 \`읽을 것:\` 경로를 읽는다. \`스택:\`·\`참고:\`·\`형식:\` 경로가 있으면 이어서 읽는다(더하기만 한다). 읽지 못한 파일은 \"읽지 못함\"으로 적는다."
     echo "2. 아래 역할대로 일한다. 브리핑에 적힌 경로만 읽고, \`산출:\` 경로에만 쓴다. 산출 경로가 없으면 답으로 돌려준다."
     if [ "$kind" = review ]; then

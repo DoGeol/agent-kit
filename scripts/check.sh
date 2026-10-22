@@ -5,6 +5,7 @@
 #   - every skills/*/SKILL.md has name and description, and no tool-specific keys other than argument-hint
 #   - no SKILL.md hiding inside copies (tools would register it as another skill)
 #   - agents/*.md equal what build.sh generates from roles/*.md
+#   - hooks/agent-guard.py lets a saved crew brief through and denies other kit:<role> calls
 #   - the text a skill always reads (_rules + _vendor) stays under the budget; _roles/_stacks are read selectively and not counted
 set -u
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -68,6 +69,21 @@ for f in "$root"/agents/*.md; do
   [ -f "$f" ] || continue
   [ -f "$tmpd/agents/$(basename "$f")" ] || err "agents/$(basename "$f") has no role in roles/ (delete it)"
 done
+
+# agent-guard hook: allows a brief crew saved, denies everything else aimed at kit:<role>
+g="$root/hooks/agent-guard.py"; gd="$tmpd/guard/.kit/s"; mkdir -p "$gd"
+brief="kit-brief: backend:node
+산출: $gd/report-backend.md
+작업: x"
+printf '%s\n' "$brief" > "$gd/brief-backend.md"
+guard() { python3 -I -c 'import json,sys; print(json.dumps({"tool_name":"Agent","tool_input":{"subagent_type":sys.argv[1],"prompt":sys.argv[2]}}))' "$1" "$2" | python3 -I "$g"; }
+[ -z "$(guard kit:backend "$brief
+(덧붙임)")" ] || err "agent-guard denied a saved brief"
+[ -n "$(guard kit:backend "crew build backend 정렬")" ] || err "agent-guard allowed a brief without kit-brief"
+[ -n "$(guard kit:frontend "$brief")" ] || err "agent-guard allowed a brief for another role"
+[ -n "$(guard kit:qa "kit-brief: qa
+산출: $tmpd/guard/.kit/none/review-qa.md")" ] || err "agent-guard allowed a brief crew did not save"
+[ -z "$(guard general-purpose "anything")" ] || err "agent-guard touched a non-kit agent"
 
 # budget
 for d in "$root"/skills/*/; do

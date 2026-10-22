@@ -18,7 +18,7 @@
 name: backend
 description: 한 줄. 생성되는 서브에이전트의 description이 된다
 kind: build | review        review면 읽기 전용 도구만
-model: inherit | opus | sonnet | haiku
+model: inherit | opus | sonnet | haiku     crew가 띄울 때 고르는 모델. 생성된 에이전트 파일은 늘 inherit (AGY가 opus 같은 이름을 받지 않는다)
 ---
 # backend: 백엔드 개발자
 ## 관점 / ## 산출물 / ## 수용 기준 / ## 하지 않는 것 / ## 리뷰에서 보는 것
