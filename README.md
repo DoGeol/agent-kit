@@ -49,9 +49,9 @@ git clone https://github.com/DoGeol/agent-kit.git ~/agent-kit
 ~/agent-kit/scripts/build.sh && ~/agent-kit/scripts/link.sh
 ```
 
-`skills/` 아래 폴더를 `~/.codex/skills`·`~/.agents/skills`에 링크한다. `git pull` 뒤 `build.sh`만 다시 돌리면 된다. Claude Code는 플러그인으로만 설치한다(둘 다 하면 Skill이 두 번 뜬다).
+`skills/` 아래 폴더를 `~/.codex/skills`(Codex)·`~/.gemini/config/skills`(AGY)에 링크한다. AGY는 `~/.agents/skills`를 읽지 않는다. `git pull` 뒤 `build.sh`만 다시 돌리면 된다. Claude Code는 플러그인으로만 설치한다(둘 다 하면 Skill이 두 번 뜬다).
 
-**같이 쓰면 좋은 외부 Skill** (설치는 각자): caveman·ponytail(개발 말투·최소 구현), im-not-ai(한국어 글 다듬기). `/setup`이 설치 여부와 명령을 알려 준다. 없어도 kit은 돈다. 설치했으면 자체 훅은 끄고(`PONYTAIL_DEFAULT_MODE=off`, `/caveman off`) `/dev`가 필요할 때만 켜게 둔다.
+**같이 쓰면 좋은 외부 Skill** (설치는 각자): caveman·ponytail(개발 말투·최소 구현), im-not-ai(한국어 글 다듬기). `/setup`이 설치 여부와 명령을 알려 준다. 없어도 kit은 돈다. 설치했으면 자체 훅은 끄고(`PONYTAIL_DEFAULT_MODE=off`, `CAVEMAN_DEFAULT_MODE=off`. `/caveman off`는 그 세션만 끈다) `/dev`가 필요할 때만 켜게 둔다.
 
 ## 명령
 

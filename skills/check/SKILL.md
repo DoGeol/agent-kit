@@ -25,7 +25,7 @@ argument-hint: "[reviewer|security|qa|designer|frontend|backend][:<스택>] [브
 2. `_roles/<직군>.md`와 `_roles/review-format.md`를 읽는다. `security`면 `_vendor/security-auditor.md`도.
 3. `_rules/check.md` 2절대로 읽는다: diff 전체, 호출자, `_vendor/code-reviewer.md`의 5관점 순서.
 4. `_rules/check.md` 3절 형식으로 쓴다. 산출 경로가 없으면 답으로.
-5. 끝에 "고치려면 `/dev 지적 1·3번 반영`".
+5. 끝에 "고치려면 `/dev 지적 1·3번 반영`". 명령 이름은 사용자가 이 명령을 부른 형식을 따른다(`/kit:dev`·`$dev`·`/dev`).
 
 ## 하지 않는 것
 

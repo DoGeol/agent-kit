@@ -26,7 +26,7 @@ argument-hint: "<화면 이름> | audit   예: 주문 목록 화면"
 3. `audit`이면 `_rules/design.md`의 `audit` 모드대로. 원칙 초안은 `_roles/designer/reference.md` 절차.
 4. 바닥 확인(2절)은 묻지 않고 레포에서 찾는다.
 5. 구성 비교(4절)는 표 + 카드. 추천 첫 번째.
-6. 설계 문서를 쓰고 끝 한 줄. "시안은 `/mock <요소>`, 구현은 `/dev`, 브라우저 확인은 `/check design`".
+6. 설계 문서를 쓰고 끝 한 줄. "시안은 `/mock <요소>`, 구현은 `/dev`, 브라우저 확인은 `/check design`". 명령 이름은 사용자가 이 명령을 부른 형식을 따른다(`/kit:dev`·`$dev`·`/dev`).
 
 ## 하지 않는 것
 

@@ -87,7 +87,12 @@ Claude 플러그인은 `/kit:dev`처럼 접두어가 붙어 안 겹치지만, Co
 - [x] **Claude** (2026-10-22, 2.1.307): 로컬 폴더 marketplace 설치, Skill 9개 등록, `/kit:setup`·`/kit:spec`부터 `/kit:check design`까지 비대화(`-p`)로 확인. 질문은 카드 대신 번호 목록(비대화 모드라 카드 도구 없음). `crew build`는 `kit:backend`·`kit:frontend` 서브에이전트로, 두 직군이면 `contract.md` 먼저 병렬. `plain=on` 훅은 `/dev`가 아닌 턴에만 줄을 넣음.
 - [x] **서브에이전트 가드**: 설명에 `kit-brief`를 적어 두었더니 모델이 표지를 흉내 내 혼자 불렀고, 글로 된 가드는 "crew 진행자가 맡긴 일"이라는 말에 뚫렸다. 설명에서 표지를 빼고, crew가 띄우기 전에 `.kit/<slug>/brief-<직군>.md`를 저장하게 하고, `hooks/agent-guard.py`(PreToolUse)가 그 파일 없이 오는 `kit:*` 호출을 막게 했다. 위조 2건 차단, 정상 crew 통과 확인.
 - [x] **Codex** (0.163.0, `codex plugin add kit@dg-agent-kit`): `$이름`으로 Skill이 돈다. 서브에이전트(collab)로 병렬 crew도 됨. 답 첫 줄 앞에 안내 문장을 하나 붙이는 버릇이 있고, `_rules/` 경로를 처음에 `skills/_rules/`로 잘못 찾았다가 검색으로 고친다. 질문은 번호 없는 글머리표.
-- [ ] **Codex 훅**: `/hooks` 신뢰와 `${CLAUDE_PLUGIN_ROOT}` 전달은 사용량 한도로 확인 못 함.
+- [x] **Codex 훅**: 신뢰 전에는 돌지 않는다. 대화형 `/hooks`에 kit 훅 2개(`agent-guard.py`, `plain.sh`)가 경로가 펼쳐진 채 보이고 `t`로 신뢰된다. `${CLAUDE_PLUGIN_ROOT}`가 전달되고, `agent-guard`가 있어도 일반 도구 호출은 그대로 돈다.
+- [x] **질문 카드** (대화형): Claude는 카드 4장을 한 번에, Codex는 `request_user_input_async`로, AGY는 `ask_question`으로 묻는다(한국어, 추천이 첫 번째). AGY는 두 번 중 한 번 글 목록으로 물었다(규칙의 대체 형식).
+- [x] **링크 설치**: Codex는 `~/.codex/skills` 링크로 `_rules`·`_vendor`를 읽는다. AGY는 `~/.agents/skills`를 읽지 않고 `~/.gemini/config/skills`를 읽는다 → `link.sh` 기본 대상과 README를 고침(0.7.2).
+- [x] **끝 안내 명령**: 규칙의 `/dev` 표기가 모든 도구에서 그대로 나왔다 → 사용자가 부른 형식(`/kit:dev`·`$dev`·`/dev`)을 따르게 고침(0.7.2).
+- [x] **caveman·ponytail 끔**: `/caveman off`는 그 세션만 끈다. 새 세션은 다시 켜지므로 `CAVEMAN_DEFAULT_MODE=off`를 안내한다. `PONYTAIL_DEFAULT_MODE=off`면 ponytail 훅은 아무것도 넣지 않는다.
+- [x] **서브에이전트끼리 메시지**: 같은 턴에 띄운 형제 서브에이전트는 서로 `SendMessage`를 못 한다. crew는 이것에 기대지 않는다.
 - [x] **AGY** (`agy plugin install https://github.com/DoGeol/agent-kit`): `/이름`으로 돈다. 저장소 전체(약 4MB)가 설치되지만 문제 없음. `rules/`는 trigger가 없어 적용되지 않음(Skill 안 사본만 쓰임). 서브에이전트는 `tools:`가 문자열이거나 `model: opus`면 건너뛰어 6개 중 3개만 등록됐다 → `tools: [ … ]` 목록, 생성 파일은 `model: inherit`으로 고쳐 6개 등록. crew는 AGY 서브에이전트로 병렬 진행. 훅은 `UserPromptSubmit`이 없어 `plain`은 돌지 않음.
 - [x] **외부 Skill**: `/setup` 표가 실제 설치와 맞음(세 도구). `/dev`의 `재료:` 줄은 감지가 엇갈렸다(Claude는 설치된 caveman을 없음, Codex는 Claude 폴더를 보고 있음) → 지금 쓰는 도구의 목록·폴더만 보게 고침.
 - [ ] caveman `/caveman off` 뒤 다음 세션, ponytail `off` 주입 내용: 확인 안 함.
