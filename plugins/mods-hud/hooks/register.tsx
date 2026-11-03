@@ -57,6 +57,9 @@ const FAST_MS = 150
 const FAST_FOR_MS = 15_000
 const MAX_AGENTS = 3
 const KEEP_DONE_MS = 10 * 60_000
+// A live agent the engine never listed (a background agent) and that made no call for this long while the
+// session itself is idle has ended without its turn.complete reaching us (issue 019): it reads as done.
+const AGENT_SILENT_MS = 30 * 60_000
 
 const ASK =
   '아래 정보로 이 세션에서 방금 끝난 턴을 한국어 한 줄, 35자 이내로 요약해. ' +
@@ -309,6 +312,14 @@ export const agentMessages = (text: string) =>
 // SendMessage may spell a listed name with its " [ref]".
 export const sessionName = (to: string) => to.replace(/\s*\[[^\]]*\]$/, '').trim()
 
+// Whether ListAgents' answer is one we can read (rows, or a listing text, even empty): then a session it lacks has ended.
+// An answer of another shape says nothing about who is gone (issue 019).
+export const hasListing = (r: unknown) => {
+  const x = (r ?? {}) as { result?: { listing?: unknown; sections?: unknown }; text?: unknown }
+  const res = typeof x.result === 'object' && x.result ? x.result : {}
+  return Array.isArray(res.sections) || typeof res.listing === 'string' || typeof x.text === 'string'
+}
+
 // ListAgents' answer, as rows when it has them, else its "[idle]  ·  NAME  ·  /path  ·  started 2h ago" lines.
 export const listedStates = (r: unknown) => {
   const x = (r ?? {}) as { result?: { listing?: unknown; sections?: { rows?: { name?: string; status?: string }[] }[] }; text?: unknown }
@@ -376,6 +387,10 @@ export const register: Register = on => {
   // Every subagent this load has heard of, kept live from its spawn, its tool calls and its end.
   const tracked = new Map<string, AgentRow>()
   const dropped = new Set<string>()
+  // Agents the engine's list has named at least once: one of these that the list later lacks has ended (issue 019).
+  const listedOnce = new Set<string>()
+  // When each agent last did something (spawn, a call), for the silence rule on never-listed agents.
+  const lastCallAt = new Map<string, number>()
   // An agent's step line, kept out of $.state (it changes on every call) and drawn in a feed region (issue 018).
   // The topic is `step|<agent>`; `columns` is the region's width, the desktop's Hangul fit applied.
   const stepLines = (topic: string, columns: number): FeedLine[] => {
@@ -556,6 +571,8 @@ export const register: Register = on => {
         const cur = rows.find(s => s.name === name) ?? { name, state: 'unknown' as const }
         const row: SessionRow = {
           ...cur,
+          // traffic with a row that read 종료 means it lives again: the next poll places it (issue 019)
+          ...(cur.state === 'gone' ? { state: 'unknown' as const, endedAt: undefined } : {}),
           ...(title ? { title } : {}),
           ...(dir === 'out' ? { lastSent: { at, text: line } } : { lastReceived: { at, text: line }, summary: undefined }),
         }
@@ -573,12 +590,22 @@ export const register: Register = on => {
       isListing = true
       try {
         const r = await $.tool.call({ tool: 'ListAgents' }).catch(() => null)
-        const listed = r && !('deny' in r && r.deny) && !('isError' in r && r.isError) ? listedStates(r) : new Map<string, SessionRow['state']>()
+        const ok = !!r && !('deny' in r && r.deny) && !('isError' in r && r.isError)
+        const listed = ok ? listedStates(r) : new Map<string, SessionRow['state']>()
         lastDraw['list-agents'] = r === null ? 'threw' : 'deny' in r && r.deny ? `deny: ${r.deny}` : 'isError' in r && r.isError ? 'error' : `ok ${listed.size}개`
+        const now = await $.clock.now()
         await changeSessions($, rows => {
-          // a session the list answered without has ended (archived, closed); a failed list leaves it unknown
-          const missing: SessionRow['state'] = listed.size > 0 ? 'gone' : 'unknown'
-          const fresh = rows.map(s => ({ ...s, state: listed.get(s.name) ?? (s.title ? listed.get(s.title) : undefined) ?? missing }))
+          // a session a readable list lacks has ended (archived, closed), an empty list included (issue 019);
+          // a failed or unreadable list leaves it unknown
+          const missing: SessionRow['state'] = ok && hasListing(r) ? 'gone' : 'unknown'
+          const fresh = rows
+            .map(s => {
+              const state = listed.get(s.name) ?? (s.title ? listed.get(s.title) : undefined) ?? missing
+              // an ended row keeps the time it ended, so it can age off the band like a finished agent
+              const endedAt = state === 'gone' ? (s.endedAt ?? now) : undefined
+              return endedAt === s.endedAt ? { ...s, state } : { ...s, state, endedAt }
+            })
+            .filter(s => !(s.state === 'gone' && s.endedAt !== undefined && now - s.endedAt > KEEP_DONE_MS))
           return JSON.stringify(fresh) === JSON.stringify(rows) ? rows : fresh
         })
       } finally {
@@ -638,9 +665,10 @@ export const register: Register = on => {
               limits: m.limits.map(l => (isStale(l) ? { kind: l.kind, percent: 0 } : l)),
             }
       })
-      // The engine's list is the authority on status; events fill in between ticks.
-      const list = await $.agent.list().catch(() => [])
-      for (const a of list) {
+      // The engine's list is the authority on status; events fill in between ticks. A failed read says nothing.
+      const list = await $.agent.list().catch(() => null)
+      for (const a of list ?? []) {
+        listedOnce.add(a.id)
         // a row that aged off the band stays off (the engine still lists it, and a reload would bring it back),
         // unless a message woke it and it runs again
         if (dropped.has(a.id)) {
@@ -657,6 +685,20 @@ export const register: Register = on => {
         const ended = agentPhase(a.status) === 'done' || agentPhase(a.status) === 'stopped'
         t.endedAt = ended ? (t.endedAt ?? now) : undefined
         tracked.set(a.id, t)
+      }
+      // Issue 019: a row still live that the engine no longer lists hung on as 진행 중 when its turn.complete
+      // never reached us (killed, errored, a reload in between). Once listed and now missing, it has ended.
+      // A never-listed one (a background agent) ends after a long silence while the session itself is idle.
+      if (list) {
+        const ids = new Set(list.map(a => a.id))
+        const sessionIdle = (await read($, phase)) !== 'running'
+        for (const t of tracked.values()) {
+          if (!LIVE.has(t.status) || ids.has(t.id)) continue
+          const silentFor = now - (lastCallAt.get(t.id) ?? t.startedAt)
+          if (listedOnce.has(t.id) || (sessionIdle && silentFor > AGENT_SILENT_MS)) {
+            tracked.set(t.id, { ...t, status: 'completed', endedAt: now, activity: '' })
+          }
+        }
       }
       await publish?.()
 
@@ -681,7 +723,15 @@ export const register: Register = on => {
     // so an agent's model stays on its row instead of waiting for its next request.
     // (a row named 'agent' came from a fork's calls in an older build: dropped)
     for (const id of await read($, droppedAtom)) dropped.add(id)
-    for (const row of await read($, agents)) if (!tracked.has(row.id) && !dropped.has(row.id) && row.type !== 'agent') tracked.set(row.id, { ...row })
+    {
+      const now = await $.clock.now()
+      for (const row of await read($, agents)) {
+        if (tracked.has(row.id) || dropped.has(row.id) || row.type === 'agent') continue
+        tracked.set(row.id, { ...row })
+        // a reload starts its silence clock over; the engine's list settles it on the next tick
+        if (LIVE.has(row.status)) lastCallAt.set(row.id, now)
+      }
+    }
 
     await $.command.register({
       name: 'mods-hud',
@@ -863,9 +913,13 @@ export const register: Register = on => {
     if (e.agentId !== undefined && known) {
       const now = await $.clock.now()
       const t = known
+      lastCallAt.set(e.agentId, now)
+      const wakes = !LIVE.has(t.status)
       tracked.set(e.agentId, {
         ...t,
-        status: LIVE.has(t.status) ? t.status : 'running',
+        status: wakes ? 'running' : t.status,
+        // a call after its end means it runs again: its old end no longer holds (issue 019)
+        ...(wakes ? { endedAt: undefined } : {}),
         lastTool: shortTool(String(e.tool)),
         activity: describeCall(String(e.tool), e as unknown as Record<string, unknown>),
         tools: t.tools + 1,
@@ -886,6 +940,7 @@ export const register: Register = on => {
     const ran = await next(e)
     if (ran.agentId !== undefined) {
       const now = await $.clock.now()
+      lastCallAt.set(ran.agentId, now)
       tracked.set(ran.agentId, {
         id: ran.agentId, type: e.subagentType, description: e.description, status: 'running',
         lastTool: '', activity: '시작', tools: 0, startedAt: now, model: ran.model,

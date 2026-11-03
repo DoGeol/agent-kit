@@ -16,7 +16,7 @@ const BAND = {
   view: {},
 } as const
 
-type World = { failUsage?: true; usage?: typeof USAGE; agentText?: string; completes?: string[]; perModel?: Record<string, { effortLevel: string }>; five?: number; statuses?: (string | undefined)[]; model?: string; effort?: string; forkText?: string; list: { id: string; type: string; description: string; status: 'running' | 'completed' | 'idle' }[]; forks: string[] }
+type World = { failUsage?: true; failList?: boolean; usage?: typeof USAGE; agentText?: string; completes?: string[]; perModel?: Record<string, { effortLevel: string }>; five?: number; statuses?: (string | undefined)[]; model?: string; effort?: string; forkText?: string; list: { id: string; type: string; description: string; status: 'running' | 'completed' | 'idle' }[]; forks: string[] }
 
 const world = (on: On, w: World) => {
   on('session.start', (_, e) => ({ cwd: e.cwd }))
@@ -41,7 +41,10 @@ const world = (on: On, w: World) => {
       ],
     } }
   })
-  on('agent.list', () => ({ value: w.list }))
+  on('agent.list', () => {
+    if (w.failList) throw new Error('busy')
+    return { value: w.list }
+  })
   on('ui.toast', () => ({ value: undefined }))
   on('prompt.submit', (_, e) => ({ text: e.text }))
   on('tool.call', () => ({ result: 'ok' }))
@@ -884,6 +887,100 @@ test('an agent aging off the band is written to state for the next load', async 
   expect(writes).toEqual([])
   await clock.advance(11 * 60_000)
   expect(writes.at(-1)).toEqual(['a1'])
+})
+
+// Issue 019: rows that hung on as 진행 중 after their agent or session was gone.
+
+test('an agent the engine listed and then dropped reads 완료, and the idle session no longer reads 진행 중', async ($, on) => {
+  const clock = mock.clock(on, { now: NOW })
+  const w: World = { list: [{ id: 'a1', type: 'Explore', description: '작업 a1', status: 'running' }], forks: [] }
+  world(on, w)
+  await $.session.start({ cwd: '/tmp/x', surface: 'desktop', isInteractive: true })
+  await $.turn.complete({ answer: 'x', durationMs: 5, isAborted: false, turnId: 'm1', reason: 'answer' })
+  await clock.advance(2000)
+  let ui = await $.ui.mount({ plugin: 'mods-hud', surface: 'desktop', component: 'AbovePrompt', props: { ...BAND, isWorking: false } })
+  expect((await ui.findAll({ type: 'Text', text: /^진행 중$/ })).length).toBe(2)
+  await ui.unmount()
+  // the engine forgot it without a turn.complete reaching us
+  w.list.length = 0
+  await clock.advance(2000)
+  ui = await $.ui.mount({ plugin: 'mods-hud', surface: 'desktop', component: 'AbovePrompt', props: { ...BAND, isWorking: false } })
+  expect(await ui.find({ type: 'Text', text: /^진행 중$/ })).toBeUndefined()
+  expect((await ui.findAll({ type: 'Text', text: /^완료$/ })).length).toBe(2)
+  await ui.unmount()
+  // a failed list read ends nothing
+  w.list.push({ id: 'b1', type: 'Explore', description: '작업 b1', status: 'running' })
+  await clock.advance(2000)
+  w.failList = true
+  await clock.advance(2000)
+  ui = await $.ui.mount({ plugin: 'mods-hud', surface: 'desktop', component: 'AbovePrompt', props: { ...BAND, isWorking: false } })
+  // two agents fold into one line: b1 still live, a1 done
+  expect((await ui.find({ key: 'agents-line' }))?.text.trim()).toBe('▸ 서브에이전트 2  진행 중 1 · 완료 1')
+  expect(await ui.find({ type: 'Text', text: /^진행 중$/ })).toBeDefined()
+})
+
+test('a background agent the engine never lists ends after 30 silent minutes while the session is idle; a call keeps it live', async ($, on) => {
+  const clock = mock.clock(on, { now: NOW })
+  const w: World = { list: [], forks: [] }
+  world(on, w)
+  on('agent.spawn', () => ({ model: 'claude-haiku-5-5', agentId: 'bg1' }))
+  await $.session.start({ cwd: '/tmp/x', surface: 'desktop', isInteractive: true })
+  await $.agent.spawn({ toolUseId: 'tu1', prompt: 'p', description: '오래 걸리는 일', subagentType: 'Explore', provider: { plugin: 'engine', tier: 'core' } } as never)
+  await $.turn.complete({ answer: 'x', durationMs: 5, isAborted: false, turnId: 'm1', reason: 'answer' })
+  await clock.advance(20 * 60_000)
+  await $.tool.call({ tool: 'Grep', tool_use_id: 't1', agentId: 'bg1', pattern: 'x' } as never)
+  await clock.advance(20 * 60_000)
+  let ui = await $.ui.mount({ plugin: 'mods-hud', surface: 'desktop', component: 'AbovePrompt', props: { ...BAND, isWorking: false } })
+  // 40 minutes since its spawn, but only 20 since its last call: still at work
+  expect((await ui.findAll({ type: 'Text', text: /^진행 중$/ })).length).toBe(2)
+  await ui.unmount()
+  await clock.advance(11 * 60_000)
+  ui = await $.ui.mount({ plugin: 'mods-hud', surface: 'desktop', component: 'AbovePrompt', props: { ...BAND, isWorking: false } })
+  expect(await ui.find({ type: 'Text', text: /^진행 중$/ })).toBeUndefined()
+  expect(await ui.find({ key: 'agent-bg1' })).toBeDefined()
+})
+
+test('a call after an agent ended starts its time over: the row stays until 10 minutes after the new end', async ($, on) => {
+  const clock = mock.clock(on, { now: NOW })
+  const w: World = { list: [{ id: 'a1', type: 'Explore', description: '작업 a1', status: 'running' }], forks: [] }
+  world(on, w)
+  await $.session.start({ cwd: '/tmp/x', surface: 'desktop', isInteractive: true })
+  await clock.advance(2000)
+  w.list[0]!.status = 'completed'
+  await clock.advance(2000)
+  await clock.advance(9 * 60_000)
+  // woken by a message, it calls a tool again; the engine then lists it ended once more
+  await $.tool.call({ tool: 'Grep', tool_use_id: 't1', agentId: 'a1', pattern: 'x' } as never)
+  await clock.advance(2000)
+  await clock.advance(2 * 60_000)
+  // 11 minutes after the first end, 2 after the second: not aged off yet
+  const ui = await $.ui.mount({ plugin: 'mods-hud', surface: 'desktop', component: 'AbovePrompt', props: BAND })
+  expect(await ui.find({ key: 'agent-a1' })).toBeDefined()
+  expect((await ui.find({ type: 'Text', text: /^완료$/ }))).toBeDefined()
+})
+
+test('ListAgents answering with no sessions ends every row; an ended row ages off after 10 minutes; new traffic brings it back', async ($, on) => {
+  const clock = mock.clock(on, { now: NOW })
+  let listing = '[running]  ·  worker-b  ·  /a  ·  started 2h ago'
+  on('tool.call', { tool: 'ListAgents' }, () => ({ result: { listing } }) as never)
+  const w: World = { list: [], forks: [] }
+  world(on, w)
+  await $.session.start({ cwd: '/tmp/x', surface: 'desktop', isInteractive: true })
+  await send($, 'worker-b', 'a')
+  await clock.advance(10_000)
+  const ui = await $.ui.mount({ plugin: 'mods-hud', surface: 'desktop', component: 'AbovePrompt', props: BAND })
+  expect((await ui.find({ key: 'sessions-line' }))?.text.trim()).toBe('▸ 오케스트레이션 1  진행 중 1')
+  // every session closed: the list is readable and empty
+  listing = ''
+  await clock.advance(10_000)
+  expect((await ui.find({ key: 'sessions-line' }))?.text.trim()).toBe('▸ 오케스트레이션 1  종료 1')
+  // ten minutes later the ended row is gone from the band
+  await clock.advance(11 * 60_000)
+  expect(await ui.find({ key: 'sessions-line' })).toBeUndefined()
+  // a message from it means it lives again: back as 대기 until the list places it
+  await $.prompt.submit({ text: peerMsg('worker-b', '다시 시작'), origin: { kind: 'peer' }, wait: false })
+  await clock.settle()
+  expect((await ui.find({ key: 'sessions-line' }))?.text.trim()).toBe('▸ 오케스트레이션 1  대기 1')
 })
 
 // Issue 009: drifted lines are dropped, so the last good one stays.
