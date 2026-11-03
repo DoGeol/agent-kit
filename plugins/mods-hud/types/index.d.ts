@@ -49,6 +49,8 @@ export type SessionRow = {
   /** ListAgents' word for it; unknown until it answers, or when it fails. */
   /** gone: ListAgents answered without it (archived, closed, exited) */
   state: 'running' | 'idle' | 'unknown' | 'gone'
+  /** When ListAgents first answered without it; the row ages off the band after a while. */
+  endedAt?: number
   lastSent?: { at: number; text: string }
   lastReceived?: { at: number; text: string }
   /** A Korean line on the latest received message. */

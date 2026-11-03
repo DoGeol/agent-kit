@@ -22,3 +22,4 @@ Issues found while building and testing `plugins/mods-hud`.
 | [016](016-desktop-reload-keeps-old-module.md) | `/reload-plugins` does not load a new mods-hud in a desktop session | open, upstream (#96223) |
 | [017](017-detail-pane-stale-title.md) | The detail pane keeps its first title | closed: pane removed (0.5.0) |
 | [018](018-detail-pane-client-regions.md) | Session detail on Client regions, with clearer tabs | closed: pane removed (0.5.0); band feed kept |
+| [019](019-stale-agent-rows.md) | Finished agents and sessions hang on as 진행 중 | fixed (0.5.7) |
