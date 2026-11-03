@@ -85,9 +85,13 @@ const SESSION_ASK =
   "'…완료', '…3개 확인', '…요청함'처럼 명사형으로 끝내고, '입니다'·'했습니다' 같은 문장체는 쓰지 마. " +
   '마크다운, 따옴표, 머리말, 괄호 설명 금지. 주어지지 않은 정보는 언급하지 마.'
 const SESSION_POLL_MS = 10_000
+// ListAgents is a tool call: ask it every 10 s while messages flow, then every minute, then every 5 minutes.
+const SESSION_LIST_EVERY = (sinceTraffic: number) => (sinceTraffic < 5 * 60_000 ? SESSION_POLL_MS : sinceTraffic < 30 * 60_000 ? 60_000 : 5 * 60_000)
 const SUMMARY_MAX = 10
 // a running agent's line is checked again at most this often, and only after it did something
 const SUMMARY_GAP_MS = 120_000
+// and only once the agent made this many calls since its last line: a slow agent gets fewer check-ins
+const SUMMARY_MIN_CALLS = 3
 const STOP_ARM_MS = 3000
 
 // claude-opus-5-5[1m] -> Opus 5.5
@@ -435,6 +439,8 @@ export const register: Register = on => {
   // Set in session.start: logs a message to or from another session, and whether an id is one of our subagents.
   let recordSession: ((name: string, dir: 'out' | 'in', text: string, title?: string) => Promise<void>) | null = null
   let isSubagent: ((id: string) => Promise<boolean>) | null = null
+  // When a message last went to or came from another session: ListAgents is asked less often as this ages.
+  let lastTrafficAt = 0
   const sessionBusy = new Set<string>()
 
   on('session.start', async ($, e, next) => {
@@ -573,6 +579,7 @@ export const register: Register = on => {
 
     recordSession = async (name, dir, text, title) => {
       const at = await $.clock.now()
+      lastTrafficAt = at
       const line = clip(oneLine(text), 200)
       await update($, sessionsAtom, rows => {
         const cur = rows.find(s => s.name === name) ?? { name, state: 'unknown' as const }
@@ -592,8 +599,13 @@ export const register: Register = on => {
 
     // ListAgents is the word on whether a session works or waits; unavailable, every row reads unknown.
     let isListing = false
+    let lastListAt = 0
     const pollSessions = async () => {
       if (isListing || (await read($, sessionsAtom)).length === 0) return
+      // back off while nothing is said: the tick stays, the call waits for its interval
+      const now0 = await $.clock.now()
+      if (now0 - lastListAt < SESSION_LIST_EVERY(now0 - lastTrafficAt)) return
+      lastListAt = now0
       isListing = true
       try {
         const r = await $.tool.call({ tool: 'ListAgents' }).catch(() => null)
@@ -944,7 +956,7 @@ export const register: Register = on => {
       await publish?.()
       // Korean lines come on a change: its task when it starts, a check-in every SUMMARY_GAP_MS while it works, its result at the end
       const cur = tracked.get(e.agentId)!
-      if (cur.summaryAt !== undefined && now - cur.summaryAt >= SUMMARY_GAP_MS && cur.tools > (cur.summaryTools ?? 0)) {
+      if (cur.summaryAt !== undefined && now - cur.summaryAt >= SUMMARY_GAP_MS && cur.tools >= (cur.summaryTools ?? 0) + SUMMARY_MIN_CALLS) {
         $.clock.after(0, () => void summarizeAgent?.(e.agentId!, false))
       }
     }
