@@ -10,7 +10,9 @@ const meter = atom({ plugin: 'mods-hud', key: 'meter' } as const, null)
 const agents = atom({ plugin: 'mods-hud', key: 'agents' } as const, [])
 const showAgentsAtom = atom({ plugin: 'mods-hud', key: 'showAgents' } as const, false)
 const hiddenAtom = atom({ plugin: 'mods-hud', key: 'hidden' } as const, [] as string[])
-const stopArmedAtom = atom({ plugin: 'mods-hud', key: 'stopArmed' } as const, null as string | null)
+const stopArmedAtom = atom({ plugin: 'mods-hud', key: 'stopArmed' } as const, null as { id: string; at: number } | null)
+// Finished agents older than RECENT_DONE_MS fold into one line until this is pressed.
+const showDoneAtom = atom({ plugin: 'mods-hud', key: 'showDone' } as const, false)
 const agentSummariesAtom = atom({ plugin: 'mods-hud', key: 'agentSummaries' } as const, true)
 const spendAtom = atom({ plugin: 'mods-hud', key: 'spend' } as const, {
   turn: { calls: 0, input: 0, output: 0 },
@@ -57,6 +59,8 @@ const FAST_MS = 150
 const FAST_FOR_MS = 15_000
 const MAX_AGENTS = 3
 const KEEP_DONE_MS = 10 * 60_000
+// A finished agent keeps its own row this long; after that the finished ones fold into one 완료 line.
+const RECENT_DONE_MS = 60_000
 // A live agent the engine never listed (a background agent) and that made no call for this long while the
 // session itself is idle has ended without its turn.complete reaching us (issue 019): it reads as done.
 const AGENT_SILENT_MS = 30 * 60_000
@@ -354,7 +358,7 @@ const lastOf = (s: SessionRow) => {
 const SESSION_LOOK: Record<SessionRow['state'], { dot: string; color?: string; dim: boolean; word: string }> = {
   running: { dot: '◆', color: 'warning', dim: false, word: '진행 중' },
   idle: { dot: '◇', color: 'subtle', dim: false, word: '대기' },
-  unknown: { dot: '◇', dim: true, word: '대기' },
+  unknown: { dot: '?', dim: true, word: '확인 중' },
   gone: { dot: '■', dim: true, word: '종료' },
 }
 
@@ -488,6 +492,9 @@ export const register: Register = on => {
         }
         // ponytail: the newest 200 ids; an older one the engine still lists would come back once
         await update($, droppedAtom, () => [...dropped].slice(-200))
+        // a row that aged off needs no hiding any more: keep the hidden list from growing for good
+        const gone = new Set(aged.map(t => t.id))
+        await update($, hiddenAtom, ids => (ids.some(id => gone.has(id)) ? ids.filter(id => !gone.has(id)) : ids))
       }
       const rows = [...tracked.values()]
         .sort((x, y) => y.startedAt - x.startedAt)
@@ -608,6 +615,9 @@ export const register: Register = on => {
             .filter(s => !(s.state === 'gone' && s.endedAt !== undefined && now - s.endedAt > KEEP_DONE_MS))
           return JSON.stringify(fresh) === JSON.stringify(rows) ? rows : fresh
         })
+        // rows that aged off need no hiding any more
+        const left = new Set((await read($, sessionsAtom)).map(s => s.name))
+        await update($, hiddenSessionsAtom, ids => (ids.some(n => !left.has(n)) ? ids.filter(n => left.has(n)) : ids))
       } finally {
         isListing = false
       }
@@ -735,8 +745,8 @@ export const register: Register = on => {
 
     await $.command.register({
       name: 'mods-hud',
-      description: 'HUD 요약 지금 갱신 (usage: 사용량·모드 토큰, pane: 패널로 보기, agents on/off: 서브에이전트 요약, debug: 진단, debug reset: 누름 카운터 초기화)',
-      argumentHint: '[usage|pane|agents on|agents off|debug|debug reset]',
+      description: 'HUD 요약 지금 갱신 (usage: 사용량·모드 토큰, show: 닫은 행 다시 보기, pane: 패널로 보기, agents on/off: 서브에이전트 요약, debug: 진단, debug reset: 누름 카운터 초기화)',
+      argumentHint: '[usage|show|pane|agents on|agents off|debug|debug reset]',
     })
 
     // Any of these may fail at start: the meter is made anyway, and the timers below still start.
@@ -842,6 +852,13 @@ export const register: Register = on => {
       const zero = { calls: 0, input: 0, output: 0 }
       const mod = `이 모드의 요청 (Haiku)\n${line('세션 요약', sp.turn)}\n${line('서브에이전트 요약', sp.agent)}\n${line('오케스트레이션 요약', sp.session ?? zero)}`
       return { text: `${m ? usageTip(m, now) : '사용량 정보 없음'}\n\n${mod}` }
+    }
+    if (arg === 'show') {
+      const [h, hs] = await Promise.all([read($, hiddenAtom), read($, hiddenSessionsAtom)])
+      await update($, hiddenAtom, () => [])
+      await update($, hiddenSessionsAtom, () => [])
+      await update($, showDoneAtom, () => true)
+      return { text: h.length + hs.length > 0 ? `닫았던 행 ${h.length + hs.length}개를 다시 보임.` : '닫은 행 없음.' }
     }
     if (arg === 'agents on' || arg === 'agents off') {
       await update($, agentSummariesAtom, () => arg === 'agents on')
@@ -1087,7 +1104,7 @@ export const register: Register = on => {
     if (!room) return next(e)
 
     const isPane = e.component === 'Pane'
-    const [sum, typed, turnPhase, m, ags, now, showAgentsRaw, hidden, stopArmed, sess, showSessionsRaw, hiddenSess, branch] = await Promise.all([
+    const [sum, typed, turnPhase, m, ags, now, showAgentsRaw, hidden, stopArmed, sess, showSessionsRaw, hiddenSess, branch, showDoneRaw] = await Promise.all([
       read($, beatAtom).then(() => read($, summary)),
       read($, prompt),
       read($, phase),
@@ -1101,10 +1118,12 @@ export const register: Register = on => {
       read($, showSessionsAtom),
       read($, hiddenSessionsAtom),
       read($, branchAtom),
+      read($, showDoneAtom),
     ])
     // the pane has the room: everything unfolded
     const showAgents = showAgentsRaw || isPane
     const showSessions = showSessionsRaw || isPane
+    const showDone = showDoneRaw || isPane
     if (!m && !sum && !typed) return next(e)
 
     // The band slot is shared: whatever the plugins beneath drew stays, under the card. No hook beneath rejects in a test.
@@ -1131,28 +1150,38 @@ export const register: Register = on => {
     const anyLive = ags.some(a => LIVE.has(a.status))
     const state = LOOK[room.isWorking || anyLive ? 'running' : turnPhase]
     const headline = (sum && oneLine(sum.text)) || typed || '첫 턴을 기다리는 중'
+    // How many turns ago the session line was written: shown when it is not this turn's.
+    const sumAge = sum ? Math.max(0, turns - sum.turns) : 0
 
-    // One agent shows as its row; two or more fold into one line with their counts, unfolded on a press.
-    // Closed ones are gone. Live rows first, then the ones that ended (완료 or 중지), newest first.
+    // Agents show as rows while they fit: live ones, stopped ones, and the ones finished within RECENT_DONE_MS.
+    // Older finished ones fold into one 완료 line. Only when the rows outnumber the room (or MAX_AGENTS) does the
+    // whole group fold into a counts line, unfolded on a press. Closed ones are gone.
     const shownAgs = ags.filter(a => !hidden.includes(a.id))
-    const isEnded = (a: AgentRow) => LOOK[agentPhase(a.status)].isDone || agentPhase(a.status) === 'stopped'
+    const isDone = (a: AgentRow) => LOOK[agentPhase(a.status)].isDone
+    const isEnded = (a: AgentRow) => isDone(a) || agentPhase(a.status) === 'stopped'
     const live = shownAgs.filter(a => !isEnded(a))
     const ended = shownAgs.filter(isEnded)
-    const isGrouped = shownAgs.length >= 2
-    const isFolded = isGrouped && !showAgents
-    // Rows the band may take: the session line, the usage block outside the desktop, the fold line; the rest is the agents'.
-    // An agent's first line comes first, and one always shows; step lines only when every live row gets one.
-    // (Halving the budget per agent made a lone agent blink whenever the surface gave a row more or less.)
-    // Sessions are always one group: its fold line costs a row; unfolded, its rows take what the agents leave.
+    const oldDone = ended.filter(a => isDone(a) && a.endedAt !== undefined && now - a.endedAt >= RECENT_DONE_MS)
+    const listed = [...live, ...ended.filter(a => !oldDone.includes(a))]
     const peers = sess.filter(s => !hiddenSess.includes(s.name))
+    // Rows the band may take: the session line, the usage block outside the desktop, the sessions' fold line.
+    // (Halving the budget per agent made a lone agent blink whenever the surface gave a row more or less.)
     // shortcut: a result beneath is counted as one row, a taller one scrolls the band; count its rows when a plugin draws more.
-    const budget = Math.max(0, room.rows - 1 - (below ? 1 : 0) - (m && e.surface !== 'desktop' && !isTight ? 4 : 0) - (isGrouped ? 1 : 0) - (peers.length > 0 ? 1 : 0))
-    const rows = isFolded ? [] : [...live, ...ended].slice(0, Math.max(1, Math.min(MAX_AGENTS * 2, budget)))
+    const room0 = Math.max(0, room.rows - 1 - (below ? 1 : 0) - (m && e.surface !== 'desktop' && !isTight ? 4 : 0) - (peers.length > 0 ? 1 : 0))
+    // the 완료 line stays while unfolded too, so the group can fold back
+    const doneLine = oldDone.length > 0 ? 1 : 0
+    const needed = listed.length + (showDone ? oldDone.length : 0) + doneLine
+    const isGrouped = shownAgs.length >= 2 && (shownAgs.length > MAX_AGENTS || needed > room0)
+    const isFolded = isGrouped && !showAgents
+    const budget = Math.max(0, room0 - (isGrouped ? 1 : 0))
+    const rows = isFolded ? [] : [...listed, ...(showDone ? oldDone : [])].slice(0, Math.max(1, Math.min(MAX_AGENTS * 2, budget - doneLine)))
     const liveShown = rows.filter(a => !isEnded(a))
-    const withSteps = budget >= rows.length + liveShown.length
-    const peerRows = showSessions ? peers.slice(0, Math.max(1, Math.min(MAX_AGENTS * 2, budget - rows.length - (withSteps ? liveShown.length : 0)))) : []
+    // step lines for every live row when they fit; the newest live one keeps its step line regardless
+    const withSteps = budget >= rows.length + doneLine + liveShown.length
+    const stepFor = (a: AgentRow) => !isEnded(a) && (withSteps || (a.id === live[0]?.id && budget >= rows.length + doneLine + 1))
+    const peerRows = showSessions ? peers.slice(0, Math.max(1, Math.min(MAX_AGENTS * 2, budget - rows.length - doneLine - (withSteps ? liveShown.length : 0)))) : []
     // the fold line's counts, each in its state's color
-    const doneCount = ended.filter(a => LOOK[agentPhase(a.status)].isDone).length
+    const doneCount = ended.filter(isDone).length
     const counts = [
       { n: live.length, word: '진행 중', color: LOOK.running.color },
       { n: doneCount, word: '완료', color: LOOK.done.color },
@@ -1160,6 +1189,21 @@ export const register: Register = on => {
     ].filter(c => c.n > 0)
     noteDraw(isPane ? 'pane' : 'band')
     lastDraw[`${e.surface} ${e.component}`] = `rows=${room.rows} cols=${width} rows=${rows.length} live=${live.length} ended=${ended.length} at=${new Date(now).toTimeString().slice(0, 8)}`
+
+    // Wide bands spell the buttons out; narrow ones keep the marks.
+    const wordy = !isCompact
+    const STOP = wordy ? '종료' : '■'
+    const RESUME = wordy ? '재개' : '↻'
+    const CLOSE = wordy ? '닫기' : '✕'
+    // Closing is undone with /mods-hud show: say so once, on the toast.
+    const hideAgent = async (a: AgentRow) => {
+      await update($, hiddenAtom, ids => (ids.includes(a.id) ? ids : [...ids, a.id]))
+      $.ui.toast(`${a.type} 닫음 · /mods-hud show 로 되돌리기`)
+    }
+    const hideSession = async (name: string) => {
+      await update($, hiddenSessionsAtom, ids => (ids.includes(name) ? ids : [...ids, name]))
+      $.ui.toast(`${clipCells(name, 30)} 닫음 · /mods-hud show 로 되돌리기`)
+    }
 
     // A row is a label cell that shrinks and a status cell that never does: two elements, no drawn divider.
     const row = (key: string, label: JSX.Element, status: JSX.Element) => (
@@ -1172,9 +1216,12 @@ export const register: Register = on => {
     // A live agent stops on a second press within STOP_ARM_MS (the engine's TaskStop, as the model would call it);
     // a finished one closes off the band with ✕.
     const stopAgent = async (id: string) => {
-      if (stopArmed !== id) {
-        await update($, stopArmedAtom, () => id)
-        $.clock.after(STOP_ARM_MS, () => void update($, stopArmedAtom, v => (v === id ? null : v)))
+      if (stopArmed?.id !== id) {
+        const at = await $.clock.now()
+        await update($, stopArmedAtom, () => ({ id, at }))
+        // the label counts the seconds down: redraw each second, then lapse
+        for (let s = 1000; s < STOP_ARM_MS; s += 1000) $.clock.after(s, () => void update($, stopArmedAtom, v => (v?.id === id ? { ...v } : v)))
+        $.clock.after(STOP_ARM_MS, () => void update($, stopArmedAtom, v => (v?.id === id ? null : v)))
         return
       }
       await update($, stopArmedAtom, () => null)
@@ -1223,7 +1270,8 @@ export const register: Register = on => {
       const last = lastOf(s)
       const meta = last ? `${last.arrow} ${ago(now - last.at)}` : ''
       const name = clipCells(s.title || s.name, isNarrow ? 12 : 24)
-      const text = clipCells(s.summary || last?.text || '', fit(Math.max(4, width - 4 - 2 - cells(name) - 1 - cells(meta) - 2 - 4 - 4)))
+      const buttons = (s.state !== 'gone' ? cells(RESUME) + 1 : 0) + cells(CLOSE)
+      const text = clipCells(s.summary || last?.text || '', fit(Math.max(4, width - 4 - 2 - cells(name) - 1 - cells(meta) - 2 - buttons - 4)))
       return row(
         `peer-${s.name}`,
         <Box flexDirection="row" columnGap={1} flexShrink={1} minWidth={0}>
@@ -1236,13 +1284,15 @@ export const register: Register = on => {
         </Box>,
         <Box flexDirection="row" columnGap={1}>
           {meta && <Text dimColor>{meta}</Text>}
-          {s.state !== 'gone' && <Button key={`resume-s-${s.name}`} plain dimColor label="↻" onPress={() => resumeSession(s.name)} />}
-          <Button key={`hide-s-${s.name}`} plain dimColor label="✕" onPress={() => update($, hiddenSessionsAtom, ids => [...ids, s.name])} />
+          {s.state !== 'gone' && <Button key={`resume-s-${s.name}`} plain dimColor label={RESUME} onPress={() => resumeSession(s.name)} />}
+          <Button key={`hide-s-${s.name}`} plain dimColor label={CLOSE} onPress={() => hideSession(s.name)} />
         </Box>,
       )
     }
-    const peerRunning = peers.filter(s => s.state === 'running').length
-    const peerGone = peers.filter(s => s.state === 'gone').length
+    // the sessions' fold line: each state's count in its color, in a fixed order
+    const peerCounts = (['running', 'idle', 'unknown', 'gone'] as const)
+      .map(st => ({ st, n: peers.filter(s => s.state === st).length }))
+      .filter(c => c.n > 0)
 
     // The state cell before a label: its dot, and its word where there is room.
     const stateCells = isCompact ? 2 : 2 + STATE_CELLS + 1
@@ -1255,7 +1305,9 @@ export const register: Register = on => {
       // a running clock ticks in its own Client region (mm:ss, 5 cells); an ended one is fixed text
       const isTicking = !isEnded(a) && !!Client
       const took = isTicking ? '00:00' : elapsedText(a, now)
-      const room = width - 4 - stateCells - cells(a.type) - 1 - (tag ? cells(tag) + 2 : 0) - cells(took) - 2 - 4
+      // the widest label the buttons may take: "종료? 3" while armed, or 재개 + 닫기 on a stopped one
+      const buttons = isEnded(a) ? (agentPhase(a.status) === 'stopped' ? cells(RESUME) + 1 : 0) + cells(CLOSE) : wordy ? 7 : 2
+      const room = width - 4 - stateCells - cells(a.type) - 1 - (tag ? cells(tag) + 2 : 0) - cells(took) - 2 - buttons
       const label = clipCells(a.summary || a.description, fit(Math.max(4, room)))
       return [
         row(
@@ -1279,17 +1331,24 @@ export const register: Register = on => {
             {isEnded(a) ? (
               <Box flexDirection="row" columnGap={1}>
                 {agentPhase(a.status) === 'stopped' && (
-                  <Button key={`resume-${a.id}`} plain dimColor label="↻" onPress={() => resumeAgent(a.id)} />
+                  <Button key={`resume-${a.id}`} plain dimColor label={RESUME} onPress={() => resumeAgent(a.id)} />
                 )}
-                <Button key={`hide-${a.id}`} plain dimColor label="✕" onPress={() => update($, hiddenAtom, ids => [...ids, a.id])} />
+                <Button key={`hide-${a.id}`} plain dimColor label={CLOSE} onPress={() => hideAgent(a)} />
               </Box>
             ) : (
-              <Button key={`stop-${a.id}`} plain dimColor={stopArmed !== a.id} label={stopArmed === a.id ? '종료?' : '■'} onPress={() => stopAgent(a.id)} />
+              <Button
+                key={`stop-${a.id}`}
+                plain
+                dimColor={stopArmed?.id !== a.id}
+                label={stopArmed?.id === a.id ? `${wordy ? '종료? ' : '■'}${Math.max(1, Math.ceil((STOP_ARM_MS - (now - stopArmed.at)) / 1000))}` : STOP}
+                onPress={() => stopAgent(a.id)}
+              />
             )}
           </Box>,
         ),
-        // Every unfinished agent keeps its step line, between calls too, so the band never jumps (room allowing).
-        !isEnded(a) && withSteps && (
+        // Every unfinished agent keeps its step line, between calls too, so the band never jumps (room allowing);
+        // the newest live one keeps it even when the others lose theirs.
+        stepFor(a) && (
           <Box key={`step-${a.id}`} paddingLeft={isCompact ? 6 : 14} width={width}>
             {feedRegion(els, e.requestId, `feed-step-${a.id}`, `step|${a.id}`, fit(Math.max(4, width - (isCompact ? 6 : 14))), stepLines(`step|${a.id}`, fit(Math.max(4, width - (isCompact ? 6 : 14)))))}
           </Box>
@@ -1309,6 +1368,7 @@ export const register: Register = on => {
             <Box flexShrink={1} minWidth={0} overflow="hidden">
               <Text wrap="truncate-end" bold={!state.isDone} dimColor={state.isDone}>{headLabel}</Text>
             </Box>
+            {sumAge > 0 && !isCompact && <Box flexShrink={0}><Text dimColor>{`· ${sumAge}턴 전 요약`}</Text></Box>}
           </Box>,
           <Box>{sessionTag && <Text dimColor>{sessionTag}</Text>}</Box>,
         )}
@@ -1324,16 +1384,34 @@ export const register: Register = on => {
           </Box>
         )}
         {rows.map(agentRows)}
+        {!isFolded && doneLine > 0 && (() => {
+          // Older finished agents, one line: their count, the newest one's result, and a close for them all.
+          const newest = [...oldDone].sort((x, y) => (y.endedAt ?? 0) - (x.endedAt ?? 0))[0]!
+          const hint = showDone
+            ? '▾'
+            : clipCells(`▸ ${newest.type} ${newest.summary || newest.description} · ${ago(now - (newest.endedAt ?? now))}`, fit(Math.max(4, width - 4 - stateCells - 8)))
+          return row(
+            'done-line',
+            <Box flexDirection="row" columnGap={1} flexShrink={1} minWidth={0}>
+              <Box flexShrink={0}><Text dimColor>  ⎿</Text></Box>
+              <Box flexShrink={0}><Text color={LOOK.done.color}>{LOOK.done.dot}</Text></Box>
+              <Button key="done" plain label={`${isCompact ? '' : '완료 '}${oldDone.length}`} onPress={() => update($, showDoneAtom, v => !v)} />
+              <Box flexShrink={1} minWidth={0} overflow="hidden"><Text wrap="truncate-end" dimColor>{hint}</Text></Box>
+            </Box>,
+            <Button key="hide-done" plain dimColor label={CLOSE} onPress={async () => {
+              await update($, hiddenAtom, ids => [...ids, ...oldDone.map(a => a.id).filter(id => !ids.includes(id))])
+              $.ui.toast(`완료 ${oldDone.length}개 닫음 · /mods-hud show 로 되돌리기`)
+            }} />,
+          )
+        })()}
         {peers.length > 0 && !isPane && (
           <Box key="sessions-line" flexDirection="row" width={width}>
             <Text dimColor>  </Text>
             <Button key="sessions" plain label={`${showSessions ? '▾' : '▸'} 오케스트레이션 ${peers.length}`} onPress={() => update($, showSessionsAtom, v => !v)} />
             <Text> </Text>
-            {peerRunning > 0 && <Text color={SESSION_LOOK.running.color}>{` 진행 중 ${peerRunning}`}</Text>}
-            {peers.length - peerRunning - peerGone > 0 && (
-              <Text color={SESSION_LOOK.idle.color}>{`${peerRunning > 0 ? ' ·' : ''} 대기 ${peers.length - peerRunning - peerGone}`}</Text>
-            )}
-            {peerGone > 0 && <Text dimColor>{`${peers.length > peerGone ? ' ·' : ''} 종료 ${peerGone}`}</Text>}
+            {peerCounts.map((c, i) => (
+              <Text key={c.st} color={SESSION_LOOK[c.st].color} dimColor={SESSION_LOOK[c.st].dim}>{`${i > 0 ? ' ·' : ''} ${SESSION_LOOK[c.st].word} ${c.n}`}</Text>
+            ))}
           </Box>
         )}
         {peerRows.map(peerRow)}

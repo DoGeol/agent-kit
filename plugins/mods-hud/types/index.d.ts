@@ -69,8 +69,10 @@ declare module 'claude-code' {
       showAgents: boolean
       /** Finished agents the person closed off the band. */
       hidden: string[]
-      /** The live agent whose stop button was pressed once and waits for the second press. */
-      stopArmed: string | null
+      /** The live agent whose stop button was pressed once and waits for the second press, and when. */
+      stopArmed: { id: string; at: number } | null
+      /** Finished agents older than a minute fold into one line until this is set. */
+      showDone: boolean
       /** Whether agents get Korean summaries (`/mods-hud agents on|off`). */
       agentSummaries: boolean
       spend: Spend

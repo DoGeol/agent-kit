@@ -566,14 +566,17 @@ test('a live agent stops on a second press; a stopped one resumes or closes; a f
   await $.session.start({ cwd: '/tmp/x', surface: 'desktop', isInteractive: true })
   await clock.advance(2000)
   const ui = await $.ui.mount({ plugin: 'mods-hud', surface: 'desktop', component: 'AbovePrompt', props: BAND })
-  expect((await ui.find({ key: 'agents-line' }))?.text.trim()).toBe('▸ 서브에이전트 2  진행 중 1 · 완료 1')
-  await ui.press({ key: 'agents' })
+  // two agents fit the band: rows straight away, no fold line; a wide band spells the buttons out
+  expect(await ui.find({ key: 'agents-line' })).toBeUndefined()
+  expect((await ui.find({ key: 'stop-a1' }))?.props.label).toBe('종료')
   await ui.press({ key: 'stop-a1' })
   expect(stops).toEqual([])
-  expect((await ui.find({ key: 'stop-a1' }))?.props.label).toBe('종료?')
-  // the arm lapses
-  await clock.advance(3000)
-  expect((await ui.find({ key: 'stop-a1' }))?.props.label).toBe('■')
+  expect((await ui.find({ key: 'stop-a1' }))?.props.label).toBe('종료? 3')
+  // the label counts down, then the arm lapses
+  await clock.advance(1000)
+  expect((await ui.find({ key: 'stop-a1' }))?.props.label).toBe('종료? 2')
+  await clock.advance(2000)
+  expect((await ui.find({ key: 'stop-a1' }))?.props.label).toBe('종료')
   await ui.press({ key: 'stop-a1' })
   await ui.press({ key: 'stop-a1' })
   expect(stops).toEqual(['a1'])
@@ -628,7 +631,7 @@ test('a SendMessage to another session makes a session row under its own fold li
   await clock.advance(30_000)
   const ui = await $.ui.mount({ plugin: 'mods-hud', surface: 'desktop', component: 'AbovePrompt', props: BAND })
   const fold = await ui.find({ key: 'sessions-line' })
-  expect(fold?.text.trim()).toBe('▸ 오케스트레이션 2  대기 2')
+  expect(fold?.text.trim()).toBe('▸ 오케스트레이션 2  확인 중 2')
   expect(await ui.find({ type: 'Text', text: /^worker-b$/ })).toBeUndefined()
   await ui.press({ key: 'sessions' })
   expect(await ui.find({ type: 'Text', text: /^worker-b$/ })).toBeDefined()
@@ -637,8 +640,8 @@ test('a SendMessage to another session makes a session row under its own fold li
   expect(await ui.find({ type: 'Text', text: /^zz$/ })).toBeUndefined()
   expect((await ui.find({ key: 'label-s-worker-b' }))?.text).toBe('로그인 버그를 고쳐줘')
   expect(await ui.find({ type: 'Text', text: /^↑ 30초 전$/ })).toBeDefined()
-  // its unknown dot is dim
-  expect((await ui.findAll({ type: 'Text', text: /^◇$/ })).every(t => t.props.dimColor === true)).toBe(true)
+  // an unknown row reads 확인 중 with a dim ? for its dot
+  expect((await ui.findAll({ type: 'Text', text: /^\?$/ })).every(t => t.props.dimColor === true)).toBe(true)
 })
 
 test('an incoming agent-message makes or updates a session row and gets a Korean line; a subagent hand-back none', async ($, on) => {
@@ -659,7 +662,7 @@ test('an incoming agent-message makes or updates a session row and gets a Korean
   const ran = await $.command.run({ command: 'mods-hud', args: 'usage', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 90 } } as never)
   expect(ran.text).toContain('오케스트레이션 요약 2회')
   const ui = await $.ui.mount({ plugin: 'mods-hud', surface: 'desktop', component: 'AbovePrompt', props: BAND })
-  expect((await ui.find({ key: 'sessions-line' }))?.text.trim()).toBe('▸ 오케스트레이션 2  대기 2')
+  expect((await ui.find({ key: 'sessions-line' }))?.text.trim()).toBe('▸ 오케스트레이션 2  확인 중 2')
   await ui.press({ key: 'sessions' })
   expect((await ui.find({ key: 'label-s-worker-b' }))?.text).toBe('빌드 통과 보고')
   expect(await ui.find({ key: 'label-s-a1' })).toBeUndefined()
@@ -687,15 +690,15 @@ test('ListAgents names each session running or idle; one it no longer lists has 
   expect((await ui.find({ type: 'Text', text: /^◇$/ }))?.props.color).toBe('subtle')
   listing = new Error('no such tool')
   await clock.advance(10_000)
-  expect((await ui.find({ key: 'sessions-line' }))?.text.trim()).toBe('▾ 오케스트레이션 2  대기 2')
-  expect((await ui.findAll({ type: 'Text', text: /^◇$/ })).map(t => t.props.dimColor)).toEqual([true, true])
+  expect((await ui.find({ key: 'sessions-line' }))?.text.trim()).toBe('▾ 오케스트레이션 2  확인 중 2')
+  expect((await ui.findAll({ type: 'Text', text: /^\?$/ })).map(t => t.props.dimColor)).toEqual([true, true])
   // rows, when the answer has them, count too
   listing = { sections: [{ kind: 'sessions', total: 2, rows: [{ name: 'worker-b', status: 'idle' }, { name: 'worker-c', status: 'running' }] }] }
   await clock.advance(10_000)
   expect((await ui.find({ key: 'sessions-line' }))?.text.trim()).toBe('▾ 오케스트레이션 2  진행 중 1 · 대기 1')
   listing = { deny: 'not allowed' }
   await clock.advance(10_000)
-  expect((await ui.find({ key: 'sessions-line' }))?.text.trim()).toBe('▾ 오케스트레이션 2  대기 2')
+  expect((await ui.find({ key: 'sessions-line' }))?.text.trim()).toBe('▾ 오케스트레이션 2  확인 중 2')
   // a session the list no longer has (archived, closed) has ended: 종료, no ↻, ✕ stays
   listing = '[running]  ·  worker-b [a1b2]  ·  /a  ·  started 2h ago'
   await clock.advance(10_000)
@@ -732,7 +735,7 @@ test('↻ sends the session a one-press nudge and logs it; ✕ hides the row; a 
   expect(await ui.find({ key: 'stop-s-worker-b' })).toBeUndefined()
   await ui.press({ key: 'hide-s-worker-c' })
   expect(await ui.find({ key: 'label-s-worker-c' })).toBeUndefined()
-  expect((await ui.find({ key: 'sessions-line' }))?.text.trim()).toBe('▾ 오케스트레이션 1  대기 1')
+  expect((await ui.find({ key: 'sessions-line' }))?.text.trim()).toBe('▾ 오케스트레이션 1  확인 중 1')
 })
 
 test('long session names and messages stay one line on both surfaces', async ($, on) => {
@@ -765,12 +768,13 @@ test('long session names and messages stay one line on both surfaces', async ($,
 
 test('the fold line colors each count by its state', async ($, on) => {
   const clock = mock.clock(on, { now: NOW })
-  const w: World = { list: [{ id: 'a1', type: 'Explore', description: 'x', status: 'running' }, { id: 'a2', type: 'Plan', description: 'y', status: 'completed' }], forks: [] }
+  // four agents: more than MAX_AGENTS, so the group folds into its counts line
+  const w: World = { list: [{ id: 'a1', type: 'Explore', description: 'x', status: 'running' }, { id: 'a2', type: 'Plan', description: 'y', status: 'completed' }, { id: 'a3', type: 'Explore', description: 'z', status: 'running' }, { id: 'a4', type: 'Plan', description: 'w', status: 'running' }], forks: [] }
   world(on, w)
   await $.session.start({ cwd: '/tmp/x', surface: 'desktop', isInteractive: true })
   await clock.advance(2000)
   const ui = await $.ui.mount({ plugin: 'mods-hud', surface: 'desktop', component: 'AbovePrompt', props: BAND })
-  expect((await ui.find({ type: 'Text', text: /^ 진행 중 1$/ }))?.props.color).toBe('warning')
+  expect((await ui.find({ type: 'Text', text: /^ 진행 중 3$/ }))?.props.color).toBe('warning')
   expect((await ui.find({ type: 'Text', text: /^ · 완료 1$/ }))?.props.color).toBe('success')
 })
 
@@ -833,7 +837,7 @@ test('a cross-session message is keyed by its session id, shown by its name, and
   await $.tool.call({ tool: 'SendMessage', tool_use_id: 's1', to: 'local_ad8a', message: '이어서 진행해줘' } as never)
   await clock.settle()
   const ui = await $.ui.mount({ plugin: 'mods-hud', surface: 'desktop', component: 'AbovePrompt', props: BAND })
-  expect((await ui.find({ key: 'sessions-line' }))?.text.trim()).toBe('▸ 오케스트레이션 1  대기 1')
+  expect((await ui.find({ key: 'sessions-line' }))?.text.trim()).toBe('▸ 오케스트레이션 1  확인 중 1')
   await ui.press({ key: 'sessions' })
   expect(await ui.find({ type: 'Text', text: /^테스트 상대$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /local_ad8a/ })).toBeUndefined()
@@ -914,9 +918,52 @@ test('an agent the engine listed and then dropped reads 완료, and the idle ses
   w.failList = true
   await clock.advance(2000)
   ui = await $.ui.mount({ plugin: 'mods-hud', surface: 'desktop', component: 'AbovePrompt', props: { ...BAND, isWorking: false } })
-  // two agents fold into one line: b1 still live, a1 done
-  expect((await ui.find({ key: 'agents-line' }))?.text.trim()).toBe('▸ 서브에이전트 2  진행 중 1 · 완료 1')
-  expect(await ui.find({ type: 'Text', text: /^진행 중$/ })).toBeDefined()
+  // two agents, both as rows: b1 still live, a1 done
+  expect(await ui.find({ key: 'agent-b1' })).toBeDefined()
+  expect(await ui.find({ key: 'agent-a1' })).toBeDefined()
+  // b1's row, and the session line that a live agent keeps 진행 중
+  expect((await ui.findAll({ type: 'Text', text: /^진행 중$/ })).length).toBe(2)
+})
+
+test('finished agents older than a minute fold into one 완료 line; its 닫기 closes them all; /mods-hud show brings them back; a narrow band keeps the marks', async ($, on) => {
+  const clock = mock.clock(on, { now: NOW })
+  const w: World = { list: [{ id: 'a1', type: 'Explore', description: '작업 a1', status: 'running' }, { id: 'a2', type: 'Plan', description: '작업 a2', status: 'running' }, { id: 'a3', type: 'Explore', description: '작업 a3', status: 'running' }], forks: [] }
+  world(on, w)
+  await $.session.start({ cwd: '/tmp/x', surface: 'desktop', isInteractive: true })
+  await clock.advance(2000)
+  w.list[1]!.status = 'completed'
+  w.list[2]!.status = 'completed'
+  await clock.advance(2000)
+  let ui = await $.ui.mount({ plugin: 'mods-hud', surface: 'desktop', component: 'AbovePrompt', props: BAND })
+  // just finished: still their own rows, no fold line for three agents
+  expect(await ui.find({ key: 'agents-line' })).toBeUndefined()
+  expect(await ui.find({ key: 'agent-a2' })).toBeDefined()
+  expect(await ui.find({ key: 'done' })).toBeUndefined()
+  await ui.unmount()
+  await clock.advance(61_000)
+  ui = await $.ui.mount({ plugin: 'mods-hud', surface: 'desktop', component: 'AbovePrompt', props: BAND })
+  // a minute on: one 완료 line with the count, the live row stays, its step line too
+  expect(await ui.find({ key: 'agent-a2' })).toBeUndefined()
+  expect((await ui.find({ key: 'done' }))?.props.label).toBe('완료 2')
+  expect(await ui.find({ key: 'agent-a1' })).toBeDefined()
+  expect((await ui.find({ key: 'hide-done' }))?.props.label).toBe('닫기')
+  await ui.press({ key: 'done' })
+  expect(await ui.find({ key: 'agent-a2' })).toBeDefined()
+  await ui.press({ key: 'done' })
+  await ui.press({ key: 'hide-done' })
+  expect(await ui.find({ key: 'done' })).toBeUndefined()
+  expect(await ui.find({ key: 'agent-a1' })).toBeDefined()
+  await ui.unmount()
+  // /mods-hud show undoes every close
+  const ran = await $.command.run({ command: 'mods-hud', args: 'show', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 90 } } as never)
+  expect(ran.text).toBe('닫았던 행 2개를 다시 보임.')
+  ui = await $.ui.mount({ plugin: 'mods-hud', surface: 'desktop', component: 'AbovePrompt', props: BAND })
+  expect(await ui.find({ key: 'agent-a2' })).toBeDefined()
+  await ui.unmount()
+  // a narrow band keeps the one-cell marks
+  ui = await $.ui.mount({ plugin: 'mods-hud', surface: 'desktop', component: 'AbovePrompt', props: { ...BAND, bodyColumns: 70 } })
+  expect((await ui.find({ key: 'stop-a1' }))?.props.label).toBe('■')
+  expect((await ui.find({ key: 'hide-a2' }))?.props.label).toBe('✕')
 })
 
 test('a background agent the engine never lists ends after 30 silent minutes while the session is idle; a call keeps it live', async ($, on) => {
@@ -953,10 +1000,11 @@ test('a call after an agent ended starts its time over: the row stays until 10 m
   await $.tool.call({ tool: 'Grep', tool_use_id: 't1', agentId: 'a1', pattern: 'x' } as never)
   await clock.advance(2000)
   await clock.advance(2 * 60_000)
-  // 11 minutes after the first end, 2 after the second: not aged off yet
+  // 11 minutes after the first end, 2 after the second: not aged off yet (finished over a minute ago: in the 완료 line)
   const ui = await $.ui.mount({ plugin: 'mods-hud', surface: 'desktop', component: 'AbovePrompt', props: BAND })
+  expect((await ui.find({ key: 'done' }))?.props.label).toBe('완료 1')
+  await ui.press({ key: 'done' })
   expect(await ui.find({ key: 'agent-a1' })).toBeDefined()
-  expect((await ui.find({ type: 'Text', text: /^완료$/ }))).toBeDefined()
 })
 
 test('ListAgents answering with no sessions ends every row; an ended row ages off after 10 minutes; new traffic brings it back', async ($, on) => {
@@ -980,7 +1028,7 @@ test('ListAgents answering with no sessions ends every row; an ended row ages of
   // a message from it means it lives again: back as 대기 until the list places it
   await $.prompt.submit({ text: peerMsg('worker-b', '다시 시작'), origin: { kind: 'peer' }, wait: false })
   await clock.settle()
-  expect((await ui.find({ key: 'sessions-line' }))?.text.trim()).toBe('▸ 오케스트레이션 1  대기 1')
+  expect((await ui.find({ key: 'sessions-line' }))?.text.trim()).toBe('▸ 오케스트레이션 1  확인 중 1')
 })
 
 // Issue 009: drifted lines are dropped, so the last good one stays.
