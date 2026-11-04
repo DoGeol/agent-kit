@@ -1,7 +1,10 @@
 import { atom, read, update } from 'claude-code'
-import type { CoreEngineInterface, Register, SessionUsage, StateDollar } from 'claude-code'
+import type { CoreEngineInterface, Register, StateDollar } from 'claude-code'
 
 import type { AgentRow, Limit, Meter, Phase, SessionRow, Spend, Summary } from '../types'
+import { agentMessages, agentPhase, ago, branchLabel, cells, clip, clipCells, describeCall, DESKTOP_WIDE, elapsedText, oneLine, shortTool, summaryLine } from './text'
+import { effortFor, fitUsage, FLASH_MS, FOOTER_RESERVED, FOOTER_SLOT, isFresh, modelTag, pctLook, prettyModel, resetAt, toLimits, usageLine, usageParts, usageTip } from './meter'
+import { hasListing, lastOf, listedStates, SESSION_LOOK, sessionName } from './peers'
 
 const summary = atom({ plugin: 'mods-hud', key: 'summary' } as const, null)
 const prompt = atom({ plugin: 'mods-hud', key: 'prompt' } as const, null)
@@ -10,7 +13,9 @@ const meter = atom({ plugin: 'mods-hud', key: 'meter' } as const, null)
 const agents = atom({ plugin: 'mods-hud', key: 'agents' } as const, [])
 const showAgentsAtom = atom({ plugin: 'mods-hud', key: 'showAgents' } as const, false)
 const hiddenAtom = atom({ plugin: 'mods-hud', key: 'hidden' } as const, [] as string[])
-const stopArmedAtom = atom({ plugin: 'mods-hud', key: 'stopArmed' } as const, null as string | null)
+const stopArmedAtom = atom({ plugin: 'mods-hud', key: 'stopArmed' } as const, null as { id: string; at: number } | null)
+// Finished agents older than RECENT_DONE_MS fold into one line until this is pressed.
+const showDoneAtom = atom({ plugin: 'mods-hud', key: 'showDone' } as const, false)
 const agentSummariesAtom = atom({ plugin: 'mods-hud', key: 'agentSummaries' } as const, true)
 const spendAtom = atom({ plugin: 'mods-hud', key: 'spend' } as const, {
   turn: { calls: 0, input: 0, output: 0 },
@@ -50,13 +55,17 @@ const AUTOMATED = new Set([
 const LIVE = new Set(['pending', 'running', 'waiting'])
 const PANE = 'session-monitor'
 const TICK_MS = 2000
-const FLASH_MS = 4000
 const STALE_MS = 5 * 60_000
 // After /model or /effort: look every FAST_MS while its picker may be open.
 const FAST_MS = 150
 const FAST_FOR_MS = 15_000
 const MAX_AGENTS = 3
 const KEEP_DONE_MS = 10 * 60_000
+// A finished agent keeps its own row this long; after that the finished ones fold into one 완료 line.
+const RECENT_DONE_MS = 60_000
+// A live agent the engine never listed (a background agent) and that made no call for this long while the
+// session itself is idle has ended without its turn.complete reaching us (issue 019): it reads as done.
+const AGENT_SILENT_MS = 30 * 60_000
 
 const ASK =
   '아래 정보로 이 세션에서 방금 끝난 턴을 한국어 한 줄, 35자 이내로 요약해. ' +
@@ -78,186 +87,22 @@ const SESSION_ASK =
   "'…완료', '…3개 확인', '…요청함'처럼 명사형으로 끝내고, '입니다'·'했습니다' 같은 문장체는 쓰지 마. " +
   '마크다운, 따옴표, 머리말, 괄호 설명 금지. 주어지지 않은 정보는 언급하지 마.'
 const SESSION_POLL_MS = 10_000
+// A session that has had no turn, no agent call and no message for this long is idle: the model, settings and
+// agent list are then read every IDLE_TICK_MS instead of every tick, and the branch every IDLE_BRANCH_MS.
+const IDLE_AFTER_MS = 10 * 60_000
+const IDLE_TICK_MS = 30_000
+const IDLE_BRANCH_MS = 60_000
+// ListAgents is a tool call: ask it every 10 s while messages flow, then every minute, then every 5 minutes.
+const SESSION_LIST_EVERY = (sinceTraffic: number) => (sinceTraffic < 5 * 60_000 ? SESSION_POLL_MS : sinceTraffic < 30 * 60_000 ? 60_000 : 5 * 60_000)
 const SUMMARY_MAX = 10
 // a running agent's line is checked again at most this often, and only after it did something
 const SUMMARY_GAP_MS = 120_000
+// and only once the agent made this many calls since its last line: a slow agent gets fewer check-ins
+const SUMMARY_MIN_CALLS = 3
 const STOP_ARM_MS = 3000
-
-// claude-opus-5-5[1m] -> Opus 5.5
-export const prettyModel = (id: string) => {
-  const m = /claude-([a-z]+)-(\d+)(?:-(\d+))?/.exec(id)
-  if (!m) return id
-  const name = m[1]!.charAt(0).toUpperCase() + m[1]!.slice(1)
-  return m[3] ? `${name} ${m[2]}.${m[3]}` : `${name} ${m[2]}`
-}
-
-// five_hour -> 5시간, seven_day -> 주간, seven_day_fable -> Fable 주간
-export const limitLabel = (kind: string) => {
-  if (kind === 'five_hour') return '5시간'
-  if (kind === 'seven_day') return '주간'
-  if (kind === 'spend_limit') return '지출'
-  const model = /^seven_day_(\w+)$/.exec(kind)?.[1]
-  return model ? `${model.charAt(0).toUpperCase()}${model.slice(1)} 주간` : kind
-}
-
-const DAYS = ['일', '월', '화', '수', '목', '금', '토']
-const two = (n: number) => String(n).padStart(2, '0')
-
-// Today: "15:30"; another day: "10/14(화) 12:00".
-export const resetAt = (iso: string | undefined, now: number) => {
-  if (!iso) return ''
-  const at = new Date(iso)
-  const time = `${two(at.getHours())}:${two(at.getMinutes())}`
-  return at.toDateString() === new Date(now).toDateString()
-    ? time
-    : `${at.getMonth() + 1}/${at.getDate()}(${DAYS[at.getDay()]}) ${time}`
-}
-
-const usedColor = (p: number) => (p >= 90 ? 'error' : p >= 70 ? 'warning' : undefined)
-
-// "5h 4%(18:10) · w 78%(10/14 12:00) · ctx 38%": the desktop bar's short plain-text usage.
-// "5h 4%(18:10) · w 78%(10/14 12:00) · ctx 38%": the short usage the desktop footer shows.
-const SHORT: Record<string, string> = { five_hour: '5h', seven_day: 'w', spend_limit: '$' }
-
-export const usageParts = (m: Meter, now: number) => [
-  ...m.limits.map(l => {
-    const at = l.resetsAt ? new Date(l.resetsAt) : null
-    const time = at ? `${two(at.getHours())}:${two(at.getMinutes())}` : ''
-    const reset = !at ? '' : at.toDateString() === new Date(now).toDateString() ? time : `${at.getMonth() + 1}/${at.getDate()} ${time}`
-    return { label: SHORT[l.kind] ?? `w-${l.kind.replace(/^seven_day_/, '')}`, percent: l.percent, reset }
-  }),
-  ...(m.context === undefined ? [] : [{ label: 'ctx', percent: m.context, reset: '' }]),
-]
-
-type UsagePart = { label: string; percent: number; reset: string }
-
-export const partsText = (parts: UsagePart[]) =>
-  parts.map(p => `${p.label} ${Math.round(p.percent)}%${p.reset ? `(${p.reset})` : ''}`).join(' · ')
-
-// Fit a width: every reset, then today's only ("18:10"), then percentages only, then fewer windows.
-export const fitUsage = (full: UsagePart[], room: number) => {
-  const bare = full.map(p => ({ ...p, reset: '' }))
-  // still too wide: ctx goes, then the weekly window; the 5-hour one always stays
-  const tiers = [full, full.map(p => ({ ...p, reset: p.reset.includes(' ') ? '' : p.reset })), bare, bare.filter(p => p.label !== 'ctx'), bare.slice(0, 1)]
-  return tiers.find(t => cells(partsText(t)) <= room) ?? tiers[tiers.length - 1]!
-}
-
-export const usageLine = (m: Meter, now: number) => partsText(usageParts(m, now)) || undefined
-
-// The tooltip: every window with its reset spelled out and how long until it.
-export const usageTip = (m: Meter, now: number) => {
-  const lines = m.limits.map(l => {
-    const at = l.resetsAt ? new Date(l.resetsAt) : null
-    const when = at ? `${resetAt(l.resetsAt, now)} 리셋 (${untilText(at.getTime() - now)} 후)` : '리셋 시각 없음'
-    return `${limitLabel(l.kind)} 한도 ${Math.round(l.percent)}% · ${when}`
-  })
-  if (m.context !== undefined) lines.push(`컨텍스트 ${Math.round(m.context)}%`)
-  lines.push(`모델 ${prettyModel(m.model)}${m.effort ? ` · effort ${m.effort}` : ''}`)
-  return lines.join('\n')
-}
-
-// "01:04", or "1:02:05" once an hour is reached: how long an agent has run, or took once it ended.
-export const durText = (ms: number) => {
-  const sec = Math.max(0, Math.floor(ms / 1000))
-  const h = Math.floor(sec / 3600)
-  const ms_ = `${two(Math.floor((sec % 3600) / 60))}:${two(sec % 60)}`
-  return h > 0 ? `${h}:${ms_}` : ms_
-}
-
-// Running: when it started ("16:42~"), still, so nothing redraws every second (that made the app blink and drop clicks);
-// ended: how long it took ("03:12").
-export const elapsedText = (a: { startedAt: number; endedAt?: number; status: string }, now: number) => {
-  const phase = agentPhase(a.status)
-  if (phase !== 'done' && phase !== 'stopped') return `${hhmm(a.startedAt)}~`
-  return durText((a.endedAt ?? now) - a.startedAt)
-}
-
-const untilText = (ms: number) => {
-  const mins = Math.max(0, Math.round(ms / 60000))
-  const d = Math.floor(mins / 1440)
-  const h = Math.floor((mins % 1440) / 60)
-  const m = mins % 60
-  return d > 0 ? `${d}일 ${h}시간` : h > 0 ? `${h}시간 ${m}분` : `${m}분`
-}
-
-// Cells the desktop footer keeps for its own controls (attach, mic, mode, model, effort, spinner).
-const FOOTER_RESERVED = 55
-// The desktop gives the mode labels a fixed slot whatever the window's width: about 30 cells, then "…".
-const FOOTER_SLOT = 30
-
-// Terminal cells a string takes: Hangul, CJK and other wide scripts take two.
-export const cells = (text: string) =>
-  [...text].reduce((n, ch) => n + (/[\u1100-\u115f\u2e80-\ua4cf\uac00-\ud7a3\uf900-\ufaff\ufe30-\ufe4f\uff00-\uff60\uffe0-\uffe6]/.test(ch) ? 2 : 1), 0)
-
-// Cut to n cells with …: every surface then draws one line, a Button's label included.
-export const clipCells = (t: string, n: number) => {
-  if (cells(t) <= n) return t
-  let out = ''
-  for (const ch of t) {
-    if (cells(out + ch) > n - 1) break
-    out += ch
-  }
-  return `${out}…`
-}
-
-const clip = (t: string, n: number) => (t.length > n ? `${t.slice(0, n - 1)}…` : t)
-const base = (path: unknown) => (typeof path === 'string' ? path.split('/').pop() ?? path : '')
-
-// What a subagent's tool call is doing, in a few words: "Grep "auth"", "Read login.ts", "Bash ls -la".
-export const describeCall = (tool: string, input: Record<string, unknown>) => {
-  const name = shortTool(tool)
-  const str = (k: string) => (typeof input[k] === 'string' ? (input[k] as string).replace(/\s+/g, ' ').trim() : '')
-  const detail =
-    name === 'Bash' ? str('description') || str('command')
-    : ['Read', 'Edit', 'Write', 'NotebookEdit', 'MultiEdit'].includes(name) ? base(input.file_path ?? input.notebook_path)
-    : name === 'Grep' ? (str('pattern') ? `"${str('pattern')}"` : '')
-    : name === 'Glob' ? str('pattern')
-    : name === 'WebFetch' ? str('url').replace(/^https?:\/\//, '').split('/')[0] ?? ''
-    : name === 'WebSearch' ? str('query')
-    : name === 'Agent' ? str('description')
-    : ''
-  return clip(detail ? `${name} ${detail}` : name, 48)
-}
-
-const shortTool = (tool: string) => tool.replace(/^mcp__[^_]+(?:_[^_]+)*?__/, '')
-
-// /effort and /model save the level per model (modelSettings.<id>.effortLevel).
-export const effortFor = (settings: unknown, model: string | null | undefined) => {
-  const s = (settings ?? {}) as { effortLevel?: unknown; modelSettings?: Record<string, { effortLevel?: unknown }> }
-  const per = s.modelSettings ?? {}
-  const key = model && (per[model] ? model : Object.keys(per).find(k => prettyModel(k) === prettyModel(model)))
-  // The top-level level is not what a model without its own entry runs on (a model may lower it), so it is not guessed.
-  const level = key ? per[key]?.effortLevel : undefined
-  return typeof level === 'string' ? level : undefined
-}
-
-// "Opus 5.5(high)": what a turn or an agent runs on.
-export const modelTag = (model: string | undefined, effort: string | undefined) =>
-  model ? `${prettyModel(model)}${effort ? `(${effort})` : ''}` : ''
-
-// "⎇ main" or "⎇ feat (워크트리)" from `git rev-parse --abbrev-ref HEAD --git-dir --git-common-dir`:
-// a linked worktree has its own git dir apart from the common one. Empty outside a repository.
-export const branchLabel = (out: string) => {
-  const [head, gitDir, commonDir] = out.trim().split('\n')
-  if (!head || !gitDir || !commonDir) return ''
-  return `⎇ ${head}${gitDir !== commonDir ? ' (워크트리)' : ''}`
-}
 
 // The widest state word (진행 중): the state sits left in a cell this wide, so what follows lines up.
 const STATE_CELLS = 7
-
-const isFresh = (at: number | undefined, now: number) => at !== undefined && now - at < FLASH_MS
-
-// A usage figure: blue for a moment after it moved, gray while stale, else colored by how much is used.
-export const pctLook = (m: Meter, p: number, now: number) =>
-  isFresh(m.flash?.usage, now)
-    ? { bold: true, color: 'suggestion' as const }
-    : m.isStale
-      ? { dimColor: true }
-      : { bold: p >= 70, color: usedColor(p) ?? 'success' }
-
-const toLimits = (u: Pick<SessionUsage, 'rateLimits'>): Limit[] =>
-  u.rateLimits.map(r => ({ kind: r.kind, percent: r.percentUsed, resetsAt: r.resetsAt }))
 
 // The four states the monitor speaks: 대기 gray, 진행 중 yellow, 완료 green (its row dims), 중지 red.
 const LOOK: Record<Phase, { word: string; dot: string; color: string; isDone: boolean }> = {
@@ -265,86 +110,6 @@ const LOOK: Record<Phase, { word: string; dot: string; color: string; isDone: bo
   running: { word: '진행 중', dot: '●', color: 'warning', isDone: false },
   done: { word: '완료', dot: '✓', color: 'success', isDone: true },
   stopped: { word: '중지', dot: '✗', color: 'error', isDone: false },
-}
-
-export const agentPhase = (status: string): Phase =>
-  status === 'pending' || status === 'running'
-    ? 'running'
-    : status === 'completed'
-      ? 'done'
-      : status === 'failed' || status === 'killed'
-        ? 'stopped'
-        : 'idle'
-
-// The fork's one line, cleaned of the decorations the model adds anyway.
-export const oneLine = (text: string) =>
-  (text.split('\n').map(l => l.trim()).find(Boolean) ?? '')
-    .replace(/^[-*•]\s*/, '')
-    .replace(/\*\*/g, '')
-    .replace(/^["'“”‘’]+|["'“”‘’]+$/g, '')
-    .trim()
-
-// A Haiku line that drifted from the asks (issue 009): an instruction echoed, an apology, a sentence ending,
-// or running wording on something finished. Such a line is dropped and the last one stays.
-export const summaryLine = (text: string, isFinal = false) => {
-  const line = oneLine(text)
-  const isBad =
-    /이내로|한 줄|출력해|끝내|금지|머리말|형태로:|^…/.test(line) ||
-    /정보가 (부족|없)|죄송/.test(line) ||
-    /(니다|어요|해요)[.!]?$/.test(line) ||
-    (isFinal && /(중|하는 중)[.…]*$/.test(line))
-  return isBad ? '' : line
-}
-
-// "<agent-message from="x">…</agent-message>": another session's (or a subagent's) message inside a prompt.
-// Messages from elsewhere inside a prompt: a subagent's `<agent-message from="id">`, or another session's
-// `<cross-session-message from-session="local_…" from-name="title">` (keyed by its session id, shown by its title).
-export const agentMessages = (text: string) =>
-  [...text.matchAll(/<(agent-message|cross-session-message)\b([^>]*)>([\s\S]*?)<\/\1>/g)].flatMap(m => {
-    const attr = (k: string) => new RegExp(`\\b${k}="([^"]+)"`).exec(m[2]!)?.[1]
-    const from = attr('from-session') ?? attr('from')
-    return from ? [{ from, title: attr('from-name'), body: m[3]!.trim() }] : []
-  })
-
-// SendMessage may spell a listed name with its " [ref]".
-export const sessionName = (to: string) => to.replace(/\s*\[[^\]]*\]$/, '').trim()
-
-// ListAgents' answer, as rows when it has them, else its "[idle]  ·  NAME  ·  /path  ·  started 2h ago" lines.
-export const listedStates = (r: unknown) => {
-  const x = (r ?? {}) as { result?: { listing?: unknown; sections?: { rows?: { name?: string; status?: string }[] }[] }; text?: unknown }
-  const res = typeof x.result === 'object' && x.result ? x.result : {}
-  const out = new Map<string, SessionRow['state']>()
-  const word = (s: string | undefined): SessionRow['state'] => (s === 'running' ? 'running' : s === 'idle' ? 'idle' : 'unknown')
-  for (const sec of Array.isArray(res.sections) ? res.sections : []) for (const row of sec.rows ?? []) if (row.name) out.set(sessionName(row.name), word(row.status))
-  const listing = typeof res.listing === 'string' ? res.listing : typeof x.text === 'string' ? x.text : ''
-  for (const line of listing.split('\n')) {
-    const m = /^\s*\[(\w+)\]\s*·\s*(.+?)\s*(?:·|$)/.exec(line)
-    if (m && !out.has(sessionName(m[2]!))) out.set(sessionName(m[2]!), word(m[1]))
-  }
-  return out
-}
-
-const hhmm = (at: number) => `${two(new Date(at).getHours())}:${two(new Date(at).getMinutes())}`
-
-// "30초 전", "2분 전", "3시간 전", "1일 전"
-export const ago = (ms: number) => {
-  const s = Math.max(0, Math.floor(ms / 1000))
-  return s < 60 ? `${s}초 전` : s < 3600 ? `${Math.floor(s / 60)}분 전` : s < 86400 ? `${Math.floor(s / 3600)}시간 전` : `${Math.floor(s / 86400)}일 전`
-}
-
-// A session's newest message either way: its direction arrow and when.
-const lastOf = (s: SessionRow) => {
-  const out = s.lastSent?.at ?? -1
-  const inn = s.lastReceived?.at ?? -1
-  return out >= inn ? (s.lastSent ? { arrow: '↑', ...s.lastSent } : undefined) : { arrow: '↓', ...s.lastReceived! }
-}
-
-// ◆ running, ◇ idle, ◇ dim when ListAgents never placed it; 대기 covers both of the last.
-const SESSION_LOOK: Record<SessionRow['state'], { dot: string; color?: string; dim: boolean; word: string }> = {
-  running: { dot: '◆', color: 'warning', dim: false, word: '진행 중' },
-  idle: { dot: '◇', color: 'subtle', dim: false, word: '대기' },
-  unknown: { dot: '◇', dim: true, word: '대기' },
-  gone: { dot: '■', dim: true, word: '종료' },
 }
 
 // A line of a feed region (hooks/feed.tsx): an optional colored mark, then text cut to the region.
@@ -376,21 +141,26 @@ export const register: Register = on => {
   // Every subagent this load has heard of, kept live from its spawn, its tool calls and its end.
   const tracked = new Map<string, AgentRow>()
   const dropped = new Set<string>()
+  // Agents the engine's list has named at least once: one of these that the list later lacks has ended (issue 019).
+  const listedOnce = new Set<string>()
+  // When each agent last did something (spawn, a call), for the silence rule on never-listed agents.
+  const lastCallAt = new Map<string, number>()
   // An agent's step line, kept out of $.state (it changes on every call) and drawn in a feed region (issue 018).
-  // The topic is `step|<agent>`; `columns` is the region's width, the desktop's Hangul fit applied.
-  const stepLines = (topic: string, columns: number): FeedLine[] => {
+  // The topic is `step|<agent>`; `columns` is the region's width and `wide` its surface's Hangul width.
+  const stepLines = (topic: string, columns: number, wide: number): FeedLine[] => {
     const t = tracked.get(topic.split('|')[1] ?? '')
-    return [{ dim: true, text: clipCells(`→ ${t?.activity || '…'}`, Math.max(4, columns - 1)) }]
+    return [{ dim: true, text: clipCells(`→ ${t?.activity || '…'}`, Math.max(4, columns - 1), wide) }]
   }
   // What each feed instance (`<requestId>|<key>`) was last handed, so an answer goes only when its lines moved.
   const feedSent = new Map<string, string>()
   // A feed region where the surface has one, plain rows elsewhere; its first lines come with the drawing.
-  const feedRegion = (els: ReturnType<CoreEngineInterface['ui']['resolve']>, requestId: string, key: string, topic: string, columns: number, lines: FeedLine[]) => {
+  const feedRegion = (els: ReturnType<CoreEngineInterface['ui']['resolve']>, requestId: string, key: string, topic: string, columns: number, wide: number) => {
+    const lines = stepLines(topic, columns, wide)
     feedSent.set(`${requestId}|${key}`, JSON.stringify(lines))
     const { Box, Text } = els
     if ('Client' in els && els.Client) {
       const Client = els.Client
-      return <Client key={key} module="./feed.tsx" props={{ topic, columns, lines }} />
+      return <Client key={key} module="./feed.tsx" props={{ topic, columns, wide, lines }} />
     }
     return (
       <Box key={key} flexDirection="column">
@@ -416,9 +186,16 @@ export const register: Register = on => {
   // Set in session.start: logs a message to or from another session, and whether an id is one of our subagents.
   let recordSession: ((name: string, dir: 'out' | 'in', text: string, title?: string) => Promise<void>) | null = null
   let isSubagent: ((id: string) => Promise<boolean>) | null = null
+  // When a message last went to or came from another session: ListAgents is asked less often as this ages.
+  let lastTrafficAt = 0
+  // When the session last did anything (a turn, a call, a message): the polls slow down once this is old.
+  let lastActivityAt = 0
+  // Set in session.start: marks activity and looks right away, so a session waking from idle is read at once.
+  let wake: (() => Promise<void>) | null = null
   const sessionBusy = new Set<string>()
 
   on('session.start', async ($, e, next) => {
+    lastActivityAt = await $.clock.now()
     // The line comes from Haiku over the turn's ask, its recent calls and the answer's head: a few thousand tokens,
     // where a fork re-sent the whole conversation on the main model every turn.
     refresh = async answer => {
@@ -473,6 +250,9 @@ export const register: Register = on => {
         }
         // ponytail: the newest 200 ids; an older one the engine still lists would come back once
         await update($, droppedAtom, () => [...dropped].slice(-200))
+        // a row that aged off needs no hiding any more: keep the hidden list from growing for good
+        const gone = new Set(aged.map(t => t.id))
+        await update($, hiddenAtom, ids => (ids.some(id => gone.has(id)) ? ids.filter(id => !gone.has(id)) : ids))
       }
       const rows = [...tracked.values()]
         .sort((x, y) => y.startedAt - x.startedAt)
@@ -551,11 +331,15 @@ export const register: Register = on => {
 
     recordSession = async (name, dir, text, title) => {
       const at = await $.clock.now()
+      lastTrafficAt = at
+      lastActivityAt = at
       const line = clip(oneLine(text), 200)
       await update($, sessionsAtom, rows => {
         const cur = rows.find(s => s.name === name) ?? { name, state: 'unknown' as const }
         const row: SessionRow = {
           ...cur,
+          // traffic with a row that read 종료 means it lives again: the next poll places it (issue 019)
+          ...(cur.state === 'gone' ? { state: 'unknown' as const, endedAt: undefined } : {}),
           ...(title ? { title } : {}),
           ...(dir === 'out' ? { lastSent: { at, text: line } } : { lastReceived: { at, text: line }, summary: undefined }),
         }
@@ -568,36 +352,66 @@ export const register: Register = on => {
 
     // ListAgents is the word on whether a session works or waits; unavailable, every row reads unknown.
     let isListing = false
+    let lastListAt = 0
     const pollSessions = async () => {
       if (isListing || (await read($, sessionsAtom)).length === 0) return
+      // back off while nothing is said: the tick stays, the call waits for its interval
+      const now0 = await $.clock.now()
+      if (now0 - lastListAt < SESSION_LIST_EVERY(now0 - lastTrafficAt)) return
+      lastListAt = now0
       isListing = true
       try {
         const r = await $.tool.call({ tool: 'ListAgents' }).catch(() => null)
-        const listed = r && !('deny' in r && r.deny) && !('isError' in r && r.isError) ? listedStates(r) : new Map<string, SessionRow['state']>()
+        const ok = !!r && !('deny' in r && r.deny) && !('isError' in r && r.isError)
+        const listed = ok ? listedStates(r) : new Map<string, SessionRow['state']>()
         lastDraw['list-agents'] = r === null ? 'threw' : 'deny' in r && r.deny ? `deny: ${r.deny}` : 'isError' in r && r.isError ? 'error' : `ok ${listed.size}개`
+        const now = await $.clock.now()
         await changeSessions($, rows => {
-          // a session the list answered without has ended (archived, closed); a failed list leaves it unknown
-          const missing: SessionRow['state'] = listed.size > 0 ? 'gone' : 'unknown'
-          const fresh = rows.map(s => ({ ...s, state: listed.get(s.name) ?? (s.title ? listed.get(s.title) : undefined) ?? missing }))
+          // a session a readable list lacks has ended (archived, closed), an empty list included (issue 019);
+          // a failed or unreadable list leaves it unknown
+          const missing: SessionRow['state'] = ok && hasListing(r) ? 'gone' : 'unknown'
+          const fresh = rows
+            .map(s => {
+              const state = listed.get(s.name) ?? (s.title ? listed.get(s.title) : undefined) ?? missing
+              // an ended row keeps the time it ended, so it can age off the band like a finished agent
+              const endedAt = state === 'gone' ? (s.endedAt ?? now) : undefined
+              return endedAt === s.endedAt ? { ...s, state } : { ...s, state, endedAt }
+            })
+            .filter(s => !(s.state === 'gone' && s.endedAt !== undefined && now - s.endedAt > KEEP_DONE_MS))
           return JSON.stringify(fresh) === JSON.stringify(rows) ? rows : fresh
         })
+        // rows that aged off need no hiding any more
+        const left = new Set((await read($, sessionsAtom)).map(s => s.name))
+        await update($, hiddenSessionsAtom, ids => (ids.some(n => !left.has(n)) ? ids.filter(n => left.has(n)) : ids))
       } finally {
         isListing = false
       }
     }
 
     let isPolling = false
-    const poll = async () => {
+    let lastLookAt = 0
+    // Nothing has happened for IDLE_AFTER_MS, no turn runs and no agent is live: the polls may wait.
+    const isIdle = async (now: number) =>
+      now - lastActivityAt > IDLE_AFTER_MS && (await read($, phase)) !== 'running' && ![...tracked.values()].some(t => LIVE.has(t.status))
+    // The tick stays; an idle session's look waits for IDLE_TICK_MS (a forced one, after /model, never waits).
+    const poll = async (isForced = false) => {
       if (isPolling) return
       isPolling = true
       try {
+        const now = await $.clock.now()
+        if (!isForced && now - lastLookAt < IDLE_TICK_MS && (await isIdle(now))) return
         await look()
       } finally {
         isPolling = false
       }
     }
+    wake = async () => {
+      lastActivityAt = await $.clock.now()
+      await poll()
+    }
     const look = async () => {
       const now = await $.clock.now()
+      lastLookAt = now
 
       // /model and /effort land here within a tick, before any request is made.
       const [model, settings] = await Promise.all([
@@ -638,9 +452,10 @@ export const register: Register = on => {
               limits: m.limits.map(l => (isStale(l) ? { kind: l.kind, percent: 0 } : l)),
             }
       })
-      // The engine's list is the authority on status; events fill in between ticks.
-      const list = await $.agent.list().catch(() => [])
-      for (const a of list) {
+      // The engine's list is the authority on status; events fill in between ticks. A failed read says nothing.
+      const list = await $.agent.list().catch(() => null)
+      for (const a of list ?? []) {
+        listedOnce.add(a.id)
         // a row that aged off the band stays off (the engine still lists it, and a reload would bring it back),
         // unless a message woke it and it runs again
         if (dropped.has(a.id)) {
@@ -658,6 +473,20 @@ export const register: Register = on => {
         t.endedAt = ended ? (t.endedAt ?? now) : undefined
         tracked.set(a.id, t)
       }
+      // Issue 019: a row still live that the engine no longer lists hung on as 진행 중 when its turn.complete
+      // never reached us (killed, errored, a reload in between). Once listed and now missing, it has ended.
+      // A never-listed one (a background agent) ends after a long silence while the session itself is idle.
+      if (list) {
+        const ids = new Set(list.map(a => a.id))
+        const sessionIdle = (await read($, phase)) !== 'running'
+        for (const t of tracked.values()) {
+          if (!LIVE.has(t.status) || ids.has(t.id)) continue
+          const silentFor = now - (lastCallAt.get(t.id) ?? t.startedAt)
+          if (listedOnce.has(t.id) || (sessionIdle && silentFor > AGENT_SILENT_MS)) {
+            tracked.set(t.id, { ...t, status: 'completed', endedAt: now, activity: '' })
+          }
+        }
+      }
       await publish?.()
 
       // The desktop app shows usage in its bar under the prompt; a terminal keeps it in the band.
@@ -670,7 +499,6 @@ export const register: Register = on => {
         $.ui.status(line)
       }
 
-
       if (wantsPane) {
         const panes = await $.ui.panes().catch(() => null)
         if (panes && !panes.some(p => p.id === PANE)) await $.ui.open({ id: PANE, title: 'Session', rows: 8 })
@@ -681,12 +509,20 @@ export const register: Register = on => {
     // so an agent's model stays on its row instead of waiting for its next request.
     // (a row named 'agent' came from a fork's calls in an older build: dropped)
     for (const id of await read($, droppedAtom)) dropped.add(id)
-    for (const row of await read($, agents)) if (!tracked.has(row.id) && !dropped.has(row.id) && row.type !== 'agent') tracked.set(row.id, { ...row })
+    {
+      const now = await $.clock.now()
+      for (const row of await read($, agents)) {
+        if (tracked.has(row.id) || dropped.has(row.id) || row.type === 'agent') continue
+        tracked.set(row.id, { ...row })
+        // a reload starts its silence clock over; the engine's list settles it on the next tick
+        if (LIVE.has(row.status)) lastCallAt.set(row.id, now)
+      }
+    }
 
     await $.command.register({
       name: 'mods-hud',
-      description: 'HUD 요약 지금 갱신 (usage: 사용량·모드 토큰, pane: 패널로 보기, agents on/off: 서브에이전트 요약, debug: 진단, debug reset: 누름 카운터 초기화)',
-      argumentHint: '[usage|pane|agents on|agents off|debug|debug reset]',
+      description: 'HUD 요약 지금 갱신 (usage: 사용량·모드 토큰, show: 닫은 행 다시 보기, pane: 패널로 보기, agents on/off: 서브에이전트 요약, debug: 진단, debug reset: 누름 카운터 초기화)',
+      argumentHint: '[usage|show|pane|agents on|agents off|debug|debug reset]',
     })
 
     // Any of these may fail at start: the meter is made anyway, and the timers below still start.
@@ -714,7 +550,11 @@ export const register: Register = on => {
     $.clock.every(TICK_MS, () => void poll())
     $.clock.every(SESSION_POLL_MS, () => void pollSessions())
     // A branch changes by hand (checkout, a new worktree's session): read it now and every session poll.
+    let lastBranchAt = 0
     const pollBranch = async () => {
+      const now = await $.clock.now()
+      if (now - lastBranchAt < IDLE_BRANCH_MS && (await isIdle(now))) return
+      lastBranchAt = now
       const r = await $.process.run(['git', 'rev-parse', '--path-format=absolute', '--abbrev-ref', 'HEAD', '--git-dir', '--git-common-dir']).catch(() => null)
       const label = r && r.exitCode === 0 ? branchLabel(r.stdout) : ''
       if (label !== (await read($, branchAtom))) await update($, branchAtom, () => label)
@@ -724,8 +564,8 @@ export const register: Register = on => {
     let fast: { cancel: () => void } | null = null
     rush = () => {
       fast?.cancel()
-      void poll()
-      const timer = $.clock.every(FAST_MS, () => void poll())
+      void wake?.()
+      const timer = $.clock.every(FAST_MS, () => void poll(true))
       fast = timer
       $.clock.after(FAST_FOR_MS, () => timer.cancel())
     }
@@ -793,6 +633,13 @@ export const register: Register = on => {
       const mod = `이 모드의 요청 (Haiku)\n${line('세션 요약', sp.turn)}\n${line('서브에이전트 요약', sp.agent)}\n${line('오케스트레이션 요약', sp.session ?? zero)}`
       return { text: `${m ? usageTip(m, now) : '사용량 정보 없음'}\n\n${mod}` }
     }
+    if (arg === 'show') {
+      const [h, hs] = await Promise.all([read($, hiddenAtom), read($, hiddenSessionsAtom)])
+      await update($, hiddenAtom, () => [])
+      await update($, hiddenSessionsAtom, () => [])
+      await update($, showDoneAtom, () => true)
+      return { text: h.length + hs.length > 0 ? `닫았던 행 ${h.length + hs.length}개를 다시 보임.` : '닫은 행 없음.' }
+    }
     if (arg === 'agents on' || arg === 'agents off') {
       await update($, agentSummariesAtom, () => arg === 'agents on')
       return { text: arg === 'agents on' ? '서브에이전트 한글 요약 켬.' : '서브에이전트 한글 요약 끔 (요약 요청을 보내지 않음).' }
@@ -828,6 +675,7 @@ export const register: Register = on => {
   })
 
   on('prompt.submit', async ($, e, next) => {
+    await wake?.()
     // Another session's message comes as an `<agent-message from>` prompt (origin peer); a subagent's from is its id.
     for (const m of agentMessages(e.text)) {
       if (!(await isSubagent?.(m.from))) await recordSession?.(sessionName(m.from), 'in', m.body, m.title)
@@ -860,12 +708,17 @@ export const register: Register = on => {
     // Only agents we saw start (agent.spawn) or the engine lists: a fork (this mod's own summary fork among them)
     // also calls with an agentId, is never listed and never ends as an agent, so it would hang on as 진행 중.
     const known = e.agentId === undefined ? undefined : tracked.get(e.agentId)
+    lastActivityAt = await $.clock.now()
     if (e.agentId !== undefined && known) {
-      const now = await $.clock.now()
+      const now = lastActivityAt
       const t = known
+      lastCallAt.set(e.agentId, now)
+      const wakes = !LIVE.has(t.status)
       tracked.set(e.agentId, {
         ...t,
-        status: LIVE.has(t.status) ? t.status : 'running',
+        status: wakes ? 'running' : t.status,
+        // a call after its end means it runs again: its old end no longer holds (issue 019)
+        ...(wakes ? { endedAt: undefined } : {}),
         lastTool: shortTool(String(e.tool)),
         activity: describeCall(String(e.tool), e as unknown as Record<string, unknown>),
         tools: t.tools + 1,
@@ -873,7 +726,7 @@ export const register: Register = on => {
       await publish?.()
       // Korean lines come on a change: its task when it starts, a check-in every SUMMARY_GAP_MS while it works, its result at the end
       const cur = tracked.get(e.agentId)!
-      if (cur.summaryAt !== undefined && now - cur.summaryAt >= SUMMARY_GAP_MS && cur.tools > (cur.summaryTools ?? 0)) {
+      if (cur.summaryAt !== undefined && now - cur.summaryAt >= SUMMARY_GAP_MS && cur.tools >= (cur.summaryTools ?? 0) + SUMMARY_MIN_CALLS) {
         $.clock.after(0, () => void summarizeAgent?.(e.agentId!, false))
       }
     }
@@ -886,6 +739,8 @@ export const register: Register = on => {
     const ran = await next(e)
     if (ran.agentId !== undefined) {
       const now = await $.clock.now()
+      lastActivityAt = now
+      lastCallAt.set(ran.agentId, now)
       tracked.set(ran.agentId, {
         id: ran.agentId, type: e.subagentType, description: e.description, status: 'running',
         lastTool: '', activity: '시작', tools: 0, startedAt: now, model: ran.model,
@@ -900,12 +755,14 @@ export const register: Register = on => {
 
   // Only the main loop raises turn.start (a subagent's run raises none): each opens a card.
   on('turn.start', async ($, e, next) => {
+    await wake?.()
     await update($, phase, () => 'running' as const)
     return next(e)
   })
 
   on('turn.complete', async ($, e, next) => {
     const ran = await next(e)
+    lastActivityAt = await $.clock.now()
     if (e.agentId === undefined) {
       await update($, phase, () => (e.reason === 'answer' ? 'done' : 'stopped') as Phase)
       // a response came back, so the usage figures are current even when none moved
@@ -954,19 +811,21 @@ export const register: Register = on => {
 
   // A feed region's ask: its lines, when they moved since it was last handed them.
   on('ui.message', { module: 'hooks/feed.tsx' }, async ($, e, next) => {
-    const d = e.data as { topic?: unknown; columns?: unknown } | null
+    const d = e.data as { topic?: unknown; columns?: unknown; wide?: unknown } | null
     if (typeof d?.topic !== 'string' || typeof d.columns !== 'number') return next(e)
     // for /mods-hud debug: asks heard, and answers sent (here `got`)
     const t = (trips[`feed ${e.surface}`] ??= { heard: 0, bad: 0, got: 0 })
     t.heard += 1
     const columns = d.columns
-    const lines = stepLines(d.topic, columns)
+    // an ask from a region drawn before `wide` was handed out (a reload) cuts as a terminal would
+    const wide = typeof d.wide === 'number' ? d.wide : 2
+    const lines = stepLines(d.topic, columns, wide)
     const instance = `${e.requestId}|${e.element}`
     const json = JSON.stringify(lines)
     if (feedSent.get(instance) === json) return next(e)
     feedSent.set(instance, json)
     t.got += 1
-    return { props: { topic: d.topic, columns, lines } }
+    return { props: { topic: d.topic, columns, wide, lines } }
   })
 
   // A Client that failed, for /mods-hud debug; the engine then draws the site again without it.
@@ -1032,7 +891,7 @@ export const register: Register = on => {
     if (!room) return next(e)
 
     const isPane = e.component === 'Pane'
-    const [sum, typed, turnPhase, m, ags, now, showAgentsRaw, hidden, stopArmed, sess, showSessionsRaw, hiddenSess, branch] = await Promise.all([
+    const [sum, typed, turnPhase, m, ags, now, showAgentsRaw, hidden, stopArmed, sess, showSessionsRaw, hiddenSess, branch, showDoneRaw] = await Promise.all([
       read($, beatAtom).then(() => read($, summary)),
       read($, prompt),
       read($, phase),
@@ -1046,10 +905,12 @@ export const register: Register = on => {
       read($, showSessionsAtom),
       read($, hiddenSessionsAtom),
       read($, branchAtom),
+      read($, showDoneAtom),
     ])
     // the pane has the room: everything unfolded
     const showAgents = showAgentsRaw || isPane
     const showSessions = showSessionsRaw || isPane
+    const showDone = showDoneRaw || isPane
     if (!m && !sum && !typed) return next(e)
 
     // The band slot is shared: whatever the plugins beneath drew stays, under the card. No hook beneath rejects in a test.
@@ -1068,36 +929,48 @@ export const register: Register = on => {
     const isNarrow = width < 60
     // Narrower than this, a state is its colored dot alone: the word goes first.
     const isCompact = width < 90
-    // ponytail: the desktop sets text in a proportional font where Hangul takes about 1.3 cells, not 2;
-    // cutting by terminal cells left half the row empty there. Retune the factor if rows start to crowd.
-    const fit = (n: number) => (e.surface === 'desktop' ? Math.floor(n * 1.3) : n)
+    // ponytail: the desktop sets text in a proportional font, so a Hangul glyph is narrower than two cells
+    // there (issue 005); every label on this drawing is measured and cut by its surface's width.
+    const wide = e.surface === 'desktop' ? DESKTOP_WIDE : 2
+    const w = (t: string) => cells(t, wide)
+    const cut = (t: string, n: number) => clipCells(t, n, wide)
 
     // A background subagent still working keeps the session 진행 중 after the main turn ends.
     const anyLive = ags.some(a => LIVE.has(a.status))
     const state = LOOK[room.isWorking || anyLive ? 'running' : turnPhase]
     const headline = (sum && oneLine(sum.text)) || typed || '첫 턴을 기다리는 중'
+    // How many turns ago the session line was written: shown when it is not this turn's.
+    const sumAge = sum ? Math.max(0, turns - sum.turns) : 0
 
-    // One agent shows as its row; two or more fold into one line with their counts, unfolded on a press.
-    // Closed ones are gone. Live rows first, then the ones that ended (완료 or 중지), newest first.
+    // Agents show as rows while they fit: live ones, stopped ones, and the ones finished within RECENT_DONE_MS.
+    // Older finished ones fold into one 완료 line. Only when the rows outnumber the room (or MAX_AGENTS) does the
+    // whole group fold into a counts line, unfolded on a press. Closed ones are gone.
     const shownAgs = ags.filter(a => !hidden.includes(a.id))
-    const isEnded = (a: AgentRow) => LOOK[agentPhase(a.status)].isDone || agentPhase(a.status) === 'stopped'
+    const isDone = (a: AgentRow) => LOOK[agentPhase(a.status)].isDone
+    const isEnded = (a: AgentRow) => isDone(a) || agentPhase(a.status) === 'stopped'
     const live = shownAgs.filter(a => !isEnded(a))
     const ended = shownAgs.filter(isEnded)
-    const isGrouped = shownAgs.length >= 2
-    const isFolded = isGrouped && !showAgents
-    // Rows the band may take: the session line, the usage block outside the desktop, the fold line; the rest is the agents'.
-    // An agent's first line comes first, and one always shows; step lines only when every live row gets one.
-    // (Halving the budget per agent made a lone agent blink whenever the surface gave a row more or less.)
-    // Sessions are always one group: its fold line costs a row; unfolded, its rows take what the agents leave.
+    const oldDone = ended.filter(a => isDone(a) && a.endedAt !== undefined && now - a.endedAt >= RECENT_DONE_MS)
+    const listed = [...live, ...ended.filter(a => !oldDone.includes(a))]
     const peers = sess.filter(s => !hiddenSess.includes(s.name))
+    // Rows the band may take: the session line, the usage block outside the desktop, the sessions' fold line.
+    // (Halving the budget per agent made a lone agent blink whenever the surface gave a row more or less.)
     // shortcut: a result beneath is counted as one row, a taller one scrolls the band; count its rows when a plugin draws more.
-    const budget = Math.max(0, room.rows - 1 - (below ? 1 : 0) - (m && e.surface !== 'desktop' && !isTight ? 4 : 0) - (isGrouped ? 1 : 0) - (peers.length > 0 ? 1 : 0))
-    const rows = isFolded ? [] : [...live, ...ended].slice(0, Math.max(1, Math.min(MAX_AGENTS * 2, budget)))
+    const room0 = Math.max(0, room.rows - 1 - (below ? 1 : 0) - (m && e.surface !== 'desktop' && !isTight ? 4 : 0) - (peers.length > 0 ? 1 : 0))
+    // the 완료 line stays while unfolded too, so the group can fold back
+    const doneLine = oldDone.length > 0 ? 1 : 0
+    const needed = listed.length + (showDone ? oldDone.length : 0) + doneLine
+    const isGrouped = shownAgs.length >= 2 && (shownAgs.length > MAX_AGENTS || needed > room0)
+    const isFolded = isGrouped && !showAgents
+    const budget = Math.max(0, room0 - (isGrouped ? 1 : 0))
+    const rows = isFolded ? [] : [...listed, ...(showDone ? oldDone : [])].slice(0, Math.max(1, Math.min(MAX_AGENTS * 2, budget - doneLine)))
     const liveShown = rows.filter(a => !isEnded(a))
-    const withSteps = budget >= rows.length + liveShown.length
-    const peerRows = showSessions ? peers.slice(0, Math.max(1, Math.min(MAX_AGENTS * 2, budget - rows.length - (withSteps ? liveShown.length : 0)))) : []
+    // step lines for every live row when they fit; the newest live one keeps its step line regardless
+    const withSteps = budget >= rows.length + doneLine + liveShown.length
+    const stepFor = (a: AgentRow) => !isEnded(a) && (withSteps || (a.id === live[0]?.id && budget >= rows.length + doneLine + 1))
+    const peerRows = showSessions ? peers.slice(0, Math.max(1, Math.min(MAX_AGENTS * 2, budget - rows.length - doneLine - (withSteps ? liveShown.length : 0)))) : []
     // the fold line's counts, each in its state's color
-    const doneCount = ended.filter(a => LOOK[agentPhase(a.status)].isDone).length
+    const doneCount = ended.filter(isDone).length
     const counts = [
       { n: live.length, word: '진행 중', color: LOOK.running.color },
       { n: doneCount, word: '완료', color: LOOK.done.color },
@@ -1105,6 +978,21 @@ export const register: Register = on => {
     ].filter(c => c.n > 0)
     noteDraw(isPane ? 'pane' : 'band')
     lastDraw[`${e.surface} ${e.component}`] = `rows=${room.rows} cols=${width} rows=${rows.length} live=${live.length} ended=${ended.length} at=${new Date(now).toTimeString().slice(0, 8)}`
+
+    // Wide bands spell the buttons out; narrow ones keep the marks.
+    const wordy = !isCompact
+    const STOP = wordy ? '종료' : '■'
+    const RESUME = wordy ? '재개' : '↻'
+    const CLOSE = wordy ? '닫기' : '✕'
+    // Closing is undone with /mods-hud show: say so once, on the toast.
+    const hideAgent = async (a: AgentRow) => {
+      await update($, hiddenAtom, ids => (ids.includes(a.id) ? ids : [...ids, a.id]))
+      $.ui.toast(`${a.type} 닫음 · /mods-hud show 로 되돌리기`)
+    }
+    const hideSession = async (name: string) => {
+      await update($, hiddenSessionsAtom, ids => (ids.includes(name) ? ids : [...ids, name]))
+      $.ui.toast(`${clipCells(name, 30)} 닫음 · /mods-hud show 로 되돌리기`)
+    }
 
     // A row is a label cell that shrinks and a status cell that never does: two elements, no drawn divider.
     const row = (key: string, label: JSX.Element, status: JSX.Element) => (
@@ -1117,9 +1005,12 @@ export const register: Register = on => {
     // A live agent stops on a second press within STOP_ARM_MS (the engine's TaskStop, as the model would call it);
     // a finished one closes off the band with ✕.
     const stopAgent = async (id: string) => {
-      if (stopArmed !== id) {
-        await update($, stopArmedAtom, () => id)
-        $.clock.after(STOP_ARM_MS, () => void update($, stopArmedAtom, v => (v === id ? null : v)))
+      if (stopArmed?.id !== id) {
+        const at = await $.clock.now()
+        await update($, stopArmedAtom, () => ({ id, at }))
+        // the label counts the seconds down: redraw each second, then lapse
+        for (let s = 1000; s < STOP_ARM_MS; s += 1000) $.clock.after(s, () => void update($, stopArmedAtom, v => (v?.id === id ? { ...v } : v)))
+        $.clock.after(STOP_ARM_MS, () => void update($, stopArmedAtom, v => (v?.id === id ? null : v)))
         return
       }
       await update($, stopArmedAtom, () => null)
@@ -1167,8 +1058,9 @@ export const register: Register = on => {
       const look = SESSION_LOOK[s.state]
       const last = lastOf(s)
       const meta = last ? `${last.arrow} ${ago(now - last.at)}` : ''
-      const name = clipCells(s.title || s.name, isNarrow ? 12 : 24)
-      const text = clipCells(s.summary || last?.text || '', fit(Math.max(4, width - 4 - 2 - cells(name) - 1 - cells(meta) - 2 - 4 - 4)))
+      const name = cut(s.title || s.name, isNarrow ? 12 : 24)
+      const buttons = (s.state !== 'gone' ? w(RESUME) + 1 : 0) + w(CLOSE)
+      const text = cut(s.summary || last?.text || '', Math.max(4, width - 4 - 2 - w(name) - 1 - w(meta) - 2 - buttons - 4))
       return row(
         `peer-${s.name}`,
         <Box flexDirection="row" columnGap={1} flexShrink={1} minWidth={0}>
@@ -1181,13 +1073,15 @@ export const register: Register = on => {
         </Box>,
         <Box flexDirection="row" columnGap={1}>
           {meta && <Text dimColor>{meta}</Text>}
-          {s.state !== 'gone' && <Button key={`resume-s-${s.name}`} plain dimColor label="↻" onPress={() => resumeSession(s.name)} />}
-          <Button key={`hide-s-${s.name}`} plain dimColor label="✕" onPress={() => update($, hiddenSessionsAtom, ids => [...ids, s.name])} />
+          {s.state !== 'gone' && <Button key={`resume-s-${s.name}`} plain dimColor label={RESUME} onPress={() => resumeSession(s.name)} />}
+          <Button key={`hide-s-${s.name}`} plain dimColor label={CLOSE} onPress={() => hideSession(s.name)} />
         </Box>,
       )
     }
-    const peerRunning = peers.filter(s => s.state === 'running').length
-    const peerGone = peers.filter(s => s.state === 'gone').length
+    // the sessions' fold line: each state's count in its color, in a fixed order
+    const peerCounts = (['running', 'idle', 'unknown', 'gone'] as const)
+      .map(st => ({ st, n: peers.filter(s => s.state === st).length }))
+      .filter(c => c.n > 0)
 
     // The state cell before a label: its dot, and its word where there is room.
     const stateCells = isCompact ? 2 : 2 + STATE_CELLS + 1
@@ -1200,8 +1094,10 @@ export const register: Register = on => {
       // a running clock ticks in its own Client region (mm:ss, 5 cells); an ended one is fixed text
       const isTicking = !isEnded(a) && !!Client
       const took = isTicking ? '00:00' : elapsedText(a, now)
-      const room = width - 4 - stateCells - cells(a.type) - 1 - (tag ? cells(tag) + 2 : 0) - cells(took) - 2 - 4
-      const label = clipCells(a.summary || a.description, fit(Math.max(4, room)))
+      // the widest label the buttons may take: "종료? 3" while armed, or 재개 + 닫기 on a stopped one
+      const buttons = isEnded(a) ? (agentPhase(a.status) === 'stopped' ? w(RESUME) + 1 : 0) + w(CLOSE) : wordy ? 7 : 2
+      const room = width - 4 - stateCells - w(a.type) - 1 - (tag ? w(tag) + 2 : 0) - w(took) - 2 - buttons
+      const label = cut(a.summary || a.description, Math.max(4, room))
       return [
         row(
           `agent-${a.id}`,
@@ -1224,26 +1120,33 @@ export const register: Register = on => {
             {isEnded(a) ? (
               <Box flexDirection="row" columnGap={1}>
                 {agentPhase(a.status) === 'stopped' && (
-                  <Button key={`resume-${a.id}`} plain dimColor label="↻" onPress={() => resumeAgent(a.id)} />
+                  <Button key={`resume-${a.id}`} plain dimColor label={RESUME} onPress={() => resumeAgent(a.id)} />
                 )}
-                <Button key={`hide-${a.id}`} plain dimColor label="✕" onPress={() => update($, hiddenAtom, ids => [...ids, a.id])} />
+                <Button key={`hide-${a.id}`} plain dimColor label={CLOSE} onPress={() => hideAgent(a)} />
               </Box>
             ) : (
-              <Button key={`stop-${a.id}`} plain dimColor={stopArmed !== a.id} label={stopArmed === a.id ? '종료?' : '■'} onPress={() => stopAgent(a.id)} />
+              <Button
+                key={`stop-${a.id}`}
+                plain
+                dimColor={stopArmed?.id !== a.id}
+                label={stopArmed?.id === a.id ? `${wordy ? '종료? ' : '■'}${Math.max(1, Math.ceil((STOP_ARM_MS - (now - stopArmed.at)) / 1000))}` : STOP}
+                onPress={() => stopAgent(a.id)}
+              />
             )}
           </Box>,
         ),
-        // Every unfinished agent keeps its step line, between calls too, so the band never jumps (room allowing).
-        !isEnded(a) && withSteps && (
+        // Every unfinished agent keeps its step line, between calls too, so the band never jumps (room allowing);
+        // the newest live one keeps it even when the others lose theirs.
+        stepFor(a) && (
           <Box key={`step-${a.id}`} paddingLeft={isCompact ? 6 : 14} width={width}>
-            {feedRegion(els, e.requestId, `feed-step-${a.id}`, `step|${a.id}`, fit(Math.max(4, width - (isCompact ? 6 : 14))), stepLines(`step|${a.id}`, fit(Math.max(4, width - (isCompact ? 6 : 14)))))}
+            {feedRegion(els, e.requestId, `feed-step-${a.id}`, `step|${a.id}`, Math.max(4, width - (isCompact ? 6 : 14)), wide)}
           </Box>
         ),
       ]
     }
 
     const sessionTag = [branch, m && turnPhase !== 'idle' ? modelTag(m.model, m.effort) : ''].filter(Boolean).join(' · ')
-    const headLabel = clipCells(headline, fit(Math.max(4, width - stateCells - (sessionTag ? cells(sessionTag) + 2 : 0) - 3)))
+    const headLabel = cut(headline, Math.max(4, width - stateCells - (sessionTag ? w(sessionTag) + 2 : 0) - 3))
     const activity = (
       <Box key="activity" flexDirection="column" width={width}>
         {row(
@@ -1254,6 +1157,7 @@ export const register: Register = on => {
             <Box flexShrink={1} minWidth={0} overflow="hidden">
               <Text wrap="truncate-end" bold={!state.isDone} dimColor={state.isDone}>{headLabel}</Text>
             </Box>
+            {sumAge > 0 && !isCompact && <Box flexShrink={0}><Text dimColor>{`· ${sumAge}턴 전 요약`}</Text></Box>}
           </Box>,
           <Box>{sessionTag && <Text dimColor>{sessionTag}</Text>}</Box>,
         )}
@@ -1269,16 +1173,34 @@ export const register: Register = on => {
           </Box>
         )}
         {rows.map(agentRows)}
+        {!isFolded && doneLine > 0 && (() => {
+          // Older finished agents, one line: their count, the newest one's result, and a close for them all.
+          const newest = [...oldDone].sort((x, y) => (y.endedAt ?? 0) - (x.endedAt ?? 0))[0]!
+          const hint = showDone
+            ? '▾'
+            : cut(`▸ ${newest.type} ${newest.summary || newest.description} · ${ago(now - (newest.endedAt ?? now))}`, Math.max(4, width - 4 - stateCells - 8))
+          return row(
+            'done-line',
+            <Box flexDirection="row" columnGap={1} flexShrink={1} minWidth={0}>
+              <Box flexShrink={0}><Text dimColor>  ⎿</Text></Box>
+              <Box flexShrink={0}><Text color={LOOK.done.color}>{LOOK.done.dot}</Text></Box>
+              <Button key="done" plain label={`${isCompact ? '' : '완료 '}${oldDone.length}`} onPress={() => update($, showDoneAtom, v => !v)} />
+              <Box flexShrink={1} minWidth={0} overflow="hidden"><Text wrap="truncate-end" dimColor>{hint}</Text></Box>
+            </Box>,
+            <Button key="hide-done" plain dimColor label={CLOSE} onPress={async () => {
+              await update($, hiddenAtom, ids => [...ids, ...oldDone.map(a => a.id).filter(id => !ids.includes(id))])
+              $.ui.toast(`완료 ${oldDone.length}개 닫음 · /mods-hud show 로 되돌리기`)
+            }} />,
+          )
+        })()}
         {peers.length > 0 && !isPane && (
           <Box key="sessions-line" flexDirection="row" width={width}>
             <Text dimColor>  </Text>
             <Button key="sessions" plain label={`${showSessions ? '▾' : '▸'} 오케스트레이션 ${peers.length}`} onPress={() => update($, showSessionsAtom, v => !v)} />
             <Text> </Text>
-            {peerRunning > 0 && <Text color={SESSION_LOOK.running.color}>{` 진행 중 ${peerRunning}`}</Text>}
-            {peers.length - peerRunning - peerGone > 0 && (
-              <Text color={SESSION_LOOK.idle.color}>{`${peerRunning > 0 ? ' ·' : ''} 대기 ${peers.length - peerRunning - peerGone}`}</Text>
-            )}
-            {peerGone > 0 && <Text dimColor>{`${peers.length > peerGone ? ' ·' : ''} 종료 ${peerGone}`}</Text>}
+            {peerCounts.map((c, i) => (
+              <Text key={c.st} color={SESSION_LOOK[c.st].color} dimColor={SESSION_LOOK[c.st].dim}>{`${i > 0 ? ' ·' : ''} ${SESSION_LOOK[c.st].word} ${c.n}`}</Text>
+            ))}
           </Box>
         )}
         {peerRows.map(peerRow)}
@@ -1289,7 +1211,7 @@ export const register: Register = on => {
     const status = m && e.surface !== 'desktop' && !isTight && (() => {
       const head = `${prettyModel(m.model)}${m.effort ? ` ${m.effort}` : ''}`
       // its own border and padding take 4 cells outside the card, the model and its gap the rest
-      const parts = fitUsage(usageParts(m, now), width - (isCard ? 0 : 4) - cells(head) - 3 - (m.isStale ? 12 : 0))
+      const parts = fitUsage(usageParts(m, now), width - (isCard ? 0 : 4) - w(head) - 3 - (m.isStale ? 12 : 0))
       return (
         <Box
           key="status"

@@ -49,6 +49,8 @@ export type SessionRow = {
   /** ListAgents' word for it; unknown until it answers, or when it fails. */
   /** gone: ListAgents answered without it (archived, closed, exited) */
   state: 'running' | 'idle' | 'unknown' | 'gone'
+  /** When ListAgents first answered without it; the row ages off the band after a while. */
+  endedAt?: number
   lastSent?: { at: number; text: string }
   lastReceived?: { at: number; text: string }
   /** A Korean line on the latest received message. */
@@ -67,8 +69,10 @@ declare module 'claude-code' {
       showAgents: boolean
       /** Finished agents the person closed off the band. */
       hidden: string[]
-      /** The live agent whose stop button was pressed once and waits for the second press. */
-      stopArmed: string | null
+      /** The live agent whose stop button was pressed once and waits for the second press, and when. */
+      stopArmed: { id: string; at: number } | null
+      /** Finished agents older than a minute fold into one line until this is set. */
+      showDone: boolean
       /** Whether agents get Korean summaries (`/mods-hud agents on|off`). */
       agentSummaries: boolean
       spend: Spend
