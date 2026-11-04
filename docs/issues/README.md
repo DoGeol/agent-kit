@@ -8,7 +8,7 @@ Issues found while building and testing `plugins/mods-hud`.
 | [002](002-band-missed-press-and-flicker.md) | Band presses lost, and the app blinks | fixed; terminal checked, desktop not yet |
 | [003](003-client-elapsed-clock.md) | A running clock in a Client region (partial rendering) | confirmed on desktop |
 | [004](004-listagents-from-plugin.md) | Whether ListAgents works from a plugin | works (terminal) |
-| [005](005-desktop-text-width.md) | Cutting text on the desktop's proportional font | guessed value, looks right |
+| [005](005-desktop-text-width.md) | Cutting text on the desktop's proportional font | fixed (0.7.0), per-script width; desktop not yet re-checked |
 | [006](006-desktop-native-buttons.md) | The desktop draws Buttons natively | worked around, confirmed |
 | [007](007-peer-message-card-offset.md) | A turn another session starts is logged on the previous card | known limit |
 | [008](008-reload-resurrects-closed-agent.md) | After a reload, a closed subagent comes back | fixed |

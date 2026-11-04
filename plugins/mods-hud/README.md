@@ -3,6 +3,11 @@
 Claude Code 입력창 위에 뜨는 현황판(HUD). 터미널과 데스크탑 앱 모두 지원.
 
 ```
+claude plugin marketplace add DoGeol/agent-kit
+claude plugin install mods-hud@dg-agent-kit
+```
+
+```
 ● 진행 중  오케스트레이션 뷰 병합 중 · 2턴 전 요약        ⎇ main · Opus 5.5(high)
   ⎿ ● 진행 중  Explore  라이선스 파일 세는 중   01:04  Sonnet 5.5(low)   종료
       → Grep "license"
@@ -37,7 +42,21 @@ Opus 5.5 high · 5h 16%(18:10) · w 81%(10/14 12:00) · ctx 58%      ← 터미�
 
 ## 비용
 
-한국어 요약만 Haiku(effort low)를 쓴다. 요청, 최근 단계, 답변 앞부분만 보낸다. 누적은 `/mods-hud usage`. 서브에이전트 중간 요약은 2분에 한 번, 그 사이 호출이 3번 이상 늘었을 때만 보낸다. 오케스트레이션의 ListAgents 호출은 메시지가 오간 뒤 5분까지는 10초마다, 30분까지는 1분마다, 그 뒤는 5분마다다.
+한국어 요약만 Haiku(effort low)를 쓴다. 요청, 최근 단계, 답변 앞부분만 보낸다. 누적은 `/mods-hud usage`. 서브에이전트 중간 요약은 2분에 한 번, 그 사이 호출이 3번 이상 늘었을 때만 보낸다. 오케스트레이션의 ListAgents 호출은 메시지가 오간 뒤 5분까지는 10초마다, 30분까지는 1분마다, 그 뒤는 5분마다다. 모델·설정·에이전트 목록은 2초마다 읽되, 턴도 에이전트 호출도 메시지도 없이 10분이 지나면 30초마다(브랜치는 1분마다) 읽고, 다음 입력이나 `/model`에서 바로 돌아온다.
+
+## 구성
+
+| 파일 | 내용 |
+|---|---|
+| `hooks/register.tsx` | 상태(atom), 훅, 현황판 그리기 |
+| `hooks/text.ts` | 폭 재기와 자르기(터미널은 한글 2칸, 데스크탑은 1.5칸), 시간·경과 표시, 요약 줄 정리, 도구 호출 설명, 브랜치 라벨 |
+| `hooks/meter.ts` | 모델·effort 이름, 사용량 창과 폭 맞추기, 색 |
+| `hooks/peers.ts` | 다른 세션 이름, ListAgents 응답 읽기, 세션 행 모양 |
+| `hooks/feed.tsx`, `hooks/elapsed.tsx` | 표면 모듈: 단계 줄 영역, 경과 시계 |
+| `tests/world.ts` | 테스트가 도는 세계(엔진 응답)와 읽기 도우미 |
+| `tests/band.test.ts`, `agents.test.ts`, `peers.test.ts`, `stack.test.tsx` | 세션 줄·사용량, 서브에이전트, 오케스트레이션, 다른 plugin과 겹칠 때 |
+
+`claude plugin test plugins/mods-hud`로 돌린다.
 
 ## 제약
 
